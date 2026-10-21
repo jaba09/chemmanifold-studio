@@ -1,0 +1,22 @@
+# Pipeline data and results (regenerate with `python run_pipeline.py`)
+data/
+*.npz
+*.npy
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.csv
+*.png
+*.log
+
+# Python / environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.ipynb_checkpoints/
+.DS_Store

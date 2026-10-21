@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chemmanifold"
+version = "0.1.0"
+description = "Physics-constrained ML surrogates for stiff combustion chemical kinetics"
+requires-python = ">=3.10"
+dependencies = [
+  "cantera>=3.1",
+  "numpy",
+  "scipy",
+  "pandas",
+  "scikit-learn",
+  "matplotlib",
+  "pyyaml",
+  "torch>=2.1",
+]
+
+[tool.setuptools]
+packages = ["chemmanifold"]

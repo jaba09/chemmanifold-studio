@@ -1,0 +1,85 @@
+# ChemManifold Studio pipeline configuration.
+# Every stage reads this file; all intermediate results live under `data_dir`.
+
+data_dir: data
+seed: 0
+
+chemistry:
+  mechanism: h2o2.yaml          # Cantera built-in 10-species H2/O2 (+AR, N2) mechanism
+  fuel: "H2:1.0"
+  oxidizer: "O2:1.0, N2:3.76"
+
+# Module 1 - ThermoExplorer
+envelope:
+  phi: [0.5, 2.0]
+  T0: [1050.0, 1300.0]          # K
+  P0_atm: [1.0, 5.0]            # atm
+  n_traj: 64
+  f_pasr: 0.35
+
+autoignition:
+  dt_base: 2.0e-6               # s (2 us for H2)
+  t_max: 3.0e-3                 # s
+  min_steps: 10                 # termination is only checked for n > min_steps
+  dT_rise: 400.0                # K, (T_n - T0) > dT_rise
+  dT_flat: 0.02                 # K, |T_n - T_{n-1}| < dT_flat
+  n_consecutive: 25
+
+arclength:
+  boxcox_lambda: 0.10
+  n_pick: 220                   # indices drawn per trajectory (incl. 15 seeds)
+  n_seed: 15
+  strides: [1, 2, 4]
+  floor_frac: 0.05              # w_n = ds_n + 0.05 * mean(ds)
+
+pasr:
+  n_particles: 400
+  beta_a: 0.7
+  beta_b: 0.7
+  dh_range: [-1.2e+5, 0.6e+5]   # J/kg
+  strides: [1, 2, 4]
+
+# Module 2 - ManifoldPrep
+preprocess:
+  boxcox_lambda: 0.10
+  val_frac: 0.12
+  sigma_y_min: 1.0e-3
+  sigma_dy_min: 1.0e-2
+
+manifold:
+  n_clusters: 4
+  candidate_dims: [2, 3, 4, 6, 8]
+  variance_target: 0.995
+  max_samples: 40000
+
+# Module 3/4 - Surrogates & training
+model:
+  hidden: 192                   # D_h
+  n_blocks: 3
+  node_hidden: 128
+  node_substeps: 2
+  latent_dim: auto              # 'auto' -> taken from manifold report
+
+training:
+  epochs: 300
+  batch_size: 512
+  lr_max: 2.0e-3
+  weight_decay: 1.0e-5
+  noise_amp: 0.015              # alpha_0 of the pushforward perturbation
+  noise_end_frac: 0.85
+  loss_weights: {inc: 1.0, mass: 1.0, T: 1.0, equil: 0.1, ae: 1.0}
+  equil_threshold: 0.05         # |v_true|_inf below which a pair counts as equilibrium
+  threads: 4
+
+# Module 5 - Certification
+evaluation:
+  rollout:
+    phi: 1.0
+    T0: 1150.0
+    P0_atm: 1.0
+    n_steps: 250
+    stride: 1                   # rollout dt = stride * dt_base
+  envelope_grid:
+    phi: [0.6, 1.0, 1.8]
+    T0: [1100.0, 1200.0, 1280.0]
+    P0_atm: [1.0, 4.0]
