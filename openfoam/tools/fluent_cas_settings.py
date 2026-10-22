@@ -75,7 +75,11 @@ def foam_chemkin(name, text):
     if name == "therm.dat":
         def temps(m):
             return "THERMO ALL\n" + "".join(f"{float(t):10.3f}" for t in m.group(1).split()) + "\n"
-        return re.sub(r"^THERMO[^\n]*\n\s*([\d.]+\s+[\d.]+\s+[\d.]+)\s*\n", temps, text, flags=re.M)
+        text = re.sub(r"^THERMO[^\n]*\n\s*([\d.]+\s+[\d.]+\s+[\d.]+)\s*\n", temps, text, flags=re.M)
+        # Species whose fit starts at 300 K (N2, CH3O here): extend it to 200 K. Otherwise every
+        # cell that dips a hair below the 300 K boundary temperature prints a janafThermo
+        # warning, which floods the log (GBs) and slows the run to a crawl.
+        return re.sub(r"^(.{44}G) *300\.0*(?= )", lambda m: m.group(1) + "200.000", text, flags=re.M)
     return None
 
 

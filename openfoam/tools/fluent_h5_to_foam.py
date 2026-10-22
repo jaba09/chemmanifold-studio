@@ -191,7 +191,7 @@ def main():
     os.makedirs(mesh, exist_ok=True)
     note = f"converted from {os.path.basename(args.cas)}: {args.angle} deg wedge about the x axis"
     write_list(os.path.join(mesh, "points"), "vectorField", "points", pts,
-               lambda p: f"({p[0]:.12g} {p[1]:.12g} {p[2]:.12g})", note)
+               lambda p: f"({p[0]:.17g} {p[1]:.17g} {p[2]:.17g})", note)
     write_list(os.path.join(mesh, "faces"), "faceList", "faces", faces,
                lambda f: f"{len(f)}(" + " ".join(map(str, f)) + ")", note)
     write_list(os.path.join(mesh, "owner"), "labelList", "owner", owner, str,

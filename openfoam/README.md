@@ -40,7 +40,7 @@ HDF5 mesh directly. `chemkin/transportProperties` is committed, so Cantera is on
 | `inlet-fuel`: mass flow 6.735e-6 kg/s CH4, 300 K | `flowRateInletVelocity`, 6.735e-6 × 5/360 kg/s |
 | `inlet-coflow-fff-fluid-mixing`: mass flow 5.7675e-5 kg/s air, 300 K | `flowRateInletVelocity`, 5.7675e-5 × 5/360 kg/s |
 | `inlet-coflow-fff-fluid-exterior`: 0.05 m/s air, 300 K | `surfaceNormalFixedValue` |
-| `outlet-lab:026` (r = 0.14 m side): pressure outlet 0 Pa gauge, backflow air 300 K | `prghPressure` + `inletOutlet` (patch `outlet-lab-026`) |
+| `outlet-lab:026` (r = 0.14 m side): pressure outlet 0 Pa gauge, backflow air 300 K | fixed `p_rgh` + `inletOutlet` (patch `outlet-lab-026`); Fluent's gauge pressure excludes the hydrostatic head, so fixing `p` on this vertical boundary would drive a spurious through-flow |
 | Turbulence at inlets: 5 % intensity, viscosity ratio 10 | fixed k = 1.5 (0.05 U)², ω = k / (10 ν) |
 | `wall-disk`: 300 K | `fixedValue` |
 | `wall-pot-fff-fluid-exhaust`, `-mixing`: convection, h = 15, Tinf = 323 K | `externalWallHeatFluxTemperature` |
@@ -60,8 +60,13 @@ Known modelling differences:
   `rhoReactingBuoyantFoam` uses unity Lewis number. The inlet jets are close to laminar
   (fuel jet Re ≈ 150), so this can shift the flame position and peak temperature.
 - **Turbulent Schmidt number.** Fluent Sc_t = 0.7; OpenFOAM diffuses species with α_t (Pr_t = 0.85).
-- **Ignition.** Fluent's data file was not supplied. The run starts from still air at 300 K and
-  patches the mixing annulus to 2000 K (`system/setFieldsDict`).
+- **Initial state.** Fluent's data file was not supplied. The run starts from still air at 300 K with
+  the fuel region under the pot already full of CH4 and the mixing annulus at 2000 K
+  (`system/setFieldsDict`). Filling that finely meshed, nearly stagnant region from the inlet takes
+  tens of thousands of local-time-step iterations, so a hot patch alone cools before fuel arrives.
+- **Thermo range.** N2 and CH3O have NASA fits starting at 300 K, the boundary temperature; the
+  chemkinToFoam copy (`therm.foam.dat`) starts them at 200 K so cells a hair below 300 K do not
+  print a warning each (which filled GBs of log).
 
 ## The DEFINE_CHEM_STEP hook in OpenFOAM
 

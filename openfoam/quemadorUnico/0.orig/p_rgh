@@ -26,8 +26,11 @@ boundaryField
 
     outlet-lab-026
     {
-        type            prghPressure;
-        p               $internalField;
+        // Fluent's 0 Pa gauge is the pressure minus the operating-density hydrostatic
+        // head, i.e. uniform p_rgh. Fixing p instead (prghPressure) on this vertical
+        // boundary would impose a 6 Pa imbalance over its 0.52 m height and drive a
+        // spurious through-flow.
+        type            fixedValue;
         value           $internalField;
     }
 
