@@ -20,7 +20,7 @@ def latent_dim(cfg):
 
 def load_surrogate(cfg, arch):
     scalers, thermo = load_prep(cfg)
-    ckpt = torch.load(require(stage_dir(cfg, "models", arch) / "model.pt"), weights_only=False)
+    ckpt = torch.load(require(stage_dir(cfg, "models", arch) / "model.pt"), map_location="cpu", weights_only=False)
     model = build_surrogate(arch, cfg, scalers, thermo, latent_dim=ckpt["latent_dim"])
     model.load_state_dict(ckpt["state_dict"])
     model.eval()

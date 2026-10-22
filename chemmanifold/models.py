@@ -113,10 +113,13 @@ class Surrogate(nn.Module):
     def forward(self, Y, T, P, h, dt):
         yt = self.encode_Y(Y)
         c = self.context(T, P, h, dt)
-        dt_star = (dt / self.dt_base).to(torch.float32)
-        dtype = next(self.net.parameters()).dtype
-        y_cand, extras = self.net(yt.to(dtype), c.to(dtype), dt_star.to(dtype))
-        y_cand = y_cand.to(torch.float64)
+        dt_star = dt / self.dt_base
+        # The network may live on an accelerator (CUDA / Apple MPS) in float32, while the
+        # encoding and hard physics layers always stay in float64 on the CPU (MPS has no float64).
+        p = next(self.net.parameters())
+        y_cand, extras = self.net(yt.to(p.device, p.dtype), c.to(p.device, p.dtype), dt_star.to(p.device, p.dtype))
+        y_cand = y_cand.to(yt.device, torch.float64)
+        extras = {k: v.to(yt.device, torch.float64) for k, v in extras.items()}
         Y_cand = self.decode_Y(y_cand)
         Y_phys = self.project(Y, Y_cand)
         T_hat = self.temperature(Y_phys, h, T)
@@ -127,6 +130,18 @@ class Surrogate(nn.Module):
         """Decode a perturbed Box-Cox state and project it onto the polytope of Y_ref (Section 5.2)."""
         Y = self.project(Y_ref, self.decode_Y(yt_noisy))
         return Y, self.temperature(Y, h, T_init)
+
+
+def resolve_device(name="auto"):
+    """'auto' -> CPU unless CUDA is present. Apple MPS must be asked for explicitly: for networks of
+    this size (~0.2M parameters) the per-batch CPU<->GPU transfers needed by the float64 physics
+    layers usually make MPS slower than the M1's CPU cores."""
+    if name == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if name == "mps" and not torch.backends.mps.is_available():
+        print("  MPS requested but not available - falling back to CPU")
+        return torch.device("cpu")
+    return torch.device(name)
 
 
 def build_surrogate(arch, cfg, scalers, thermo, latent_dim=4):

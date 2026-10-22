@@ -25,7 +25,7 @@ import torch
 
 from chemmanifold.io import base_parser, load_config, load_npz, stage_dir
 from chemmanifold.loading import latent_dim, load_prep
-from chemmanifold.models import build_surrogate
+from chemmanifold.models import build_surrogate, resolve_device
 
 MASS_SCALE = 1e-2
 
@@ -59,11 +59,14 @@ def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha):
 def main(cfg, arch):
     tc = cfg["training"]
     torch.manual_seed(cfg["seed"])
-    torch.set_num_threads(tc["threads"])
+    if tc.get("threads", "auto") != "auto":
+        torch.set_num_threads(int(tc["threads"]))
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
     scalers, thermo = load_prep(cfg)
     d = latent_dim(cfg)
     model = build_surrogate(arch, cfg, scalers, thermo, latent_dim=d)
+    device = resolve_device(tc.get("device", "auto"))
+    model.net.to(device)
     A = model.project.A
 
     train, val = to_tensors(ds, ~ds["is_val"]), to_tensors(ds, ds["is_val"])
@@ -78,7 +81,8 @@ def main(cfg, arch):
     out_dir = stage_dir(cfg, "models", arch)
     hist, best = [], np.inf
     n_params = sum(p.numel() for p in model.net.parameters())
-    print(f"  {arch}: {n_params} parameters, latent d={d}, {n_train} train pairs, {E} epochs")
+    print(f"  {arch}: {n_params} parameters, latent d={d}, {n_train} train pairs, {E} epochs, "
+          f"network on {device}, {torch.get_num_threads()} CPU threads")
     for e in range(1, E + 1):
         t0 = time.time()
         alpha = tc["noise_amp"] * max(0.0, 1.0 - e / (tc["noise_end_frac"] * E))
@@ -105,7 +109,8 @@ def main(cfg, arch):
         hist.append(row)
         if float(vloss) < best:
             best = float(vloss)
-            torch.save({"arch": arch, "latent_dim": d, "state_dict": model.state_dict(), "epoch": e},
+            state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+            torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": e},
                        out_dir / "model.pt")
         if e == 1 or e % 5 == 0 or e == E:
             print(f"  epoch {e:3d}  alpha={alpha:.4f}  train_inc={agg['inc']:.4f}  val_inc={vparts['inc']:.4f}  "

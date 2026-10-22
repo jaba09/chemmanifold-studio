@@ -22,6 +22,22 @@ pip install -r requirements.txt  # exact tested versions: requirements-lock.txt
 pip install -e .
 ```
 
+### Apple Silicon (M1/M2/M3 Macs)
+
+Cantera and PyTorch both ship native arm64 wheels, so the steps above work unchanged with a native
+Python 3.10–3.13 (for example from Homebrew: `brew install python@3.12`, then
+`python3.12 -m venv .venv`). Do not use an x86 Python under Rosetta.
+
+The defaults are tuned for a MacBook Air (16 GB RAM, 8 cores):
+
+* `training.threads: 4` keeps PyTorch on the four performance cores.
+* `training.device: auto` keeps the network on the CPU. The hard-physics layers need float64,
+  and Apple's MPS GPU backend has no float64, so on MPS only the network can move to the
+  GPU and every batch has to be copied back and forth. For networks this small (about 0.2M
+  parameters) that is usually slower than the CPU. You can try `device: mps` to compare.
+* Peak memory measured for the H2 case is under 1 GB for every stage. The CH4 case is larger
+  but still far below 16 GB.
+
 ## Running
 
 ```bash
@@ -31,9 +47,22 @@ python scripts/02_autoignition_0d.py --config config.yaml   # any single stage
 ```
 
 All settings (mechanism, envelope bounds, sample counts, network sizes, training schedule,
-certification grid) live in [`config.yaml`](config.yaml). The default is the Cantera built-in
-`h2o2.yaml` H2/air mechanism (10 species) with `dt_base = 2 us`; for CH4 point `mechanism` to
-`gri30.yaml`, change `fuel`, and raise `dt_base` to 10 us.
+certification grid) live in one YAML file. Two chemical systems are included:
+
+| Config | Mechanism | Species | phi | T0 | P0 | dt_base |
+|---|---|---|---|---|---|---|
+| [`config.yaml`](config.yaml) (default) | H2/air, Cantera `h2o2.yaml` | 10 | 0.5–2.0 | 1050–1300 K | 1–5 atm | 2 us |
+| [`configs/ch4_gri30.yaml`](configs/ch4_gri30.yaml) (experimental) | CH4/air, GRI-Mech 3.0 (`gri30.yaml`) | 53 | 0.6–1.6 | 1400–1700 K | 1–5 atm | 10 us |
+
+```bash
+python run_pipeline.py --config configs/ch4_gri30.yaml   # writes to data/ch4_gri30/
+```
+
+The CH4 case runs end to end and is accurate for single steps, but its closed-loop rollouts are
+not yet stable (see `RESULTS.md`), so treat it as a starting point rather than a validated model.
+
+Any other mechanism that uses NASA-7 thermodynamics works as well. Copy a config, then set
+`chemistry.mechanism` (a Cantera YAML file), `fuel`/`oxidizer`, the envelope, and `dt_base`/`t_max`.
 
 ## Stages and on-disk handoff
 

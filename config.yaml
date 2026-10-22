@@ -69,7 +69,8 @@ training:
   noise_end_frac: 0.85
   loss_weights: {inc: 1.0, mass: 1.0, T: 1.0, equil: 0.1, ae: 1.0}
   equil_threshold: 0.05         # |v_true|_inf below which a pair counts as equilibrium
-  threads: 4
+  threads: 4                    # CPU threads; 4 = the performance cores of an M1/M2 MacBook Air ('auto' = torch default)
+  device: auto                  # auto (CPU, or CUDA if present) | cpu | mps | cuda
 
 # Module 5 - Certification
 evaluation:
