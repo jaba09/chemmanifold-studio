@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Ignition: Fluent's steady laminar finite-rate run needs a hot start too. Start the whole
+// domain as still air at 300 K and patch the mixing annulus (where fuel meets the coflow air)
+// to 2000 K so the flame lights; the solution then relaxes to the steady flame.
+defaultFieldValues
+(
+    volScalarFieldValue T 300
+);
+
+regions
+(
+    zoneToCell
+    {
+        zone            fff-fluid-mixing;
+        fieldValues
+        (
+            volScalarFieldValue T 2000
+        );
+    }
+);
+
+// ************************************************************************* //

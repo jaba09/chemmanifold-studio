@@ -66,6 +66,9 @@ chemmanifold/
   rollout.py    Cantera reference, batched autoregressive rollout, Tier 2/3 metrics
 scripts/        the ten pipeline stages
 run_pipeline.py runs the stages as separate processes
+openfoam/       Fluent single-flame burner rebuilt as an OpenFOAM case, plus a DEFINE_CHEM_STEP
+                counterpart (custom chemistry solver) where a surrogate can be plugged in;
+                see openfoam/README.md
 ```
 
 ## Implementation notes (where the spec leaves choices open)

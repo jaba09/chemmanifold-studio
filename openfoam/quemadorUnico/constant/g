@@ -1,0 +1,18 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       uniformDimensionedVectorField;
+    location    "constant";
+    object      g;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions          [0 1 -2 0 0 0 0];
+value               (-9.8 0 0);     // Fluent gravity/x = -9.8: x is the burner axis, pointing up
+
+// ************************************************************************* //

@@ -1,0 +1,35 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      chemistryProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Fluent: laminar finite-rate, stiff chemistry, ODE rtol 1e-5 / atol 1e-10.
+// Fluent's DEFINE_CHEM_STEP hook (user_chem_step): build ../../userChemStep, add
+// libs (userChemStep); to system/controlDict and set solver userChemStep; below.
+chemistryType
+{
+    solver          ode;            // or userChemStep
+    method          standard;
+}
+
+chemistry           on;
+
+initialChemicalTimeStep 1e-07;
+
+odeCoeffs
+{
+    solver          seulex;
+    absTol          1e-10;
+    relTol          1e-05;
+}
+
+// ************************************************************************* //

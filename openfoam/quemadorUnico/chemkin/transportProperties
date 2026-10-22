@@ -1,0 +1,188 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// Sutherland fits to kinetic-theory viscosity from tran.dat
+
+"H2"
+{
+    transport
+    {
+        As  7.258916e-07;
+        Ts  140.6528;
+    }
+}
+// max fit error 4.89% over 300-2500 K
+
+"H"
+{
+    transport
+    {
+        As  8.827210e-07;
+        Ts  193.3048;
+    }
+}
+// max fit error 2.36% over 300-2500 K
+
+"O"
+{
+    transport
+    {
+        As  2.085888e-06;
+        Ts  153.7916;
+    }
+}
+// max fit error 3.91% over 300-2500 K
+
+"O2"
+{
+    transport
+    {
+        As  1.801810e-06;
+        Ts  168.0928;
+    }
+}
+// max fit error 3.16% over 300-2500 K
+
+"OH"
+{
+    transport
+    {
+        As  2.150594e-06;
+        Ts  153.7916;
+    }
+}
+// max fit error 3.91% over 300-2500 K
+
+"H2O"
+{
+    transport
+    {
+        As  2.122467e-06;
+        Ts  818.9667;
+    }
+}
+// max fit error 4.53% over 300-2500 K
+
+"HO2"
+{
+    transport
+    {
+        As  1.829970e-06;
+        Ts  168.0928;
+    }
+}
+// max fit error 3.16% over 300-2500 K
+
+"H2O2"
+{
+    transport
+    {
+        As  1.857703e-06;
+        Ts  168.0928;
+    }
+}
+// max fit error 3.16% over 300-2500 K
+
+"CH2"
+{
+    transport
+    {
+        As  9.589370e-07;
+        Ts  192.5647;
+    }
+}
+// max fit error 2.37% over 300-2500 K
+
+"CH2(S)"
+{
+    transport
+    {
+        As  9.589370e-07;
+        Ts  192.5647;
+    }
+}
+// max fit error 2.37% over 300-2500 K
+
+"CH3"
+{
+    transport
+    {
+        As  9.927946e-07;
+        Ts  192.5647;
+    }
+}
+// max fit error 2.37% over 300-2500 K
+
+"CH4"
+{
+    transport
+    {
+        As  1.057089e-06;
+        Ts  190.6610;
+    }
+}
+// max fit error 2.40% over 300-2500 K
+
+"CO"
+{
+    transport
+    {
+        As  1.528681e-06;
+        Ts  162.7906;
+    }
+}
+// max fit error 3.42% over 300-2500 K
+
+"CO2"
+{
+    transport
+    {
+        As  1.669515e-06;
+        Ts  279.2295;
+    }
+}
+// max fit error 1.36% over 300-2500 K
+
+"HCO"
+{
+    transport
+    {
+        As  1.451547e-06;
+        Ts  526.1634;
+    }
+}
+// max fit error 1.74% over 300-2500 K
+
+"CH2O"
+{
+    transport
+    {
+        As  1.476544e-06;
+        Ts  526.1634;
+    }
+}
+// max fit error 1.74% over 300-2500 K
+
+"CH3O"
+{
+    transport
+    {
+        As  1.426691e-06;
+        Ts  475.8007;
+    }
+}
+// max fit error 1.88% over 300-2500 K
+
+"N2"
+{
+    transport
+    {
+        As  1.554426e-06;
+        Ts  162.4823;
+    }
+}
+// max fit error 3.43% over 300-2500 K

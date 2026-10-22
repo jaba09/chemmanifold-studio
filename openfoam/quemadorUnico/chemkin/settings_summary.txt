@@ -1,0 +1,145 @@
+Fluent 20.2 (ANSYS_FLUENT 20.2 Build 10176)
+enabled models: rp-seg? rp-axi? rf-energy? rp-kw? rp-react? rp-trb-scl? rp-turb? rp-visc? hyb-init? rp-double? rp-graphics? rp-host? rp-thread? dpm-cache?
+species/reaction-model: "finite-rate"
+udf/chem-step-fcn: "user_chem_step::libudf"
+operating-pressure: 101325
+gravity/x: -9.800000000000001
+gravity/y: 0
+species/sct: 0.7
+species/ode-rtol: 1e-05
+species/ode-atol: 1e-10
+species order: h2 h o o2 oh h2o ho2 h2o2 ch2 ch2<s> ch3 ch4 co co2 hco ch2o ch3o n2
+wrote chem.inp (7190 chars)
+wrote chem.foam.inp (chemkinToFoam-readable copy)
+wrote therm.dat (6201 chars)
+wrote therm.foam.dat (chemkinToFoam-readable copy)
+wrote tran.dat (8118 chars)
+
+boundary zones:
+  [9] fff-fluid-exhaust: fluid
+      material chemkin-import
+  [10] fff-fluid-exterior: fluid
+      material chemkin-import
+  [11] fff-fluid-fuel: fluid
+      material chemkin-import
+  [12] fff-fluid-mixing: fluid
+      material chemkin-import
+  [18] inlet-coflow-fff-fluid-mixing: mass-flow-inlet
+      t0 = 300
+      p = 0
+      flow-spec = 0
+      mass-flow = 5.7675e-05
+      direction-spec = 1
+      ni = 1
+      nj = 0
+      ke-spec = 2
+      turb-intensity = 0.05
+      turb-viscosity-ratio = 10
+      mf = 0 0 0 0.21 0 0 0 0 0 0 0 0 0 0 0 0 0
+  [19] outlet-lab: wall
+      t = 300
+      q = 0
+      h = 0
+      tinf = 300
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = heat flux
+  [26] outlet-lab:026: pressure-outlet
+      t0 = 300
+      p = 0
+      direction-spec = 1
+      ni = 1
+      nj = 0
+      ke-spec = 2
+      turb-intensity = 0.05
+      turb-viscosity-ratio = 10
+      mf = 0 0 0 0.21 0 0 0 0 0 0 0 0 0 0 0 0 0
+  [20] inlet-fuel: mass-flow-inlet
+      t0 = 300
+      p = 0
+      flow-spec = 0
+      mass-flow = 6.735e-06
+      direction-spec = 1
+      ni = 1
+      nj = 0
+      ke-spec = 2
+      turb-intensity = 0.05
+      turb-viscosity-ratio = 10
+      mf = 0 0 0 0 0 0 0 0 0 0 0 1 0 0 0 0 0
+  [5] wall-hood: wall
+      t = 300
+      q = 0
+      h = 0
+      tinf = 300
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = coupled
+  [15] axis-fff-fluid-exhaust: axis
+  [16] axis-fff-fluid-fuel: axis
+  [17] inlet-coflow-fff-fluid-exterior: velocity-inlet
+      t = 300
+      p = 0
+      vmag = 0.05
+      velocity-spec = 2
+      ni = 1
+      nj = 0
+      ke-spec = 2
+      turb-intensity = 0.05
+      turb-viscosity-ratio = 10
+      mf = 0 0 0 0.21 0 0 0 0 0 0 0 0 0 0 0 0 0
+  [21] wall-pot-fff-fluid-exhaust: wall
+      t = 300
+      q = 0
+      h = 15
+      tinf = 323
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = convection
+  [22] wall-pot-fff-fluid-fuel: wall
+      t = 300
+      q = 0
+      h = 0
+      tinf = 300
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = heat flux
+  [23] wall-pot-fff-fluid-mixing: wall
+      t = 300
+      q = 0
+      h = 15
+      tinf = 323
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = convection
+  [24] wall-disk: wall
+      t = 300
+      q = 0
+      h = 0
+      tinf = 300
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = fixed temperature
+  [25] wall-fff-fluid-exhaust: wall
+      t = 300
+      q = 0
+      h = 0
+      tinf = 300
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = heat flux
+  [14] wall-hood-shadow: wall
+      t = 300
+      q = 0
+      h = 0
+      tinf = 300
+      vmag = 0
+      ni = 1
+      nj = 0
+      thermal-bc = coupled

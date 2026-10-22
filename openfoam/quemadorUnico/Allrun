@@ -1,0 +1,40 @@
+#!/bin/sh
+# Build and run the case from the Fluent .cas.h5.
+#   ./Allrun /path/to/quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 [nProcs]
+# Needs: OpenFOAM (openfoam.com, v1912 or newer) sourced, python3 with numpy and h5py.
+cd "${0%/*}" || exit 1
+set -e
+
+CAS=${1:?usage: ./Allrun <case.cas.h5> [nProcs]}
+NP=${2:-4}
+TOOLS=../tools
+
+run() { # run <log name> <command...>
+    log=log.$1; shift
+    echo "Running $* > $log"
+    "$@" > "$log" 2>&1 || { echo "  failed, see $log"; tail -20 "$log"; exit 1; }
+}
+
+# 1. Mesh: Fluent 2D axisymmetric mesh -> 5 deg wedge about the x axis
+run meshConvert python3 $TOOLS/fluent_h5_to_foam.py "$CAS" . --angle 5
+run checkMesh checkMesh
+
+# 2. Mechanism: the Chemkin files Fluent stored in the .cas (already extracted to chemkin/;
+#    re-extract with: python3 $TOOLS/fluent_cas_settings.py "$CAS" chemkin)
+run chemkinToFoam chemkinToFoam chemkin/chem.foam.inp chemkin/therm.foam.dat \
+    chemkin/transportProperties constant/reactions constant/thermo.compressibleGas
+
+# 3. Fields and ignition
+rm -rf 0 && cp -r 0.orig 0
+run setFields setFields
+
+# 4. Solve (steady state by local time stepping)
+APP=$(foamDictionary -entry application -value system/controlDict)
+if [ "$NP" -gt 1 ]; then
+    foamDictionary -entry numberOfSubdomains -set "$NP" system/decomposeParDict > /dev/null
+    run decomposePar decomposePar -force
+    run "$APP" mpirun -np "$NP" "$APP" -parallel
+    run reconstructPar reconstructPar -latestTime
+else
+    run "$APP" "$APP"
+fi

@@ -1,0 +1,85 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Fluent thermal BCs: fixed T (disk), adiabatic (q = 0), convection (h, Tinf), coupled (hood)
+dimensions          [0 0 0 1 0 0 0];
+
+internalField       uniform 300;
+
+boundaryField
+{
+    "inlet.*"
+    {
+        type            fixedValue;
+        value           uniform 300;
+    }
+
+    outlet-lab-026
+    {
+        type            inletOutlet;
+        inletValue      uniform 300;
+        value           uniform 300;
+    }
+
+    wall-disk
+    {
+        type            fixedValue;
+        value           uniform 300;
+    }
+
+    // adiabatic: outlet-lab (a wall in Fluent despite its name), wall-pot-fff-fluid-fuel,
+    // wall-fff-fluid-exhaust
+    wall
+    {
+        type            zeroGradient;
+    }
+
+    // explicit names: a regex would lose to the "wall" group entry above
+    wall-pot-fff-fluid-exhaust
+    {
+        // Fluent: convection, h = 15 W/m2K, Tinf = 323 K
+        type            externalWallHeatFluxTemperature;
+        mode            coefficient;
+        h               uniform 15;
+        Ta              constant 323;
+        kappaMethod     fluidThermo;
+        value           uniform 300;
+    }
+
+    wall-pot-fff-fluid-mixing
+    {
+        $wall-pot-fff-fluid-exhaust;
+    }
+
+    wall-hood
+    {
+        // Fluent: two-sided coupled wall of zero thickness (hood sheet)
+        type            compressible::turbulentTemperatureCoupledBaffleMixed;
+        Tnbr            T;
+        kappaMethod     fluidThermo;
+        value           uniform 300;
+    }
+
+    wall-hood-shadow
+    {
+        $wall-hood;
+    }
+
+    "(front|back)"
+    {
+        type            wedge;
+    }
+}
+
+// ************************************************************************* //
