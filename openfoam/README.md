@@ -22,6 +22,11 @@ cd openfoam/quemadorUnico
 ./Allrun /path/to/quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 4     # 4 = MPI ranks
 ```
 
+Without OpenFOAM installed, `quemadorUnico/run_on_my_computer.sh` does everything on any x86_64
+Linux or Windows WSL machine: it installs v2412 from conda-forge into `~/openfoam-burner` (no sudo),
+then runs `Allrun`. `--resume` continues a stopped run and `--results` reconstructs the latest save
+for ParaView (`burner.foam`).
+
 `Allrun` converts the mesh, runs `checkMesh`, converts the mechanism with `chemkinToFoam`, copies
 `0.orig` to `0`, ignites with `setFields`, then runs `rhoReactingBuoyantFoam` in parallel.
 `fluentMeshToFoam` is not used because it only reads ASCII `.msh`/`.cas`; the converter reads the
