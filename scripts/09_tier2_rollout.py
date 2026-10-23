@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from chemmanifold.chemistry import make_gas
+from chemmanifold.flame import case_label, make_initializer
 from chemmanifold.io import base_parser, load_config, save_json, save_npz, stage_dir
 from chemmanifold.loading import load_surrogate
-from chemmanifold.rollout import (cantera_trajectory, ignition_index, manifold_T_mae, phase_aligned_nrmse,
-                                  surrogate_rollout)
+from chemmanifold.rollout import (cantera_trajectory, eval_case, ignition_index, manifold_T_mae,
+                                  phase_aligned_nrmse, surrogate_rollout)
 
 
 def main(cfg, arch):
@@ -22,8 +23,9 @@ def main(cfg, arch):
     model, scalers, _ = load_surrogate(cfg, arch)
     gas = make_gas(cfg)
     dt = r["stride"] * cfg["autoignition"]["dt_base"]
-    P0 = r["P0_atm"] * 101325.0
-    Y_ct, T_ct, h0 = cantera_trajectory(gas, cfg, r["phi"], r["T0"], P0, dt, r["n_steps"])
+    case = eval_case(cfg, r)
+    P0 = case["P0"]
+    Y_ct, T_ct, h0 = cantera_trajectory(gas, make_initializer(gas, cfg), case, dt, r["n_steps"])
     Y_ml, T_ml = surrogate_rollout(model, Y_ct[0], T_ct[0], P0, h0, dt, r["n_steps"])
     Y_ml, T_ml = Y_ml[0], T_ml[0]
     t = np.arange(r["n_steps"] + 1) * dt
@@ -31,7 +33,7 @@ def main(cfg, arch):
     i_ct, i_ml = ignition_index(T_ct, t), ignition_index(T_ml, t)
     tau_ct, tau_ml = t[i_ct], t[i_ml]
     report = dict(
-        arch=arch, phi=r["phi"], T0=r["T0"], P0_atm=r["P0_atm"], dt=dt, n_steps=r["n_steps"],
+        arch=arch, case=case, dt=dt, n_steps=r["n_steps"],
         tau_ign_cantera_us=tau_ct * 1e6, tau_ign_ml_us=tau_ml * 1e6,
         tau_ign_rel_err_pct=float((tau_ml - tau_ct) / tau_ct * 100.0),          # Eq. 47
         T_final_cantera=float(T_ct[-1]), T_final_ml=float(T_ml[-1]),
@@ -46,9 +48,11 @@ def main(cfg, arch):
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     axes[0].plot(t * 1e6, T_ct, "k-", label="Cantera")
     axes[0].plot(t * 1e6, T_ml, "r--", label=arch)
-    axes[0].set(xlabel="t [us]", ylabel="T [K]", title=f"tau error {report['tau_ign_rel_err_pct']:+.1f}%")
+    axes[0].set(xlabel="t [us]", ylabel="T [K]",
+                title=f"{case_label(case)}: tau error {report['tau_ign_rel_err_pct']:+.1f}%")
     axes[0].legend()
-    for name in ("H2", "O2", "H2O", "OH", "H", "HO2"):
+    shown = [s for s in ("CH4", "H2", "O2", "H2O", "CO", "OH", "H", "HO2") if s in species][:6]
+    for name in shown:
         k = species.index(name)
         line, = axes[1].semilogy(t * 1e6, np.maximum(Y_ct[:, k], 1e-12), "-", label=name)
         axes[1].semilogy(t * 1e6, np.maximum(Y_ml[:, k], 1e-12), "--", color=line.get_color())

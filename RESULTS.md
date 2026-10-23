@@ -1,6 +1,57 @@
 # Reference runs
 
-## H2/air (default `config.yaml`)
+## Burner flame, CH4/air with GA18 (default `config.yaml`)
+
+The streams are those of the Fluent burner: CH4 at 300 K and air at 300 K with Y_O2 = 0.21 by
+mass, at 1 atm. Z_st = 0.050 and the adiabatic peak is 2126 K. Run on 4 CPU threads, the full
+pipeline takes about 55 min: about 2.5 min for flamelets, 1.5 min for sampling, and 23–26 min to
+train each model (300 epochs on 49k pairs).
+
+### Flame reference and sampled space
+
+* 14 counterflow flamelets (mixture-averaged transport), strain 7–881 1/s, peak T 1771–2070 K.
+  Five of them (1, 4, 7, 10, 13) are held out of training to test coverage.
+* 39,480 0D reactor pairs from 62 seeds, 13,600 PaSR pairs from 34 ensembles, and 3,057
+  flamelet-state pairs, for 56,137 pairs in total (49,401 train / 6,736 validation).
+* Global PCA: d_99.5% = 11 (out of 18 species). VQ-PCA R2(8) = 0.9965, so latent d = 8.
+
+| Bound | Sampled data | Flamelets |
+|---|---|---|
+| Pressure | 1 atm | 1 atm |
+| Mixture fraction Z | 0–1 | 0–1 |
+| Temperature | 300–2076 K | 300–2070 K (adiabatic max 2126 K) |
+
+Held-out flamelet states with a sampled state within 0.5 standard deviations (all species + T):
+**93.4%**. By Z band: 90% for Z < 0.025, 99% for 0.025–0.05, 96% for 0.05–0.10, 100% for
+0.10–0.20, and 94% for Z > 0.2. The median distance is 0.19 and the maximum 1.05.
+
+What goes beyond the steady flame: 86% of the sampled states are more than 0.5 sigma from every
+steady flamelet state. These are the ignition, partially burnt and heat-loss states that the 0D
+and PaSR seeds produce. They stay inside the flame's T, Z and P bounds, but some intermediates peak
+higher than in the steady flame: CH2O 3.1e-3 vs 4.9e-4, H 3.9e-4 vs 8.2e-5, H2O2 1.1e-4 vs 1.9e-5,
+and CH3O 1.2e-4 vs 1.0e-6. These peaks come from slow-ignition transients. A Fluent run passes
+through such states while it converges, so they are kept. Narrowing `envelope.alpha` (for example
+to [0.5, 1.0]) or lowering `autoignition.t_max` trims them.
+
+### Certification
+
+| Metric | ResNet-FiLM | Phy-ChemNODE |
+|---|---|---|
+| Tier 1 R2 of Box-Cox increments (all / flamelet states) | 0.9977 / 0.928 | 0.9965 / 0.925 |
+| Tier 1 max elemental residual | 4.6e-16 | 4.7e-16 |
+| Tier 1 temperature MAE / max error | 0.02 K / 4.2 K | 0.05 K / 3.0 K |
+| Tier 2 (Z = 0.05, alpha = 0.6, 500 × 10 us) ignition time error | 0% (470 us) | +260% |
+| Tier 2 final T (Cantera 2113 K) | 2077 K | 1775 K |
+| Tier 3 (Z 0.03/0.05/0.08 × alpha 0.6/0.7/0.8) mean \|tau error\| | 9.3% | 232% |
+| Tier 3 mean progress-aligned T MAE / species NRMSE | 34.8 K / 2.1% | 85.1 K / 5.2% |
+
+ResNet-FiLM is the usable model for this flame. It ignites at the right time, but it settles
+30–45 K below the burnt temperature at Z = 0.03 and 0.05. The rich case Z = 0.08, alpha = 0.8
+settles 155 K low, with a 9.8% species error. Phy-ChemNODE ignites late at stoichiometric
+conditions, and in one rich case it collapses to the 280 K solver bound, so it is not stable here
+yet. The 18-species state with an intrinsic dimension of about 11 is harder for an 8-D latent ODE.
+
+## H2/air premixed autoignition (`configs/h2_air_premixed.yaml`)
 
 H2/air, Cantera `h2o2.yaml` (10 species), envelope phi 0.5–2.0, T0 1050–1300 K, P0 1–5 atm,
 64 Sobol trajectories (42 autoignition, 22 PaSR), dt_base = 2 us. Run on 4 CPU cores. The full

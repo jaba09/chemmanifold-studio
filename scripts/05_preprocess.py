@@ -1,7 +1,7 @@
 """Stage 5 (Sections 3.1, 3.2, 5.1): merge sampled pairs, split train/validation, fit the Box-Cox +
 z-score scalers and increment scales, and export the thermodynamic tables used by the physics layers.
 
-Reads  03_samples/pairs_0d.npz, 03_samples/pairs_pasr.npz.
+Reads  03_samples/pairs_0d.npz, 03_samples/pairs_pasr.npz (+ pairs_flamelet.npz in flame mode).
 Writes 04_prep/dataset.npz  (raw pairs + split mask + standardized arrays)
        04_prep/scalers.json (lambda, mu_y, sigma_y, ctx_mu, ctx_sigma, sigma_dy, dt_base)
        04_prep/thermo.npz   (A, W, NASA-7 tables, species/element names)
@@ -19,6 +19,8 @@ def main(cfg):
     lam = pp["boxcox_lambda"]
     samples = stage_dir(cfg, "samples")
     parts = [load_npz(samples / "pairs_0d.npz"), load_npz(samples / "pairs_pasr.npz")]
+    if (samples / "pairs_flamelet.npz").exists():  # flame mode
+        parts.append(load_npz(samples / "pairs_flamelet.npz"))
     data = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     N = len(data["dt"])
 

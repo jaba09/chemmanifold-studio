@@ -1,17 +1,29 @@
 """Cantera helpers: gas setup, elemental mass matrix (Eq. 5) and NASA-7 coefficient tables."""
 
+from pathlib import Path
+
 import cantera as ct
 import numpy as np
 
 RU = 8314.462618  # J/(kmol K)
 
 
+def mechanism_path(cfg):
+    """A mechanism path relative to the config file or the repository, else a Cantera built-in name."""
+    mech = cfg["chemistry"]["mechanism"]
+    for base in (Path(cfg["_config_path"]).parent, Path(__file__).resolve().parents[1]):
+        if (base / mech).is_file():
+            return str(base / mech)
+    return mech
+
+
 def make_gas(cfg):
-    return ct.Solution(cfg["chemistry"]["mechanism"])
+    return ct.Solution(mechanism_path(cfg))
 
 
 def set_unburnt(gas, cfg, phi, T0, P0):
-    gas.set_equivalence_ratio(phi, cfg["chemistry"]["fuel"], cfg["chemistry"]["oxidizer"])
+    c = cfg["chemistry"]
+    gas.set_equivalence_ratio(phi, c["fuel"], c["oxidizer"], basis=c.get("composition_basis", "mole"))
     gas.TP = T0, P0
 
 
