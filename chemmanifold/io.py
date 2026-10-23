@@ -9,6 +9,7 @@ import yaml
 
 # Stage output directories, relative to `data_dir`.
 STAGE_DIRS = {
+    "flame": "00_flame",
     "envelope": "01_envelope",
     "autoignition": "02_autoignition",
     "samples": "03_samples",

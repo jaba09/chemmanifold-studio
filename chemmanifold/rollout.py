@@ -1,13 +1,31 @@
 """Closed-loop surrogate rollouts, Cantera reference trajectories and trajectory metrics (Section 6)."""
 
+import itertools
+
 import numpy as np
 import torch
 
-from .chemistry import const_p_reactor, set_unburnt
+from .chemistry import const_p_reactor
+from .flame import flame_pressure, is_flame
 
 
-def cantera_trajectory(gas, cfg, phi, T0, P0, dt, n_steps):
-    set_unburnt(gas, cfg, phi, T0, P0)
+def eval_case(cfg, spec):
+    """Normalize an evaluation case from the config: flame -> Z, alpha (dh = 0) at the flame
+    pressure; premixed -> phi, T0, P0 [Pa] (from P0_atm)."""
+    if is_flame(cfg):
+        return {"Z": float(spec["Z"]), "alpha": float(spec["alpha"]), "dh": 0.0, "P0": flame_pressure(cfg)}
+    return {"phi": float(spec["phi"]), "T0": float(spec["T0"]), "P0": float(spec["P0_atm"]) * 101325.0}
+
+
+def grid_cases(cfg):
+    """Cartesian product of evaluation.envelope_grid, in the key order given in the config."""
+    g = cfg["evaluation"]["envelope_grid"]
+    keys = list(g)
+    return keys, [eval_case(cfg, dict(zip(keys, vals))) for vals in itertools.product(*g.values())]
+
+
+def cantera_trajectory(gas, init, case, dt, n_steps):
+    init(case)
     Y, T = [gas.Y.copy()], [gas.T]
     h0 = gas.enthalpy_mass
     _, net = const_p_reactor(gas)

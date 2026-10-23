@@ -1,5 +1,13 @@
 """Stage 4 (Section 2.5): Partially Stirred Reactor stochastic micromixing ensemble.
 
+premixed mode: fresh = unburnt (phi, T0, P0) mixture, burnt = its HP equilibrium.
+flame mode:    fresh = stream mixture at Z (cold mixing line), burnt = the state of the row's training
+               flamelet at the same Z; with `dh_scale_by_alpha` the heat loss dh is multiplied by
+               alpha so that the cold mixing line keeps its 300 K inlet enthalpy.
+               Also writes 03_samples/pairs_flamelet.npz (regime 2): the training flamelets' own
+               states advanced by a random stride, so the radical pools that only diffusion
+               creates in a flame are in the data, not just what 0D chemistry reaches.
+
 Reads  01_envelope/initial_conditions.csv (regime 1 rows).
 Writes 03_samples/pairs_pasr.npz with the same layout as pairs_0d.npz (regime = 1).
 """
@@ -8,6 +16,7 @@ import numpy as np
 import pandas as pd
 
 from chemmanifold.chemistry import advance_const_p, make_gas, set_unburnt
+from chemmanifold.flame import FlameSeeds, case_label, is_flame
 from chemmanifold.io import base_parser, load_config, require, save_npz, stage_dir
 
 
@@ -18,16 +27,22 @@ def main(cfg):
     ics = pd.read_csv(require(stage_dir(cfg, "envelope") / "initial_conditions.csv"))
     ics = ics[ics.regime == 1]
     gas = make_gas(cfg)
+    seeds = FlameSeeds(gas, cfg) if is_flame(cfg) else None
     out = {k: [] for k in ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")}
     n_fail = 0
     for _, row in ics.iterrows():
-        set_unburnt(gas, cfg, row.phi, row.T0, row.P0)
-        Y_fresh, h_fresh = gas.Y.copy(), gas.enthalpy_mass
-        gas.equilibrate("HP")                      # burnt state with identical elemental ratios
-        Y_burnt, h_burnt = gas.Y.copy(), gas.enthalpy_mass
+        if seeds is not None:
+            (Y_fresh, h_fresh), (Y_burnt, h_burnt) = seeds.fresh(row.Z), seeds.burnt(row.Z, row.flamelet)
+        else:
+            set_unburnt(gas, cfg, row.phi, row.T0, row.P0)
+            Y_fresh, h_fresh = gas.Y.copy(), gas.enthalpy_mass
+            gas.equilibrate("HP")                  # burnt state with identical elemental ratios
+            Y_burnt, h_burnt = gas.Y.copy(), gas.enthalpy_mass
 
         alpha = rng.beta(p["beta_a"], p["beta_b"], size=p["n_particles"])
         dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
+        if p.get("dh_scale_by_alpha", False):
+            dh = dh * alpha
         strides = rng.choice(p["strides"], size=p["n_particles"])
         for a, d, s in zip(alpha, dh, strides):
             Y_mix = (1 - a) * Y_fresh + a * Y_burnt                        # Eq. 16
@@ -50,10 +65,30 @@ def main(cfg):
             out["T_out"].append(gas.T)
             out["regime"].append(1)
             out["traj_id"].append(int(row.id))
-        print(f"  PaSR {int(row.id):04d}: phi={row.phi:.2f} T0={row.T0:.0f}K P0={row.P0/101325:.2f}atm")
+        print(f"  PaSR {int(row.id):04d}: {case_label(row.to_dict())}")
     arrays = {k: np.asarray(v) for k, v in out.items()}
     print(f"  {len(arrays['dt'])} PaSR transition pairs ({n_fail} rejected states)")
     save_npz(stage_dir(cfg, "samples") / "pairs_pasr.npz", **arrays)
+    if seeds is not None:
+        flamelet_pairs(gas, cfg, seeds, rng)
+
+
+def flamelet_pairs(gas, cfg, seeds, rng):
+    p, dt_base = cfg["pasr"], cfg["autoignition"]["dt_base"]
+    out = {k: [] for k in ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")}
+    for j in seeds.train_ids:
+        for Y, h in zip(*seeds.raw[j]):
+            s = rng.choice(p["strides"])
+            gas.HPY = h, seeds.P, Y
+            Y_in, T_in = gas.Y.copy(), gas.T
+            advance_const_p(gas, s * dt_base)
+            for k, v in (("Y_in", Y_in), ("T_in", T_in), ("P_in", seeds.P), ("h_in", h), ("dt", s * dt_base),
+                         ("Y_out", gas.Y.copy()), ("T_out", gas.T), ("regime", 2), ("traj_id", int(j))):
+                out[k].append(v)
+    arrays = {k: np.asarray(v) for k, v in out.items()}
+    print(f"  {len(arrays['dt'])} flamelet-state transition pairs from flamelets {list(seeds.train_ids)} "
+          f"(held out for the coverage check: {list(seeds.heldout_ids)})")
+    save_npz(stage_dir(cfg, "samples") / "pairs_flamelet.npz", **arrays)
 
 
 if __name__ == "__main__":
