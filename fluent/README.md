@@ -141,6 +141,31 @@ enthalpy. The UDF then does the following:
 The cost is about 0.15 ms per surrogate step per cell on one core (gcc -O2). Cells below `T_freeze`
 cost almost nothing.
 
+### Expected CPU saving
+
+Measured on one core of a 2.8 GHz Xeon, over 400 training states at T ≥ 600 K. The direct-chemistry
+proxy is Cantera's CVODES constant-pressure reactor with Fluent's tolerances (rtol 1e-5, atol 1e-10),
+timing only the integration. Fluent's own stiff solver was not timed.
+
+| Chemistry dt | Direct GA18 (CVODES) | Surrogate, ResNet-FiLM (UDF core, with OOD checks) | Speed-up |
+|---|---|---|---|
+| 10 µs | 590 µs/cell (21 steps) | 160–210 µs/cell (1 step) | ~3–4× |
+| 40 µs | 760 µs/cell (30 steps) | 155 µs/cell (1 step) | ~5× |
+| 100 µs | 900 µs/cell (39 steps) | 430 µs/cell (3 steps) | ~2× |
+| 1 ms | 1600 µs/cell (77 steps) | 4100 µs/cell (25 steps) | **0.4× (slower)** |
+
+* The surrogate is a fixed-cost 40 µs step, while the cost of a stiff solver grows slowly with dt. So the
+  saving exists only while Fluent's chemistry dt stays within about 10–100 µs. Check `mean_substeps`
+  in the log: 1–2 means you are in the fast regime.
+* Fluent with ISAT on (the default for stiff chemistry) can cut direct-chemistry cost by a further 10×
+  or more in a steady flame, which can erase the gain. Compare against the setting you actually use.
+* Chemistry is only part of each iteration. The wall-clock saving is 1 / ((1 − f) + f / s), where f is
+  the share of iteration time spent in chemistry and s is the speed-up above. For example, f = 0.7
+  and s = 5 give about 2.3× overall.
+* The OOD checks add 5–30% to the surrogate's cost. Set `check_ood = 0` once you trust a run.
+* The main levers for more speed are a model trained on larger dt (strides up to ~1 ms, so one call
+  covers Fluent's step) and a smaller network. The 192-wide ResNet is ~0.23 M multiply-adds per step.
+
 ## 5. Is the model working outside the sampled space?
 
 For each cell it advances, the UDF runs six checks. They use the training states that
