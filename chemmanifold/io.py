@@ -17,6 +17,7 @@ STAGE_DIRS = {
     "manifold": "05_manifold",
     "models": "06_models",
     "eval": "07_eval",
+    "fluent": "08_fluent",
 }
 
 
