@@ -1,0 +1,54 @@
+; Fluent 20.2 journal: run the GA18 burner case with Direct Integration (DI) chemistry
+; instead of the DEFINE_CHEM_STEP UDF (user_chem_step::libudf).
+;
+; Run from the folder holding the case, e.g.
+;   fluent 2ddp -t12 -g -i ga18_di.jou > ga18_di.log
+; (2ddp: the case is 2D axisymmetric, double precision; it is partitioned for 12 processes.)
+;
+; Lines marked "prompt" use interactive TUI prompts that were written from the Fluent 20.2 TUI
+; layout but have NOT been run here. Check them once in an interactive session (type the command
+; and answer the prompts) before running the journal unattended.
+
+/file/read-case "quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5"
+; Starting from the UDF run's converged data is the best initial guess, if you have it:
+; /file/read-data "quemadorUnicoTesis_60KCells-GA18--ID-UDF.dat.h5"
+
+; --- 1. Hand the chemistry back to Fluent -----------------------------------------------------
+; With a DEFINE_CHEM_STEP hook active, Fluent calls the UDF instead of its own integrator.
+; ISAT is already off in this case, so unhooking the UDF is what switches the run to DI.
+/define/user-defined/function-hooks/chemistry-step "none"          ; prompt
+; Fallback if the TUI path differs in your build (sets the same case variable):
+; (rpsetvar 'udf/chem-step-fcn "none")
+(rpsetvar 'species/isat? #f)
+
+; --- 2. DI tolerances (unchanged from the case; see README for when to change them) -----------
+(rpsetvar 'species/ode-rtol 1e-05)
+(rpsetvar 'species/ode-atol 1e-10)
+
+; --- 3. Optional speed-ups. Uncomment after a first DI run, and compare -----------------------
+; Skip chemistry in cold cells. The case has 200 K, so all 63k cells are integrated, including the
+; 300 K CH4 in the fuel pot (42k cells) and the coflow air. 400 K changes nothing that burns here.
+; (rpsetvar 'species/min-temp-chemistry 400.)
+; Chemistry agglomeration: integrate one representative per cluster of similar cells
+; (Fluent default tolerance 0.02 is already stored in the case).
+; (rpsetvar 'species/agglom-chemistry? #t)
+
+; Print what Fluent will use, so the log records it
+(display (list 'chem-step (rpgetvar 'udf/chem-step-fcn) 'isat (rpgetvar 'species/isat?)
+               'rtol (rpgetvar 'species/ode-rtol) 'atol (rpgetvar 'species/ode-atol)
+               'tmin-chem (rpgetvar 'species/min-temp-chemistry)
+               'agglom (rpgetvar 'species/agglom-chemistry?)))
+(newline)
+
+; --- 4. Initialise (skip this block if you read the UDF run's data above) ----------------------
+/solve/initialize/hyb-initialization
+; Ignite: hot gas in the mixing annulus (zone fff-fluid-mixing, r 0.05-0.075 m, x 0-0.085 m),
+; where the fuel leaving the pot meets the coflow air.
+/solve/patch fff-fluid-mixing () temperature no 2000               ; prompt
+
+; --- 5. Iterate and save -----------------------------------------------------------------------
+/file/auto-save/data-frequency 500
+/file/auto-save/root-name "quemadorUnicoTesis_60KCells-GA18--DI"
+/solve/iterate 3000
+/file/write-case-data "quemadorUnicoTesis_60KCells-GA18--DI.cas.h5"
+/exit yes
