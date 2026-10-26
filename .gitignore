@@ -20,3 +20,6 @@ build/
 dist/
 .ipynb_checkpoints/
 .DS_Store
+
+# Exception: the Fluent base case (DI) is committed on purpose
+!fluent/cases/*.cas.h5

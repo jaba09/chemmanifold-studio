@@ -282,7 +282,11 @@ What to expect, from the certification of the full training run (RESULTS.md):
 This reference run is the direct-GA18 Fluent solution that `scripts/13_fluent_compare.py` compares the surrogate run against.
 
 Case: `quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5` (Fluent 20.2), from
-`burner-simulation.zip`. The case file is not committed.
+`burner-simulation.zip`. That original file is not committed.
+
+The Direct Integration base case (the original with the chem-step UDF unhooked) is committed at
+[`fluent/cases/quemadorUnicoTesis_60KCells-GA18--DI.cas.h5`](cases/quemadorUnicoTesis_60KCells-GA18--DI.cas.h5)
+(1.6 MB). It is the output of the command below, so you can open it in Fluent directly and skip that step.
 
 | File | What it does |
 |---|---|
