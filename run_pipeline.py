@@ -1,6 +1,7 @@
 """Run the full ChemManifold pipeline. Each stage is a separate process that reads its inputs from
 and writes its outputs to `data_dir`, so any stage can be re-run on its own. Stages 0 (flame
-reference) and 11 (flame coverage) run only for `envelope.mode: flame`.
+reference) and 11 (flame coverage) run only for `envelope.mode: flame`. Stage 12 exports the
+models for the Fluent UDF; stages 13-14 (Fluent comparisons) need Fluent exports and run by hand.
 
     python run_pipeline.py                       # everything, both architectures
     python run_pipeline.py --from 7 --arch chemnode
@@ -28,6 +29,7 @@ STAGES = [
     (9, "09_tier2_rollout.py", True),
     (10, "10_tier3_envelope.py", True),
     (11, "11_flame_coverage.py", False),
+    (12, "12_export_fluent.py", True),
 ]
 FLAME_ONLY = {0, 11}
 
@@ -36,7 +38,7 @@ def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--config", default=str(ROOT / "config.yaml"))
     p.add_argument("--from", dest="start", type=int, default=0)
-    p.add_argument("--to", dest="stop", type=int, default=11)
+    p.add_argument("--to", dest="stop", type=int, default=12)
     p.add_argument("--arch", nargs="+", default=["resnet_film", "chemnode"], choices=["resnet_film", "chemnode"])
     a = p.parse_args()
     with open(a.config) as f:

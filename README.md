@@ -115,6 +115,9 @@ streams, the envelope, and `dt_base`/`t_max`.
 | 9 | `09_tier2_rollout.py` | §6.2 | 5, 7 | `07_eval/<arch>/tier2*.{json,npz,png}` |
 | 10 | `10_tier3_envelope.py` | §6.3 | 5, 7 | `07_eval/<arch>/tier3.csv`, summary, heatmap |
 | 11 | `11_flame_coverage.py` (flame mode) | – | 0, 5 | `07_eval/flame_coverage.json`, `flame_coverage.png` |
+| 12 | `12_export_fluent.py` | – | 5, 6, 7 | `08_fluent/<arch>/chemmanifold_model.txt`, `chemmanifold_tests.txt` |
+| 13 | `13_fluent_compare.py` (by hand) | – | two Fluent ASCII exports | `08_fluent/compare_<label>/` |
+| 14 | `14_fluent_apriori.py` (by hand) | – | a Fluent ASCII export, 5, 7, 12 | `08_fluent/apriori_<label>_<arch>/` |
 
 Transition-pair files share one layout: `Y_in, T_in, P_in, h_in, dt, Y_out, T_out, regime, traj_id`
 (regime 0 = 0D reactor, 1 = PaSR micromixing, 2 = flamelet states in flame mode).
@@ -131,7 +134,9 @@ chemmanifold/
   models.py     ResNetFiLM (Eqs. 32-37), PhyChemNODE (Eqs. 38-41), Surrogate wrapper
   loading.py    load scalers / thermo tables / trained checkpoints
   rollout.py    Cantera reference, batched autoregressive rollout, Tier 2/3 metrics
-scripts/        the ten pipeline stages
+  fluent.py     Fluent model-file export, Python twin of the UDF stepping and OOD checks, ASCII reader
+scripts/        the pipeline stages
+fluent/         the Fluent UDF (C) that runs the surrogates, and its tests - see fluent/README.md
 run_pipeline.py runs the stages as separate processes
 ```
 
