@@ -31,16 +31,20 @@ prints a warning when you load it.
 O2 = 0.21 with *species in mole fractions* on, so it is normal air (Y_O2 = 0.233 by mass,
 Z_st = 0.055). The default `config.yaml` samples air with Y_O2 = 0.21 by mass (Z_st = 0.050), so every
 burning lean state in Fluent would have more O2 than any training state. Use
-[`configs/burner_fluent_air.yaml`](../configs/burner_fluent_air.yaml) for the model you load in Fluent:
+[`configs/burner_fluent_nonadiabatic.yaml`](../configs/burner_fluent_nonadiabatic.yaml) for the model you load in
+Fluent. It has that air and also explores the heat-loss states the burner's cold walls and gas
+radiation produce. The adiabatic model of `burner_fluent_air.yaml` collapses on wall-cooled burnt gas
+(see `RESULTS.md`), and in the first Fluent run that showed up as an out-of-distribution share
+rising from 27% to 50% of the hot cells in 19 steps.
 
 ```bash
-python run_pipeline.py --config configs/burner_fluent_air.yaml --arch resnet_film   # ~1 h on 4 cores
+python run_pipeline.py --config configs/burner_fluent_nonadiabatic.yaml --arch resnet_film   # ~1h 50 on 4 cores
 ```
 
 For a model that is already trained, stage 12 alone is
 `python run_pipeline.py --config <config> --from 12 --to 12 --arch resnet_film`.
 
-This writes `<data_dir>/08_fluent/resnet_film/` (`data/fluent_air/08_fluent/resnet_film/` for the config above):
+This writes `<data_dir>/08_fluent/resnet_film/` (`data/fluent_nonadiabatic/08_fluent/resnet_film/` for the config above):
 
 | File | What it is |
 |---|---|
