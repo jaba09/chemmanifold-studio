@@ -51,6 +51,37 @@ settles 155 K low, with a 9.8% species error. Phy-ChemNODE ignites late at stoic
 conditions, and in one rich case it collapses to the 280 K solver bound, so it is not stable here
 yet. The 18-species state with an intrinsic dimension of about 11 is harder for an 8-D latent ODE.
 
+## Burner flame with the Fluent case's air (`configs/burner_fluent_air.yaml`): the model for Fluent
+
+Same as above, but the air is the one the Fluent case really solves: O2 = 0.21 by **mole**
+(Y_O2 = 0.233), so Z_st = 0.055 and the adiabatic peak is 2239 K. Run on 4 CPU threads, ResNet-FiLM
+only: flamelets 2 min, sampling ~1.5 min, training 18 min.
+
+* 15 flamelets, strain 7–1316 1/s, peak T 1907–2200 K. 56,796 pairs (49,980 train / 6,816 validation).
+  Global PCA d_99.5% = 11, VQ-PCA R2(8) = 0.9975, latent d = 8.
+* Coverage of the held-out flamelets: **98.5%** within 0.5 sigma. Sampled T 300–2202 K.
+
+| Metric | ResNet-FiLM |
+|---|---|
+| Tier 1 R2 of Box-Cox increments / max elemental residual | 0.9967 / 4.8e-16 |
+| Tier 1 temperature MAE / max error | 0.03 K / 3.9 K |
+| Tier 2 (Z = 0.055, alpha = 0.6, 500 × 10 us) ignition time | 190 us vs 190 us (0%) |
+| Tier 2 final T (Cantera 2242 K) | 2256 K (+14 K) |
+| Tier 3 (Z 0.033/0.055/0.088 × alpha 0.6/0.7/0.8) mean \|tau error\| | 35.7% (stoichiometric 0–14%) |
+| Tier 3 mean T MAE / species NRMSE | 23.2 K / 4.9% |
+| Stage 14 on held-out flamelet states, one 40 us step (837 cells ≥ 600 K) | T MAE 0.09 K (max 2.7 K), 1.3% flagged OOD |
+| UDF self-test (C core vs PyTorch) / cost | 60/60 cases, 122 us per cell call (1 core) |
+
+Near stoichiometric this model is better than the default-config one (final T within 15 K). The
+weak spot is the rich side, Z = 0.088: alpha = 0.6 ignites 2× late and ends 350 K low, alpha = 0.8
+ends 200 K low (same weakness as the 155 K of the default config). The lean slow case (Z = 0.033,
+alpha = 0.6) ignites 59% late but reaches the right temperature.
+
+A second run with 50% more seeds weighted to the rich side and `equil` loss weight 0.3 matched single
+steps as well (stage 14 T MAE 0.08 K) but was much worse in closed loop (mean |tau error| 970%,
+stoichiometric ignition 10× late), so it was discarded. Closed-loop behaviour varies a lot between
+trainings with similar single-step accuracy; a multi-step rollout loss is the fix to try next.
+
 ## H2/air premixed autoignition (`configs/h2_air_premixed.yaml`)
 
 H2/air, Cantera `h2o2.yaml` (10 species), envelope phi 0.5–2.0, T0 1050–1300 K, P0 1–5 atm,

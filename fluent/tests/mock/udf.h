@@ -23,6 +23,7 @@ extern double CURRENT_TIME;
 #define C_R(c, t) ((t)->rho)
 #define PRF_GRSUM1(x) (x)
 #define PRF_GRHIGH1(x) (x)
+#define PRF_GRLOW1(x) (x)
 double RP_Get_Real(const char *name);
 Domain *Get_Domain(int id);
 Material *mixture_material(Domain *d);

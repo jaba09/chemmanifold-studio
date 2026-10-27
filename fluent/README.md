@@ -27,13 +27,20 @@ prints a warning when you load it.
 
 ## 1. Export the model
 
-After training (stages 0–11), run:
+**Train the model for the air the Fluent case really uses.** The burner case sets the air inlets to
+O2 = 0.21 with *species in mole fractions* on, so it is normal air (Y_O2 = 0.233 by mass,
+Z_st = 0.055). The default `config.yaml` samples air with Y_O2 = 0.21 by mass (Z_st = 0.050), so every
+burning lean state in Fluent would have more O2 than any training state. Use
+[`configs/burner_fluent_air.yaml`](../configs/burner_fluent_air.yaml) for the model you load in Fluent:
 
 ```bash
-python run_pipeline.py --from 12 --to 12 --arch resnet_film      # or: python scripts/12_export_fluent.py --arch resnet_film
+python run_pipeline.py --config configs/burner_fluent_air.yaml --arch resnet_film   # ~1 h on 4 cores
 ```
 
-This writes `data/08_fluent/resnet_film/`:
+For a model that is already trained, stage 12 alone is
+`python run_pipeline.py --config <config> --from 12 --to 12 --arch resnet_film`.
+
+This writes `<data_dir>/08_fluent/resnet_film/` (`data/fluent_air/08_fluent/resnet_film/` for the config above):
 
 | File | What it is |
 |---|---|
@@ -41,7 +48,8 @@ This writes `data/08_fluent/resnet_film/`:
 | `chemmanifold_tests.txt` | 60 cases computed with the PyTorch model that the compiled UDF checks itself against |
 | `export_report.json` | trained dt range, fraction of validation states the OOD checks flag (about 0.1–0.3% by design), float32 vs float64 difference |
 
-Copy the two `.txt` files into the folder Fluent runs in (next to the case file).
+Copy the two `.txt` files and [`chemmanifold.ini`](chemmanifold.ini) into the folder Fluent runs in
+(the *Working Directory* of Fluent Launcher, next to the case file).
 
 Optionally, check the C code on your machine before going into Fluent. This needs Linux, macOS or WSL with a C compiler:
 
@@ -52,7 +60,15 @@ fluent/tests/run_tests.sh data/08_fluent/resnet_film
 ## 2. Build the UDF in Fluent
 
 Written for **Fluent 2020 R2 (20.2), double precision**, which is the version of the burner case. It
-uses only the standard UDF API, so newer versions should work too.
+uses only the standard UDF API and plain C99, so newer versions (2026 R1, including the Student
+edition) work the same way.
+
+On **Windows** (Fluent 2026 R1, Student or not), use the compiler that ships with Fluent: tick
+*Use Built-In Compiler* in the *Compiled UDFs* dialog. No Visual Studio is needed. Keep the working
+folder on a local path without spaces, accents or OneDrive sync (for example `C:\quemador`), because
+the UDF build scripts break on such paths. Start Fluent standalone (Fluent Launcher, *2D*,
+*Double Precision*, *Processes* 4 for the Student edition); the case was saved with 12 partitions and
+Fluent repartitions it for 4 processes when it reads it.
 
 1. Copy `fluent/udf/chemmanifold_udf.c`, `chemmanifold_core.c` and `chemmanifold_core.h` into the case folder.
 2. Go to *User-Defined > Functions > Compiled…*. Add **both `.c` files** under *Source Files* and
@@ -203,7 +219,8 @@ The checks use the same coordinates as stage 11 (Box-Cox z-scores of all species
 appends a row to `chemmanifold_monitor.csv` with these columns: `iteration, flow_time, cells,
 advanced, frozen, ood_skipped, invalid, dt_capped, dt_scaled, mean_substeps, ood_any, ood_T,
 ood_T_at_Z, ood_pressure, ood_species, ood_manifold, ood_data, ood_fraction,
-max_manifold_ratio, max_data_ratio`. The counts refer to the chemistry calls of the previous iteration,
+max_manifold_ratio, max_data_ratio, dt_chem_min, dt_chem_max`. The last two are the smallest and largest
+chemistry time step Fluent passed to the hook in that iteration. The counts refer to the chemistry calls of the previous iteration,
 summed over all compute nodes.
 
 How to read it:
@@ -262,6 +279,49 @@ What to expect, from the certification of the full training run (RESULTS.md):
   (Z = 0.08) it is 155 K low.
 * So in Fluent, look first at the peak temperature and at ⟨T|Z⟩ just rich of Z_st.
 
+## 7. Running the burner with the surrogate (transient, dt = 4e-5 s)
+
+[`ga18_surrogate.jou`](ga18_surrogate.jou) does all of this in one journal. The steps are:
+
+1. Read the **converged DI case and data** (`File > Read > Case & Data`). Do not initialise: the DI
+   field (peak about 2085 K) is the initial condition, and the surrogate only has to keep the flame,
+   not light it.
+2. Build and load `libudf` (section 2), set 7 UDMs, run `chemmanifold_selftest`.
+3. Hooks: *Chemistry Step* `user_chem_step::libudf`, *Adjust* `chemmanifold_monitor::libudf`.
+   ISAT and chemistry agglomeration off; minimum chemistry temperature 400 K.
+4. *General > Time: Transient*, first-order implicit. *Time Step Size* **4e-5 s**, *Max
+   Iterations/Time Step* 10.
+5. Run 500 steps (0.02 s), check the log, then continue to about 0.2 s (5000 steps).
+
+**Why transient.** The DI case is steady with pseudo-transient and an automatic pseudo time step of
+0.148 s. In a steady run the time Fluent passes to the chemistry step follows that (pseudo) time step,
+so it can be of order 0.1 s. The surrogate advances
+chemistry in fixed 40 µs steps, so a 0.148 s call would need 3700 network steps per cell: the UDF caps
+it at `max_substeps` (2 ms), the chemistry would advance far less than Fluent assumes, and the steady
+solution would be wrong. A transient run with a small physical time step keeps every call inside the
+range the network was trained on. The monitor prints the dt that Fluent actually passes
+(`dt_chem_min`/`dt_chem_max`); it should read 4e-05 in every iteration.
+
+**Why 4e-5 s.**
+
+* The network was trained on steps of 10, 20 and 40 µs. With dt = 40 µs each cell takes exactly one
+  network step (`mean_substeps` = 1), with no extrapolation and the lowest cost per unit of physical
+  time. 1e-4 s (3 steps) is the largest value worth using: beyond about 100 µs the surrogate becomes
+  slower than direct GA18 integration (section 4), and it cannot be cheaper per step than below
+  10 µs.
+* The flow is resolved easily at this step. Read from the mesh: cells at the flame base
+  (x 0.03–0.10 m, r 0.04–0.09 m) are 0.25–0.32 mm (smallest 0.14 mm); in the plume 0.6–1.6 mm. With
+  buoyant gas speeds of order 1 m/s the Courant number is 1 m/s × 4e-5 s / 0.25 mm ≈ 0.16, so the
+  implicit solver converges each step in a few iterations.
+* Chemistry is the fast process (ignition about 0.5 ms at Z_st in the certification rollout), so
+  40 µs also resolves the chemical transient in time, which is what the surrogate was certified on.
+
+**How long.** Residence times in this buoyant flame are of order 0.1–0.3 s (gas from the flame
+base around the hood lip to the side outlet), so expect 0.1–0.2 s of flow time (2500–5000 steps)
+before monitors settle. Watch peak temperature, the `chemmanifold_monitor` line and the UDM 0
+contour. Reasonable signs: `invalid` 0, `dt capped` 0, an OOD share of a few percent at most, and a
+peak temperature within about 50 K of the DI value.
+
 ## Assumptions and limits
 
 * Fluent 2020 R2, double precision, cell-based laminar finite-rate (or EDC) with the stiff-chemistry
@@ -271,8 +331,9 @@ What to expect, from the certification of the full training run (RESULTS.md):
   `C_UDMI`, `C_R`, `PRF_GRSUM1` and `PRF_GRHIGH1`. Nothing version-specific beyond these.
 * Every compute node reads the model file from the working folder, which works for local parallel
   runs and shared cluster file systems.
-* The model is valid for this flame only: CH4/air with GA18, air with Y_O2 = 0.21 by mass, 300 K
-  streams, 1 atm. A different mechanism, stream or pressure needs a retrained model; the UDF refuses
+* The model is valid for the flame it was trained on: CH4/air with GA18, 300 K streams, 1 atm, and
+  the air of its config (normal air, X_O2 = 0.21, for `configs/burner_fluent_air.yaml`, which matches
+  the Fluent case; Y_O2 = 0.21 by mass for the default `config.yaml`, which does not). A different mechanism, stream or pressure needs a retrained model; the UDF refuses
   a model whose species count does not match.
 * The counters are per process and are not thread-safe. They are statistics only, and Fluent's MPI
   parallelism (one process per core) is not affected.
