@@ -3,7 +3,10 @@
 Solves counterflow diffusion flamelets between the fuel and oxidizer streams of the burner, from
 low strain up to extinction (the upper branch of the S-curve). `flame.transport` selects the
 transport model: "mixture-averaged" (default) is closest to Fluent's kinetic-theory diffusivities;
-"unity-Lewis-number" makes Z and h exact conserved scalars.
+"unity-Lewis-number" makes Z and h exact conserved scalars. `flame.radiation` lists the families to
+solve: [false] adiabatic only (default); [false, true] adds a second strain sweep with optically thin
+gas radiation (CO2, H2O, Cantera's radiation model), whose states carry the radiative heat loss of
+a real flame. Flamelets are numbered across families, adiabatic first.
 
 Writes 00_flame/flamelets.npz        every flamelet grid point: Z, Y, T, h, strain index
        00_flame/burnt_reference.npz  lowest-strain flamelet resampled on a Z grid (burnt state per Z)
@@ -18,7 +21,7 @@ from chemmanifold.flame import BilgerZ, flame_pressure, stoichiometric_z, stream
 from chemmanifold.io import base_parser, load_config, save_json, save_npz, stage_dir
 
 
-def solve_flamelets(gas, cfg):
+def solve_flamelets(gas, cfg, radiation=False):
     fc, c = cfg["flame"], cfg["chemistry"]
     P = flame_pressure(cfg)
     gas.TPY = c["fuel_T"], P, c["fuel"]
@@ -29,28 +32,35 @@ def solve_flamelets(gas, cfg):
 
     f = ct.CounterflowDiffusionFlame(gas, width=fc["width"])
     f.transport_model = fc.get("transport", "mixture-averaged")
+    f.radiation_enabled = bool(radiation)
     f.P = P
     f.fuel_inlet.Y, f.fuel_inlet.T = c["fuel"], c["fuel_T"]
     f.oxidizer_inlet.Y, f.oxidizer_inlet.T = c["oxidizer"], c["oxidizer_T"]
     f.set_refine_criteria(ratio=3, slope=0.08, curve=0.15, prune=0.02)
 
     mdot = fc["mdot_fuel_min"]
+    tag = "radiating " if radiation else ""
     out = []
     for i in range(fc["max_flamelets"]):
         f.fuel_inlet.mdot, f.oxidizer_inlet.mdot = mdot, mdot * ratio
         try:
             f.solve(loglevel=0, auto=(i == 0))
         except ct.CanteraError:
-            print(f"  flamelet {i}: solver failed, stopping the strain sweep")
+            print(f"  {tag}flamelet {i}: solver failed, stopping the strain sweep")
             break
         T_max, a = float(f.T.max()), float(f.strain_rate("max"))
         if T_max < fc["extinction_T"]:
-            print(f"  flamelet {i}: extinguished at strain ~{a:.0f} 1/s")
+            print(f"  {tag}flamelet {i}: extinguished at strain ~{a:.0f} 1/s")
             break
-        print(f"  flamelet {i}: strain={a:7.1f} 1/s  T_max={T_max:.0f} K  points={len(f.grid)}")
-        out.append(dict(Y=f.Y.T.copy(), T=f.T.copy(), h=f.enthalpy_mass.copy(), strain=a, T_max=T_max))
+        print(f"  {tag}flamelet {i}: strain={a:7.1f} 1/s  T_max={T_max:.0f} K  points={len(f.grid)}")
+        out.append(dict(Y=f.Y.T.copy(), T=f.T.copy(), h=f.enthalpy_mass.copy(), strain=a, T_max=T_max,
+                        radiation=bool(radiation)))
         mdot *= fc["strain_factor"]
     return out
+
+
+def fc_radiation(cfg):
+    return [bool(r) for r in cfg["flame"].get("radiation", [False])]
 
 
 def main(cfg):
@@ -60,7 +70,7 @@ def main(cfg):
     bz = BilgerZ(gas, Yf, Yo)
     z_st = stoichiometric_z(gas, cfg)
 
-    flamelets = solve_flamelets(gas, cfg)
+    flamelets = [fl for rad in fc_radiation(cfg) for fl in solve_flamelets(gas, cfg, rad)]
     if not flamelets:
         raise RuntimeError("no burning flamelet found - check the flame section of the config")
     for fl in flamelets:
@@ -97,6 +107,7 @@ def main(cfg):
     save_json(out / "flame_reference.json", dict(
         P=P, Z_st=z_st, T_ad_max=float(T_ad.max()), Z_at_T_ad_max=float(Zg[np.argmax(T_ad)]),
         strain_rates=[fl["strain"] for fl in flamelets], T_max=[fl["T_max"] for fl in flamelets],
+        radiation=[fl["radiation"] for fl in flamelets],
         species=list(gas.species_names)))
     print(f"  Z_st={z_st:.4f}  T_ad,max={T_ad.max():.0f} K  {len(flamelets)} flamelets, "
           f"strain {flamelets[0]['strain']:.0f}-{flamelets[-1]['strain']:.0f} 1/s, "

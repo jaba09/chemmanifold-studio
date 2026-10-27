@@ -55,6 +55,7 @@ certification cases) live in one YAML file. Three setups are included:
 |---|---|---|---|
 | [`config.yaml`](config.yaml) (default) | the burner's non-premixed CH4/air flame | GA18 (`mechanisms/ga18.yaml`, 18 species, 92 reactions) | 1 atm, Z 0–1 refined around Z_st = 0.050, 300 K up to the flame's burnt states, heat loss only |
 | [`configs/burner_fluent_air.yaml`](configs/burner_fluent_air.yaml) | the same flame with the air exactly as the Fluent case defines it (X_O2 = 0.21, i.e. Y_O2 = 0.233) | GA18 | as above, Z_st = 0.055. **Use this model in Fluent** (`fluent/README.md`) |
+| [`configs/burner_fluent_nonadiabatic.yaml`](configs/burner_fluent_nonadiabatic.yaml) | the same flame and air, explored **non-adiabatically**: losses from adiabatic down to wall-cooled (300 K), reactors that cool while reacting, radiating flamelets, plus a multi-step rollout loss | GA18 | 1 atm, Z 0–1, any enthalpy between the adiabatic mixing line and the wall-cooled composition |
 | [`configs/h2_air_premixed.yaml`](configs/h2_air_premixed.yaml) | premixed H2/air autoignition (the spec's original setup) | Cantera `h2o2.yaml`, 10 species | phi 0.5–2.0, T0 1050–1300 K, 1–5 atm |
 | [`configs/ch4_gri30.yaml`](configs/ch4_gri30.yaml) (experimental) | premixed CH4/air autoignition | GRI-Mech 3.0 (`gri30.yaml`), 53 species | phi 0.6–1.6, T0 1400–1700 K, 1–5 atm |
 

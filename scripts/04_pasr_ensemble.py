@@ -4,6 +4,9 @@ premixed mode: fresh = unburnt (phi, T0, P0) mixture, burnt = its HP equilibrium
 flame mode:    fresh = stream mixture at Z (cold mixing line), burnt = the state of the row's training
                flamelet at the same Z; with `dh_scale_by_alpha` the heat loss dh is multiplied by
                alpha so that the cold mixing line keeps its 300 K inlet enthalpy.
+               With `loss_fraction_range: [a, b]` the loss is instead psi ~ U(a, b) times the largest
+               physical loss of each particle (cooling it to envelope.T_wall), so the ensemble spans
+               adiabatic to wall-cooled mixtures.
                Also writes 03_samples/pairs_flamelet.npz (regime 2): the training flamelets' own
                states advanced by a random stride, so the radical pools that only diffusion
                creates in a flame are in the data, not just what 0D chemistry reaches.
@@ -16,7 +19,7 @@ import numpy as np
 import pandas as pd
 
 from chemmanifold.chemistry import advance_const_p, make_gas, set_unburnt
-from chemmanifold.flame import FlameSeeds, case_label, is_flame
+from chemmanifold.flame import FlameSeeds, case_label, heat_loss, is_flame, wall_temperature
 from chemmanifold.io import base_parser, load_config, require, save_npz, stage_dir
 
 
@@ -40,14 +43,22 @@ def main(cfg):
             Y_burnt, h_burnt = gas.Y.copy(), gas.enthalpy_mass
 
         alpha = rng.beta(p["beta_a"], p["beta_b"], size=p["n_particles"])
-        dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
-        if p.get("dh_scale_by_alpha", False):
-            dh = dh * alpha
+        fraction = seeds is not None and "loss_fraction_range" in p
+        if fraction:
+            psi = rng.uniform(*p["loss_fraction_range"], size=p["n_particles"])
+            dh = np.zeros(p["n_particles"])
+        else:
+            dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
+            if p.get("dh_scale_by_alpha", False):
+                dh = dh * alpha
         strides = rng.choice(p["strides"], size=p["n_particles"])
-        for a, d, s in zip(alpha, dh, strides):
+        for i, (a, d, s) in enumerate(zip(alpha, dh, strides)):
             Y_mix = (1 - a) * Y_fresh + a * Y_burnt                        # Eq. 16
-            h_mix = (1 - a) * h_fresh + a * h_burnt + d
+            h_mix = (1 - a) * h_fresh + a * h_burnt
             try:
+                if fraction:
+                    d = heat_loss(gas, Y_mix, h_mix, psi[i], row.P0, wall_temperature(cfg))
+                h_mix = h_mix + d
                 gas.HPY = h_mix, row.P0, Y_mix
                 if not 280.0 < gas.T < 3800.0:
                     raise ValueError("temperature out of range")
