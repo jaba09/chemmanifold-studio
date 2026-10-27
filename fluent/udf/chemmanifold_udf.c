@@ -29,6 +29,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <direct.h>
+#define cm_getcwd _getcwd
+#else
+#include <unistd.h>
+#define cm_getcwd getcwd
+#endif
 
 #include "chemmanifold_core.h"
 
@@ -39,6 +46,7 @@ typedef struct {
     double calls, advanced, frozen, skipped, invalid, capped, scaled, substeps, ood_any;
     double ood[6];
     double max_manifold, max_data;
+    double dt_min, dt_max;   /* chemistry dt Fluent passed this iteration [s] (0 = no call) */
 } cm_counters;
 
 static cm_model *cm_m = NULL;
@@ -54,6 +62,7 @@ static char cm_model_path[CM_PATH] = "chemmanifold_model.txt";
 static char cm_tests_path[CM_PATH] = "chemmanifold_tests.txt";
 static char cm_log_path[CM_PATH] = "chemmanifold_monitor.csv";
 static cm_counters cm_cnt;
+static int cm_capped_warned = 0;
 
 /* ------------------------------------------------------------------------------------------ */
 
@@ -111,9 +120,13 @@ static void cm_load_all(void)
     cm_map_n = -1;
     cm_load_failed = (cm_m == NULL);
     memset(&cm_cnt, 0, sizeof cm_cnt);
+    cm_capped_warned = 0;
     if (!cm_m) {
+        char cwd[CM_PATH];
+        if (!cm_getcwd(cwd, sizeof cwd)) snprintf(cwd, sizeof cwd, "?");
         Message0("\nchemmanifold: ERROR %s - chemistry is FROZEN until a model loads "
                  "(fix chemmanifold.ini, then run chemmanifold_reload)\n", err);
+        Message0("chemmanifold: the model and ini files are looked for in Fluent's working folder: %s\n", cwd);
         return;
     }
     Message0("\nchemmanifold: loaded %s (%s, %d species, trained dt %.3g-%.3g s, OOD tables %s)\n",
@@ -218,6 +231,8 @@ DEFINE_CHEM_STEP(user_chem_step, c, t, p, num_p, n_spe, dt, pres, temp, yk)
     for (i = 0; i < n_spe; i++) yk[i] = Y[cm_map[i]];
 
     cm_cnt.calls += 1;
+    if (cm_cnt.dt_min <= 0.0 || *dt < cm_cnt.dt_min) cm_cnt.dt_min = *dt;
+    if (*dt > cm_cnt.dt_max) cm_cnt.dt_max = *dt;
     if (info.flags & CM_FROZEN) cm_cnt.frozen += 1;
     else if (info.flags & CM_OOD_SKIPPED) cm_cnt.skipped += 1;
     else if (info.flags & CM_INVALID) cm_cnt.invalid += 1;
@@ -273,6 +288,9 @@ DEFINE_ADJUST(chemmanifold_monitor, d)
     for (b = 0; b < 6; b++) g.ood[b] = PRF_GRSUM1(g.ood[b]);
     g.max_manifold = PRF_GRHIGH1(g.max_manifold);
     g.max_data = PRF_GRHIGH1(g.max_data);
+    if (g.dt_min <= 0.0) g.dt_min = 1e30;   /* no call on this node */
+    g.dt_min = PRF_GRLOW1(g.dt_min);
+    g.dt_max = PRF_GRHIGH1(g.dt_max);
     if (!I_AM_NODE_ZERO_P) return;
 #endif
     if (g.calls <= 0) return;   /* first iteration, or the hook is not active */
@@ -282,6 +300,14 @@ DEFINE_ADJUST(chemmanifold_monitor, d)
             "invalid %.0f\n", n, g.advanced, g.advanced > 0 ? g.substeps / g.advanced : 0.0, g.frozen,
             g.ood_any, 100.0 * g.ood_any / n, g.ood[0], g.ood[1], g.ood[2], g.ood[3], g.ood[4], g.ood[5],
             g.capped, g.invalid);
+    Message("chemmanifold: chemistry dt passed by Fluent %.3g - %.3g s\n", g.dt_min, g.dt_max);
+    if (!cm_capped_warned && g.advanced > 0 && g.capped > 0.05 * g.advanced) {
+        cm_capped_warned = 1;
+        Message("chemmanifold: WARNING %.0f%% of the advanced cells got a chemistry dt above %.3g s and "
+                "were advanced LESS than dt. The surrogate is meant for a transient run with a time step "
+                "of about 4e-5 s (at most 1e-4 s); see fluent/README.md.\n",
+                100.0 * g.capped / g.advanced, cm_opt.max_substeps * (cm_m ? cm_dt_max(cm_m) : 4e-5));
+    }
     f = fopen(cm_log_path, "r");
     b = (f == NULL);
     if (f) fclose(f);
@@ -290,11 +316,11 @@ DEFINE_ADJUST(chemmanifold_monitor, d)
     if (b)
         fprintf(f, "iteration,flow_time,cells,advanced,frozen,ood_skipped,invalid,dt_capped,dt_scaled,"
                    "mean_substeps,ood_any,ood_T,ood_T_at_Z,ood_pressure,ood_species,ood_manifold,ood_data,"
-                   "ood_fraction,max_manifold_ratio,max_data_ratio\n");
-    fprintf(f, "%d,%.9g,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.4f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.6f,%.4g,%.4g\n",
+                   "ood_fraction,max_manifold_ratio,max_data_ratio,dt_chem_min,dt_chem_max\n");
+    fprintf(f, "%d,%.9g,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.4f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.0f,%.6f,%.4g,%.4g,%.4g,%.4g\n",
             N_ITER, CURRENT_TIME, n, g.advanced, g.frozen, g.skipped, g.invalid, g.capped, g.scaled,
             g.advanced > 0 ? g.substeps / g.advanced : 0.0, g.ood_any, g.ood[0], g.ood[1], g.ood[2],
-            g.ood[3], g.ood[4], g.ood[5], g.ood_any / n, g.max_manifold, g.max_data);
+            g.ood[3], g.ood[4], g.ood[5], g.ood_any / n, g.max_manifold, g.max_data, g.dt_min, g.dt_max);
     fclose(f);
 #endif
 }

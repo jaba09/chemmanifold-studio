@@ -1,0 +1,46 @@
+; Fluent journal: continue the converged GA18 Direct Integration (DI) solution of the burner as a
+; TRANSIENT run whose chemistry is done by the ChemManifold ResNet-FiLM surrogate (DEFINE_CHEM_STEP).
+;
+; Before running it, put these files in Fluent's working folder (the one chosen in Fluent Launcher,
+; a path without spaces or accents, e.g. C:\quemador):
+;   quemadorUnicoTesis_60KCells-GA18--DI.cas.h5 / .dat.h5   your converged DI case and data
+;   chemmanifold_udf.c  chemmanifold_core.c  chemmanifold_core.h   (fluent/udf)
+;   chemmanifold_model.txt  chemmanifold_tests.txt  (stage 12 output of configs/burner_fluent_air.yaml)
+;   chemmanifold.ini    (fluent/chemmanifold.ini)
+; Run it from the Fluent console with File > Read > Journal, or launch
+;   fluent 2ddp -t4 -i ga18_surrogate.jou
+; The step-by-step GUI version of the same settings is in fluent/README.md, section 7.
+;
+; Lines marked "prompt" use TUI paths that were not run here (Fluent was not available); if one
+; fails, do that step in the GUI as README section 7 describes and run the rest.
+
+; --- 0. Converged DI solution (change the names to yours) -------------------------------------
+/file/read-case-data "quemadorUnicoTesis_60KCells-GA18--DI.cas.h5"
+; Do NOT initialise: the converged DI field is the initial condition.
+
+; --- 1. Build and load the UDF (uses Fluent's built-in compiler on Windows) -------------------
+/define/user-defined/compiled-functions compile "libudf" yes "chemmanifold_udf.c" "chemmanifold_core.c" "" "chemmanifold_core.h" ""   ; prompt
+/define/user-defined/compiled-functions load "libudf"
+/define/user-defined/user-defined-memory 7
+
+; --- 2. Self-test: the console must print "selftest passed: 60/60 cases match PyTorch" ----------
+/define/user-defined/execute-on-demand "chemmanifold_selftest::libudf"
+
+; --- 3. Hooks ---------------------------------------------------------------------------------
+/define/user-defined/function-hooks/chemistry-step "user_chem_step::libudf"           ; prompt
+/define/user-defined/function-hooks/adjust "chemmanifold_monitor::libudf" ""            ; prompt
+; ISAT off (direct calls of the hook in every cell), no agglomeration, skip cold cells.
+(rpsetvar 'species/isat? #f)
+(rpsetvar 'species/agglom-chemistry? #f)
+(rpsetvar 'species/min-temp-chemistry 400.)
+
+; --- 4. Transient, dt = 4e-5 s (one surrogate step per cell and time step) ---------------------
+/define/models/unsteady-1st-order yes
+/solve/set/time-step 4e-5
+/solve/set/max-iterations-per-time-step 10                                             ; prompt
+
+; --- 5. Run 0.02 s (500 steps), saving every 250 steps -----------------------------------------
+/file/auto-save/data-frequency 250
+/file/auto-save/root-name "quemador-surrogado"
+/solve/dual-time-iterate 500 10
+/file/write-case-data "quemador-surrogado-t0.02.cas.h5"
