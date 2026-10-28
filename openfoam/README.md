@@ -82,9 +82,8 @@ Fluent calls `DEFINE_CHEM_STEP(name, c, t, p, num_p, n_spe, dt, pres, temp, yk)`
 expects the mass fractions after `dt`. In OpenFOAM the same hook is a chemistry solver:
 `StandardChemistryModel` calls `solver.solve(c, T, p, deltaT, subDeltaT)` per cell with molar
 concentrations and sets RR_i = W_i (c_i(dt) − c_i(0)) / dt. `userChemStep` converts c ↔ Y at the
-cell density, so its `chemStep(yk, T, p, dt)` has the Fluent signature. The shipped body is the
-Fluent manual example from the UDF (dY_k/dt = 1/N − Y_k); a surrogate from this repo
-(Y(t+dt) = F(Y, T, p, dt)) would go there, e.g. through libtorch or ONNX Runtime.
+cell density, so its `chemStep(yk, T, p, dt)` has the Fluent signature. Without a model file the body
+is the Fluent manual example from the UDF (dY_k/dt = 1/N − Y_k).
 
 With `userChemStepCoeffs/model` set, `chemStep` runs the ChemManifold surrogate through the same
 plain-C core as the Fluent UDF (`fluent/udf/chemmanifold_core.c`; `Allwmake` copies it in), with
