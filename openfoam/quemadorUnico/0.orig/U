@@ -33,7 +33,7 @@ boundaryField
         // Fluent: mass-flow inlet 5.7675e-5 kg/s air, normal to boundary (about 5 mm/s)
         type            flowRateInletVelocity;
         massFlowRate    constant 8.010417e-07;
-        rhoInlet        1.1686;
+        rhoInlet        1.1721;     // air, M = 28.85 g/mol, 300 K
         value           uniform (0 0 0);
     }
 

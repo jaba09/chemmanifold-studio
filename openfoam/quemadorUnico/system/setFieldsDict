@@ -12,12 +12,16 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Initial state for the steady solution. The fuel region under the pot is very finely meshed
-// and nearly stagnant, so with local time stepping the fuel needs tens of thousands of
-// iterations to fill it from the inlet; the hot patch would cool long before. Start instead
-// with the fuel region full of CH4 and the mixing annulus (where it meets the coflow air)
-// at 2000 K, so the flame lights at their interface; the solution then relaxes to the
-// steady flame. Everything else starts as still air at 300 K.
+// Initial state for the steady solution, close to the Fluent DI run: still air at 300 K
+// everywhere, except the gap under the pot (fff-fluid-fuel) and the mixing annulus
+// (fff-fluid-mixing), which start full of hot lean burnt gas: CH4/air products at phi = 0.5
+// (Y_CO2 0.078, Y_H2O 0.064, Y_O2 0.113, Y_N2 0.745, about 1480 K, its adiabatic flame
+// temperature). The fuel jet entering it lights at once, and since this gas is a burnt
+// state that still holds O2, the jet cannot burn hotter than with fresh air.
+// Two earlier choices gave other flames:
+//  - 2000 K air in the mixing annulus burned the fuel as preheated air (2690 K peak);
+//  - pre-filling the gap with CH4 left a buoyant fuel pocket trapped under the pot, with the
+//    flame outside the gap, whereas Fluent's DI flame sits inside the gap on the fuel jet.
 defaultFieldValues
 (
     volScalarFieldValue T 300
@@ -27,21 +31,14 @@ regions
 (
     zoneToCell
     {
-        zone            fff-fluid-fuel;
+        zones           (fff-fluid-fuel fff-fluid-mixing);
         fieldValues
         (
-            volScalarFieldValue CH4 1
-            volScalarFieldValue O2  0
-            volScalarFieldValue N2  0
-        );
-    }
-
-    zoneToCell
-    {
-        zone            fff-fluid-mixing;
-        fieldValues
-        (
-            volScalarFieldValue T 2000
+            volScalarFieldValue T   1480
+            volScalarFieldValue CO2 0.0778
+            volScalarFieldValue H2O 0.0637
+            volScalarFieldValue O2  0.1132
+            volScalarFieldValue N2  0.7453
         );
     }
 );

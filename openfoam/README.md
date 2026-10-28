@@ -53,9 +53,11 @@ HDF5 mesh directly. `chemkin/transportProperties` is committed, so Cantera is on
 | other walls: adiabatic | `zeroGradient` |
 | `DEFINE_CHEM_STEP` = `user_chem_step::libudf` | `userChemStep` library, see below (the case runs with `ode` by default) |
 
-Things worth checking in the Fluent setup itself, carried over unchanged:
+Notes on the Fluent setup:
 
-- The air streams set **Y_O2 = 0.21 as a mass fraction** (Y_N2 = 0.79). Air is 0.21 by mole, 0.233 by mass.
+- The air streams set O2 = 0.21 with *species in mole fractions* on, so they are normal air. The case
+  uses **Y_O2 = 0.233, Y_N2 = 0.767 by mass** (Z_st = 0.055). The first version of this case read the
+  0.21 as a mass fraction; that was wrong.
 - `outlet-lab` (top, r = 0.02–0.14 m) and `wall-fff-fluid-exhaust` (top of the chimney, r < 0.02 m)
   are **adiabatic walls**, so the only open boundary is the side at r = 0.14 m and the chimney is closed.
 
@@ -66,8 +68,9 @@ Known modelling differences:
   (fuel jet Re ≈ 150), so this can shift the flame position and peak temperature.
 - **Turbulent Schmidt number.** Fluent Sc_t = 0.7; OpenFOAM diffuses species with α_t (Pr_t = 0.85).
 - **Initial state.** Fluent's data file was not supplied. The run starts from still air at 300 K with
-  the fuel region under the pot already full of CH4 and the mixing annulus at 2000 K
-  (`system/setFieldsDict`). Filling that finely meshed, nearly stagnant region from the inlet takes
+  the fuel region under the pot already full of CH4 and the mixing annulus full of stoichiometric
+  CH4/air products at 2000 K (`system/setFieldsDict`). Hot products hold no O2, so they light the
+  flame without the 2690 K preheated-air peak that a 2000 K air patch gave. Filling that finely meshed, nearly stagnant region from the inlet takes
   tens of thousands of local-time-step iterations, so a hot patch alone cools before fuel arrives.
 - **Thermo range.** N2 and CH3O have NASA fits starting at 300 K, the boundary temperature; the
   chemkinToFoam copy (`therm.foam.dat`) starts them at 200 K so cells a hair below 300 K do not

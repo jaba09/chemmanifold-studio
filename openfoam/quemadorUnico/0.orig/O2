@@ -12,10 +12,11 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Fluent air streams: Y_O2 = 0.21, Y_N2 = 0.79 (mass fractions, as set in the .cas)
+// Fluent air streams: X_O2 = 0.21, X_N2 = 0.79. The .cas has species-in-mole-fractions on for the
+// air inlets, so this is normal air: Y_O2 = 0.233, Y_N2 = 0.767 by mass (Z_st = 0.055).
 dimensions          [0 0 0 0 0 0 0];
 
-internalField       uniform 0.21;
+internalField       uniform 0.233;
 
 boundaryField
 {
@@ -28,14 +29,14 @@ boundaryField
     "inlet-coflow-.*"
     {
         type            fixedValue;
-        value           uniform 0.21;
+        value           uniform 0.233;
     }
 
     outlet-lab-026
     {
         type            inletOutlet;
-        inletValue      uniform 0.21;
-        value           uniform 0.21;
+        inletValue      uniform 0.233;
+        value           uniform 0.233;
     }
 
     wall
