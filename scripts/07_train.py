@@ -1,7 +1,9 @@
 """Stage 7 (Section 5): train a hard-constrained surrogate with pushforward manifold perturbation.
 
 Reads  04_prep/dataset.npz, 04_prep/scalers.json, 04_prep/thermo.npz, 05_manifold/manifold_report.json.
-Writes 06_models/<arch>/model.pt, 06_models/<arch>/history.csv, 06_models/<arch>/loss.png
+Writes 06_models/<arch>/model.pt, 06_models/<arch>/history.csv, 06_models/<arch>/loss.png,
+       06_models/<arch>/train_info.json (when, how long, where, best epoch) and
+       06_models/<arch>/config_used.yaml (the exact config, for the model registry, stage 15)
 
 Composite loss (Eq. 44), all terms computed per batch:
   L_inc   MSE between normalized step velocities v_pred and v_true (Eq. 43), with v_pred taken
@@ -18,7 +20,11 @@ Composite loss (Eq. 44), all terms computed per batch:
           Switched on after `start_frac` of the epochs, once the single-step map is reasonable.
 """
 
+import platform
+import subprocess
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import matplotlib
 
@@ -27,8 +33,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+import yaml
 
-from chemmanifold.io import base_parser, load_config, load_npz, stage_dir
+from chemmanifold.io import base_parser, load_config, load_npz, save_json, stage_dir
 from chemmanifold.loading import latent_dim, load_prep
 from chemmanifold.models import build_surrogate, resolve_device
 
@@ -104,7 +111,8 @@ def main(cfg, arch):
               f"from epoch {int(rl.get('start_frac', 0.0) * E) + 1}")
 
     out_dir = stage_dir(cfg, "models", arch)
-    hist, best = [], np.inf
+    t_start, started = time.time(), datetime.now(timezone.utc)
+    hist, best, best_epoch = [], np.inf, 0
     n_params = sum(p.numel() for p in model.net.parameters())
     print(f"  {arch}: {n_params} parameters, latent d={d}, {n_train} train pairs, {E} epochs, "
           f"network on {device}, {torch.get_num_threads()} CPU threads")
@@ -139,7 +147,7 @@ def main(cfg, arch):
         hist.append(row)
         rolling = seg is None or e > rl.get("start_frac", 0.0) * E
         if rolling and float(vloss) < best:   # with the rollout loss, only checkpoints trained with it
-            best = float(vloss)
+            best, best_epoch = float(vloss), e
             state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
             torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": e},
                        out_dir / "model.pt")
@@ -158,6 +166,26 @@ def main(cfg, arch):
     fig.tight_layout()
     fig.savefig(out_dir / "loss.png", dpi=150)
     print(f"  best val loss {best:.4f} -> {out_dir / 'model.pt'}")
+    with open(out_dir / "config_used.yaml", "w") as f:
+        yaml.safe_dump({k: v for k, v in cfg.items() if not k.startswith("_")}, f, sort_keys=False)
+    save_json(out_dir / "train_info.json", dict(
+        started_utc=started.isoformat(timespec="seconds"), wall_time_s=round(time.time() - t_start, 1),
+        config=str(Path(cfg["_config_path"]).name), git_commit=git_commit(), epochs=E, best_epoch=best_epoch,
+        best_val_loss=best, n_parameters=n_params, n_train_pairs=n_train, latent_dim=d, device=str(device),
+        threads=torch.get_num_threads(), torch=torch.__version__, python=platform.python_version(),
+        machine=f"{platform.system()} {platform.machine()}"))
+
+
+def git_commit():
+    try:
+        root = Path(__file__).resolve().parents[1]
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root, capture_output=True, text=True,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=root,
+                               capture_output=True, text=True).stdout.strip()
+        return sha + ("-dirty" if dirty else "")
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":

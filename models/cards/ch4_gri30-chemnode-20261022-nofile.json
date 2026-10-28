@@ -1,0 +1,49 @@
+{
+  "id": "ch4_gri30-chemnode-20261022-nofile",
+  "config": "ch4_gri30.yaml",
+  "arch": "chemnode",
+  "trained_utc": "2026-10-22T00:00:00+00:00",
+  "status": "discarded",
+  "notes": [
+    "Backfilled on 2026-10-28 from RESULTS.md: trained outside this machine, so files, hashes and training details are not available.",
+    "Experimental. Stays physical but fires too early at 1 atm with long delays."
+  ],
+  "exploration": {
+    "mechanism": "gri30.yaml",
+    "fuel": "CH4",
+    "oxidizer": "air",
+    "P_atm": "1-5",
+    "mode": "premixed",
+    "n_traj": null,
+    "f_pasr": null,
+    "rollout_loss": "none"
+  },
+  "data": {
+    "pairs_by_regime": {
+      "reactor_0D": 23733,
+      "PaSR": 8800
+    }
+  },
+  "training": {
+    "latent_dim": 6
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9926,
+      "T_mae_K": 1.37,
+      "T_max_err_K": null,
+      "elemental_residual_max": 1.9e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": -8.3,
+      "T_final_ml_K": null,
+      "T_final_cantera_K": null
+    },
+    "tier3": {
+      "mean_abs_tau_err_pct": 24,
+      "mean_T_mae_manifold_K": 126,
+      "mean_nrmse_Y_pct": 4.9
+    }
+  },
+  "files": {}
+}

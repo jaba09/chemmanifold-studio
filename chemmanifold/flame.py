@@ -130,6 +130,17 @@ class FlameSeeds:
         return Y, h
 
 
+    def recirculated(self, Z_p, beta, stream, psi=0.0, flamelet=0):
+        """Set self.gas to beta * (burnt products at Z_p, minus heat-loss fraction psi) + (1 - beta) *
+        pure inlet stream ("fuel" or "air"); returns (Y, h)."""
+        Y_p, h_p = self.burnt(Z_p, flamelet)
+        h_p = h_p + heat_loss(self.gas, Y_p, h_p, psi, self.P, self.T_wall)
+        Y_s, h_s = (self.Yf, self.hf) if stream == "fuel" else (self.Yo, self.ho)
+        Y, h = beta * Y_p + (1 - beta) * Y_s, beta * h_p + (1 - beta) * h_s
+        self.gas.HPY = h, self.P, Y
+        return Y, h
+
+
 def make_initializer(gas, cfg):
     """Return init(case) that puts `gas` in the initial state of a case (a dict or DataFrame row):
     premixed cases carry phi, T0, P0; flame cases carry Z, alpha and optionally dh or psi."""

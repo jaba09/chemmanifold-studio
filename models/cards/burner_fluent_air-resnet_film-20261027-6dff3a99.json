@@ -1,0 +1,110 @@
+{
+  "id": "burner_fluent_air-resnet_film-20261027-6dff3a99",
+  "config": "burner_fluent_air.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-27T08:29:32+00:00",
+  "status": "superseded",
+  "notes": [
+    "2026-10-28: Shipped for the first Fluent run (PR #6). Fluent 2026 R1 Student, transient dt 4e-5 s from the converged DI solution: compiled and self-test 60/60, but 27% of the hot cells were outside the sampled space at the start, rising to 50% by step 19; run stopped. Collapses on wall-cooled burnt gas (cooled test). Superseded by the non-adiabatic exploration."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 96,
+    "f_pasr": 0.35,
+    "heat_loss": "fixed, |dh| <= 120000.0 J/kg",
+    "cooling_reactors": "none",
+    "radiating_flamelets": false,
+    "pasr_heat_loss": "dh in [-120000.0, 0.0]",
+    "recirculation": "none",
+    "rollout_loss": "none"
+  },
+  "data": {
+    "n_train": 49980,
+    "n_val": 6816,
+    "pairs_by_regime": {
+      "reactor_0D": 39807,
+      "PaSR": 13600,
+      "flamelet_states": 3389
+    },
+    "T_range_K": [
+      299.99999999984,
+      2200.4881252536416
+    ],
+    "flamelets": {
+      "n": 15,
+      "n_radiating": 0,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.746465286597,
+      "peak_T_K": [
+        1907.0754264602308,
+        2200.488125283663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 8,
+    "pca_d_995": 11,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 295,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9967365065061883,
+      "T_mae_K": 0.029864059032168707,
+      "T_max_err_K": 3.9426258427758967,
+      "elemental_residual_max": 4.840607621167514e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 0.0,
+      "T_final_ml_K": 2256.252856542122,
+      "T_final_cantera_K": 2242.4491942566465
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 35.74136899158081,
+      "max_abs_tau_err_pct": 103.98230088495575,
+      "mean_T_mae_manifold_K": 23.169291057850323,
+      "max_T_mae_manifold_K": 96.99726326768344,
+      "mean_nrmse_Y_pct": 4.922623872569992,
+      "max_nrmse_Y_pct": 27.950947307155673,
+      "cooled_mean_T_mae_K": 277.13022011129016,
+      "cooled_max_T_mae_K": 612.9216131041004,
+      "cooled_mean_nrmse_Y_pct": 9.854125420095116,
+      "mixing_mean_T_mae_K": 115.65115587578542,
+      "mixing_max_T_mae_K": 466.8706652339554,
+      "mixing_mean_nrmse_Y_pct": 5.690965311687699
+    },
+    "coverage_heldout_flamelets": 0.9846878680800942,
+    "export": {
+      "ood_flagged_validation": 0.0029342723004694834,
+      "T_range_K": [
+        299.99999999984,
+        2201.530951262549
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "6dff3a9981de5b33dabaa45f3c0faaf96044b44381056803daf968b3f44d7306",
+    "data_dir": "../data/fluent_air",
+    "fluent_model_sha256": "05abce0ee3af3123732427c6a0056b3d8cd4bd0abeac7937c741e3e1ba5ac5a3"
+  }
+}
