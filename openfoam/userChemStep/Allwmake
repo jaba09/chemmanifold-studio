@@ -1,0 +1,5 @@
+#!/bin/sh
+# Builds libuserChemStep with the ChemManifold C core shared with the Fluent UDF.
+cd "${0%/*}" || exit 1
+cp ../../fluent/udf/chemmanifold_core.c ../../fluent/udf/chemmanifold_core.h .
+wmake libso

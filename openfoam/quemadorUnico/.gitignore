@@ -1,0 +1,9 @@
+/0/
+/[1-9]*/
+/processor*/
+/postProcessing/
+/log.*
+/constant/polyMesh/
+/constant/reactions
+/constant/thermo.compressibleGas
+*.cas.h5

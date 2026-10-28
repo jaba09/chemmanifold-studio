@@ -1,0 +1,46 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Initial state for the steady solution, close to the Fluent DI run: still air at 300 K
+// everywhere, except the gap under the pot (fff-fluid-fuel) and the mixing annulus
+// (fff-fluid-mixing), which start full of hot lean burnt gas: CH4/air products at phi = 0.5
+// (Y_CO2 0.078, Y_H2O 0.064, Y_O2 0.113, Y_N2 0.745, about 1480 K, its adiabatic flame
+// temperature). The fuel jet entering it lights at once, and since this gas is a burnt
+// state that still holds O2, the jet cannot burn hotter than with fresh air.
+// Two earlier choices gave other flames:
+//  - 2000 K air in the mixing annulus burned the fuel as preheated air (2690 K peak);
+//  - pre-filling the gap with CH4 left a buoyant fuel pocket trapped under the pot, with the
+//    flame outside the gap, whereas Fluent's DI flame sits inside the gap on the fuel jet.
+defaultFieldValues
+(
+    volScalarFieldValue T 300
+);
+
+regions
+(
+    zoneToCell
+    {
+        zones           (fff-fluid-fuel fff-fluid-mixing);
+        fieldValues
+        (
+            volScalarFieldValue T   1480
+            volScalarFieldValue CO2 0.0778
+            volScalarFieldValue H2O 0.0637
+            volScalarFieldValue O2  0.1132
+            volScalarFieldValue N2  0.7453
+        );
+    }
+);
+
+// ************************************************************************* //

@@ -1,0 +1,59 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      omega;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Fluent: viscosity ratio 10 at every inlet: omega = k / (10 nu)
+dimensions          [0 0 -1 0 0 0 0];
+
+internalField       uniform 0.06;
+
+boundaryField
+{
+    inlet-fuel
+    {
+        type            fixedValue;
+        value           uniform 6.1;            // nu(CH4, 300 K) = 1.70e-5 m2/s
+    }
+
+    inlet-coflow-fff-fluid-mixing
+    {
+        type            fixedValue;
+        value           uniform 6.0e-04;        // nu(air, 300 K) = 1.58e-5 m2/s
+    }
+
+    inlet-coflow-fff-fluid-exterior
+    {
+        type            fixedValue;
+        value           uniform 0.0593;
+    }
+
+    outlet-lab-026
+    {
+        type            inletOutlet;
+        inletValue      uniform 0.0593;
+        value           uniform 0.0593;
+    }
+
+    wall
+    {
+        type            omegaWallFunction;
+        value           $internalField;
+    }
+
+    "(front|back)"
+    {
+        type            wedge;
+    }
+}
+
+// ************************************************************************* //

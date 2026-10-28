@@ -1,0 +1,55 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Fluent ran this case steady (pressure-based, pseudo-transient). The OpenFOAM counterpart is
+// rhoReactingBuoyantFoam with local time stepping (ddt localEuler): each "time step" is one iteration.
+application         rhoReactingBuoyantFoam;   // reactingFoam with gravity (p_rgh)
+
+startFrom           latestTime;
+startTime           0;
+stopAt              endTime;
+endTime             20000;
+deltaT              1;
+
+writeControl        timeStep;
+writeInterval       200;
+purgeWrite          3;
+
+writeFormat         binary;
+writePrecision      8;
+writeCompression    off;
+timeFormat          general;
+timePrecision       6;
+
+runTimeModifiable   true;
+
+functions
+{
+    minMaxT
+    {
+        type            fieldMinMax;
+        libs            ("libfieldFunctionObjects.so");
+        fields          (T U);
+        writeControl    timeStep;
+        writeInterval   10;
+    }
+
+    // mass flow through each inlet and the open side boundary (kg/s, for the 5 deg wedge)
+    #includeFunc flowRatePatch(name=inlet-fuel)
+    #includeFunc flowRatePatch(name=inlet-coflow-fff-fluid-mixing)
+    #includeFunc flowRatePatch(name=inlet-coflow-fff-fluid-exterior)
+    #includeFunc flowRatePatch(name=outlet-lab-026)
+}
+
+// ************************************************************************* //

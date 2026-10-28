@@ -1,0 +1,66 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Fluent mass flows are for the full 360 deg; the 5 deg wedge carries 5/360 of them.
+dimensions          [0 1 -1 0 0 0 0];
+
+internalField       uniform (0 0 0);
+
+boundaryField
+{
+    inlet-fuel
+    {
+        // Fluent: mass-flow inlet 6.735e-6 kg/s CH4, normal to boundary (about 0.53 m/s)
+        type            flowRateInletVelocity;
+        massFlowRate    constant 9.354167e-08;
+        rhoInlet        0.6517;
+        value           uniform (0 0 0);
+    }
+
+    inlet-coflow-fff-fluid-mixing
+    {
+        // Fluent: mass-flow inlet 5.7675e-5 kg/s air, normal to boundary (about 5 mm/s)
+        type            flowRateInletVelocity;
+        massFlowRate    constant 8.010417e-07;
+        rhoInlet        1.1721;     // air, M = 28.85 g/mol, 300 K
+        value           uniform (0 0 0);
+    }
+
+    inlet-coflow-fff-fluid-exterior
+    {
+        // Fluent: velocity inlet, 0.05 m/s normal to boundary
+        type            surfaceNormalFixedValue;
+        refValue        uniform -0.05;
+        value           uniform (0.05 0 0);
+    }
+
+    outlet-lab-026
+    {
+        // Fluent: pressure outlet, 0 Pa gauge
+        type            pressureInletOutletVelocity;
+        value           uniform (0 0 0);
+    }
+
+    wall
+    {
+        type            noSlip;
+    }
+
+    "(front|back)"
+    {
+        type            wedge;
+    }
+}
+
+// ************************************************************************* //

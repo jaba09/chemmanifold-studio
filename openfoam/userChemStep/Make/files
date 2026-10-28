@@ -1,0 +1,4 @@
+makeUserChemStep.C
+chemmanifold_core.c
+
+LIB = $(FOAM_USER_LIBBIN)/libuserChemStep

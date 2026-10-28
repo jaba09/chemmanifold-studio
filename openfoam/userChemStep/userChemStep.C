@@ -1,0 +1,229 @@
+/*---------------------------------------------------------------------------*\
+    OpenFOAM counterpart of Fluent's DEFINE_CHEM_STEP; see userChemStep.H
+\*---------------------------------------------------------------------------*/
+
+#include "userChemStep.H"
+#include <cctype>
+
+// * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
+
+template<class ChemistryModel>
+Foam::userChemStep<ChemistryModel>::userChemStep
+(
+    typename ChemistryModel::reactionThermo& thermo
+)
+:
+    chemistrySolver<ChemistryModel>(thermo),
+    coeffsDict_(this->subOrEmptyDict("userChemStepCoeffs")),
+    Y_(this->nSpecie()),
+    model_(nullptr),
+    map_(this->nSpecie(), -1),
+    reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
+    nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
+    dtMin_(GREAT), dtMax_(0)
+{
+    for (label b=0; b<6; b++) nFlag_[b] = 0;
+    cm_default_options(&options_);
+    fileName modelFile;
+    if (!coeffsDict_.readIfPresent("model", modelFile))
+    {
+        Info<< "userChemStep: no model file, using the Fluent manual example" << endl;
+        return;
+    }
+    modelFile.expand();
+    options_.T_freeze = coeffsDict_.getOrDefault<scalar>("T_freeze", 600);
+    options_.max_substeps = coeffsDict_.getOrDefault<label>("maxSubsteps", 50);
+    options_.ood_action = coeffsDict_.getOrDefault<label>("oodAction", 0);
+    options_.check_ood = coeffsDict_.getOrDefault<bool>("checkOOD", true);
+
+    char err[512];
+    model_ = cm_load(modelFile.c_str(), err, sizeof(err));
+    if (!model_)
+    {
+        FatalErrorInFunction
+            << "cannot load " << modelFile << ": " << err << exit(FatalError);
+    }
+
+    // Species by name, ignoring case
+    const auto& thermos = this->specieThermo();
+    const label nModel = cm_n_species(model_);
+    forAll(map_, i)
+    {
+        const word& name = thermos[i].name();
+        for (label k=0; k<nModel; k++)
+        {
+            const char* mk = cm_species_name(model_, k);
+            if (label(name.size()) != label(strlen(mk))) continue;
+            bool same = true;
+            forAll(name, j)
+            {
+                if (tolower(name[j]) != tolower(mk[j])) { same = false; break; }
+            }
+            if (same) { map_[i] = k; break; }
+        }
+        if (map_[i] < 0)
+        {
+            FatalErrorInFunction
+                << "species " << name << " is not in the model " << modelFile
+                << exit(FatalError);
+        }
+    }
+    if (nModel != map_.size())
+    {
+        FatalErrorInFunction
+            << "the model has " << nModel << " species, the case "
+            << map_.size() << exit(FatalError);
+    }
+
+    Info<< "userChemStep: ChemManifold surrogate " << cm_arch(model_)
+        << " from " << modelFile << ", trained dt " << cm_dt_min(model_)
+        << "-" << cm_dt_max(model_) << " s, T_freeze " << options_.T_freeze
+        << " K, maxSubsteps " << options_.max_substeps << endl;
+
+    fileName testsFile;
+    if (coeffsDict_.readIfPresent("tests", testsFile))
+    {
+        testsFile.expand();
+        char rep[1024];
+        const int nFail = cm_selftest(model_, testsFile.c_str(), rep, sizeof(rep));
+        Info<< "userChemStep: " << rep << endl;
+        if (nFail != 0)
+        {
+            FatalErrorInFunction
+                << "self-test failed (" << nFail << ")" << exit(FatalError);
+        }
+    }
+}
+
+
+// * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
+
+template<class ChemistryModel>
+Foam::userChemStep<ChemistryModel>::~userChemStep()
+{
+    if (model_)
+    {
+        cm_free(model_);
+    }
+}
+
+
+// * * * * * * * * * * * * * Private Member Functions  * * * * * * * * * * * //
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::chemStep
+(
+    scalarField& yk,
+    const scalar T,
+    const scalar p,
+    const scalar dt
+) const
+{
+    if (model_)
+    {
+        double Y[CM_MAX_SPECIES];
+        forAll(yk, i)
+        {
+            Y[map_[i]] = yk[i];
+        }
+        cm_info info;
+        const int status = cm_advance(model_, &options_, Y, T, p, dt, &info);
+        forAll(yk, i)
+        {
+            yk[i] = Y[map_[i]];
+        }
+
+        nCalls_++;
+        if (status != 0 || (info.flags & CM_INVALID)) nInvalid_++;
+        else if (info.flags & CM_FROZEN) nFrozen_++;
+        else nAdvanced_++;
+        if (info.flags & CM_OOD_ANY) nOOD_++;
+        for (label b=0; b<6; b++)
+        {
+            if (info.flags & (1u << b)) nFlag_[b]++;
+        }
+        if (info.flags & CM_DT_CAPPED) nCapped_++;
+        dtMin_ = min(dtMin_, dt);
+        dtMax_ = max(dtMax_, dt);
+        if (reportCalls_ > 0 && nCalls_ >= reportCalls_)
+        {
+            report();
+        }
+        return;
+    }
+
+    // Fluent manual example of DEFINE_CHEM_STEP (user_chem_step):
+    //     dY_k/dt = 1/N - Y_k  =>  Y_k(dt) = (Y_k(0) - 1/N) exp(-dt) + 1/N
+    const scalar c = 1.0/yk.size();
+    const scalar decay = exp(-dt);
+
+    forAll(yk, i)
+    {
+        yk[i] = (yk[i] - c)*decay + c;
+    }
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::report() const
+{
+    // Per processor: chemistry runs cell by cell, so no reduction here
+    Pout<< "userChemStep: " << nCalls_ << " calls, " << nAdvanced_
+        << " advanced, " << nFrozen_ << " frozen, OOD " << nOOD_
+        << " (" << (nAdvanced_ ? 100.0*nOOD_/nAdvanced_ : 0.0)
+        << " % of advanced), invalid " << nInvalid_ << ", dt capped " << nCapped_
+        << ", dt " << dtMin_ << "-" << dtMax_ << " s; OOD by check: T "
+        << nFlag_[0] << ", T|Z " << nFlag_[1] << ", p " << nFlag_[2]
+        << ", species " << nFlag_[3] << ", manifold " << nFlag_[4]
+        << ", data " << nFlag_[5] << endl;
+    nCalls_ = nAdvanced_ = nFrozen_ = nOOD_ = nInvalid_ = nCapped_ = 0;
+    for (label b=0; b<6; b++) nFlag_[b] = 0;
+    dtMin_ = GREAT;
+    dtMax_ = 0;
+}
+
+
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::solve
+(
+    scalarField& c,
+    scalar& T,
+    scalar& p,
+    scalar& deltaT,
+    scalar& subDeltaT
+) const
+{
+    const label nSpecie = this->nSpecie();
+    const auto& thermos = this->specieThermo();
+
+    // Concentrations [kmol/m3] -> mass fractions, at the cell density
+    scalar rho = 0;
+    for (label i=0; i<nSpecie; i++)
+    {
+        rho += c[i]*thermos[i].W();
+    }
+    if (rho < VSMALL)
+    {
+        return;
+    }
+    for (label i=0; i<nSpecie; i++)
+    {
+        Y_[i] = c[i]*thermos[i].W()/rho;
+    }
+
+    chemStep(Y_, T, p, deltaT);
+
+    for (label i=0; i<nSpecie; i++)
+    {
+        c[i] = max(0.0, rho*Y_[i]/thermos[i].W());
+    }
+
+    // The whole step is taken in one call (no sub-stepping); report deltaT
+    // as the chemical time scale so local time stepping is not restricted
+    subDeltaT = deltaT;
+}
+
+
+// ************************************************************************* //
