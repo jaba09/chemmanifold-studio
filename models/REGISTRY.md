@@ -15,6 +15,7 @@ To identify the model a Fluent run used, compare the sha256 of its `chemmanifold
 | [`burner_fluent_air-resnet_film-20261027-6dff3a99`](#burner_fluent_air-resnet_film-20261027-6dff3a99) | superseded | 2026-10-27 | 49,980 | 8 | 0.03 | 23.2 | 277.1 | 115.7 | 98.5% |
 | [`burner_fluent_air_v2-resnet_film-20261027-d8c9d49a`](#burner_fluent_air_v2-resnet_film-20261027-d8c9d49a) | discarded | 2026-10-27 | 73,484 | 8 | 0.02 | 106.2 | – | – | 98.2% |
 | [`burner_fluent_nonadiabatic-resnet_film-20261027-44281c08`](#burner_fluent_nonadiabatic-resnet_film-20261027-44281c08) | candidate | 2026-10-27 | 82,049 | 12 | 0.03 | 21.3 | 5.9 | 50.1 | 97.5% |
+| [`burner_fluent_recirc-resnet_film-20261028-15d39d9f`](#burner_fluent_recirc-resnet_film-20261028-15d39d9f) | candidate | 2026-10-28 | 96,129 | 12 | 0.03 | 47.2 | 13.5 | 15.1 | 97.6% |
 
 ## h2_air_premixed-resnet_film-20261021-nofile
 
@@ -243,3 +244,31 @@ Flamelets: 30 (15 radiating), Z_st 0.0552, peak T 1652–2200 K.
 Training: latent d 12, hidden 192 x 3 blocks, best epoch 299 of 300.
 Certification: Tier 1 R2 0.9961, T MAE 0.03 K; held-out flamelet coverage 97.5%; Tier 2 tau error -100%, final T 2230 K (Cantera 2242 K); Tier 3 mean |tau error| 70%, T MAE 21.3 K; cooled gas T MAE 5.9 K (max 17 K); mixing T MAE 50.1 K (max 121 K).
 Fluent file sha256: `d288c8bbe7ceeef9357cfd651487b8dd6f26ab9c11a110709f4ca04a02092937`.
+
+## burner_fluent_recirc-resnet_film-20261028-15d39d9f
+
+Config `burner_fluent_recirc.yaml`, resnet_film, trained 2026-10-28T08:21:00+00:00, status **candidate**.
+
+- 2026-10-28: Recirculation exploration (PR #7). Mixing test 15 K vs 50 K for nonadiabatic, but rich Z 0.088 closed loop 60-140 K low and cooled lean Z 0.033 psi 0.6 case 179 K low; training stopped at epoch ~289/300 by job limit (best 285 kept). Alternative to nonadiabatic for the first Fluent comparison.
+
+| Exploration | |
+|---|---|
+| mechanism | mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 160 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 40 ensembles x 400 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 96,129 train / 13,109 validation pairs (reactor_0D 44,184, PaSR 22,400, flamelet_states 6,803, wall_cooled_0D 19,851, recirculation 16,000).
+Flamelets: 30 (15 radiating), Z_st 0.0552, peak T 1652–2200 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 285 of 300, 111 min on 4 threads (Linux x86_64), git 14c9c92+recirc (uncommitted at launch; code = 0aeb7de).
+Certification: Tier 1 R2 0.9964, T MAE 0.03 K; held-out flamelet coverage 97.6%; Tier 2 tau error +37%, final T 2230 K (Cantera 2242 K); Tier 3 mean |tau error| 50%, T MAE 47.2 K; cooled gas T MAE 13.5 K (max 71 K); mixing T MAE 15.1 K (max 27 K).
+Fluent file sha256: `576599c94907fe3be5dc2b91d5d4eed8f3d91b2f0c958477267df210181b8877`.

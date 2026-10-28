@@ -51,6 +51,38 @@ settles 155 K low, with a 9.8% species error. Phy-ChemNODE ignites late at stoic
 conditions, and in one rich case it collapses to the 280 K solver bound, so it is not stable here
 yet. The 18-species state with an intrinsic dimension of about 11 is harder for an 8-D latent ODE.
 
+## Recirculation exploration (`configs/burner_fluent_recirc.yaml`): alternative model for Fluent
+
+Why: in the burner, hot products recirculate and mix with the fresh CH4 and air jets before they
+burn. The non-adiabatic exploration only reached those states indirectly, and its worst case
+(stoichiometric products mixed 50/50 into the fuel jet) collapsed to 450 K instead of 894 K. This
+exploration keeps everything of `burner_fluent_nonadiabatic` and adds a three-stream PaSR (regime 4),
+again derived a priori, with no CFD state:
+
+* 40 ensembles × 400 particles, each a mixture beta·products(Z_p, psi_p) + (1 − beta)·pure fuel or
+  air, beta ~ Beta(0.7, 0.7), psi_p in [0, 0.85];
+* half of the particles are aged 10 us–5 ms before the pair is taken, so partly reacted mixtures
+  are sampled too; then one 40 us stride (adiabatic Cantera target).
+
+Data: 96,129 train pairs (82,049 + recirculation). Latent d = 12. Training was stopped by the 2 h
+job limit at epoch ~289 of 300; the best checkpoint (epoch 285) was kept.
+
+| Metric | non-adiabatic | recirculation |
+|---|---|---|
+| Tier 1 T MAE | 0.03 K | 0.03 K |
+| **Products mixed into fuel/air**, 6 cases, 250 × 40 us: mean / max T MAE | 50.1 K / 121 K (fuel, beta 0.5: 451 vs 894 K) | **15.1 K / 27 K** |
+| Same, mean species NRMSE | 3.1% | 1.3% |
+| Cooled burnt gas (9 cases): mean / max T MAE | **5.9 K / 17 K** | 13.5 K / 71 K (Z 0.033, psi 0.6: 756 vs 935 K) |
+| Tier 3 (10 us) mean T MAE / tau error | **21.3 K** / – | 47.2 K / 50% |
+| Tier 3 at 40 us: rich Z 0.088 final T | **within 5 K** | 60–140 K low (1753–1822 vs 1879–1892 K) |
+| Tier 3 at 40 us: ignition | stoichiometric exact; slow seeds 1.4–2.4× late | stoichiometric exact (+14 K); lean alpha 0.6 3.7× late, rich alpha 0.6 18% early |
+| Coverage of held-out flamelets / stage 14 one-step error | 97.5% / 0.09 K | 97.6% / 0.12 K, 0% OOD |
+| UDF self-test / cost per cell call | 60/60, 92 us | 60/60, 145 us |
+
+Neither model wins everywhere: recirculation is much better on products mixed into the jets, the
+non-adiabatic model is better on cooled gas and on rich closed-loop temperatures. Which one the
+burner needs is decided by the Fluent run (see `models/REGISTRY.md`).
+
 ## Non-adiabatic exploration (`configs/burner_fluent_nonadiabatic.yaml`): the model for Fluent
 
 Why: in the first Fluent run with the `burner_fluent_air` model, 27% of the hot cells of the DI flame
