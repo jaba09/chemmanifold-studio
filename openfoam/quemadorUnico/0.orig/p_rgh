@@ -1,0 +1,43 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      p_rgh;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions          [1 -1 -2 0 0 0 0];
+
+internalField       uniform 101325;
+
+boundaryField
+{
+    ".*"
+    {
+        type            fixedFluxPressure;
+        value           $internalField;
+    }
+
+    outlet-lab-026
+    {
+        // Fluent's 0 Pa gauge is the pressure minus the operating-density hydrostatic
+        // head, i.e. uniform p_rgh. Fixing p instead (prghPressure) on this vertical
+        // boundary would impose a 6 Pa imbalance over its 0.52 m height and drive a
+        // spurious through-flow.
+        type            fixedValue;
+        value           $internalField;
+    }
+
+    "(front|back)"
+    {
+        type            wedge;
+    }
+}
+
+// ************************************************************************* //

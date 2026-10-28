@@ -1,0 +1,49 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Initial state for the steady solution. The fuel region under the pot is very finely meshed
+// and nearly stagnant, so with local time stepping the fuel needs tens of thousands of
+// iterations to fill it from the inlet; the hot patch would cool long before. Start instead
+// with the fuel region full of CH4 and the mixing annulus (where it meets the coflow air)
+// at 2000 K, so the flame lights at their interface; the solution then relaxes to the
+// steady flame. Everything else starts as still air at 300 K.
+defaultFieldValues
+(
+    volScalarFieldValue T 300
+);
+
+regions
+(
+    zoneToCell
+    {
+        zone            fff-fluid-fuel;
+        fieldValues
+        (
+            volScalarFieldValue CH4 1
+            volScalarFieldValue O2  0
+            volScalarFieldValue N2  0
+        );
+    }
+
+    zoneToCell
+    {
+        zone            fff-fluid-mixing;
+        fieldValues
+        (
+            volScalarFieldValue T 2000
+        );
+    }
+);
+
+// ************************************************************************* //

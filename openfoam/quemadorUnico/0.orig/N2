@@ -1,0 +1,52 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Single-flame burner (quemadorUnico), converted from Fluent 20.2
+  quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      N2;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Fluent air streams: Y_O2 = 0.21, Y_N2 = 0.79 (mass fractions, as set in the .cas)
+dimensions          [0 0 0 0 0 0 0];
+
+internalField       uniform 0.79;
+
+boundaryField
+{
+    inlet-fuel
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+
+    "inlet-coflow-.*"
+    {
+        type            fixedValue;
+        value           uniform 0.79;
+    }
+
+    outlet-lab-026
+    {
+        type            inletOutlet;
+        inletValue      uniform 0.79;
+        value           uniform 0.79;
+    }
+
+    wall
+    {
+        type            zeroGradient;
+    }
+
+    "(front|back)"
+    {
+        type            wedge;
+    }
+}
+
+// ************************************************************************* //

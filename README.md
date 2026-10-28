@@ -139,6 +139,9 @@ chemmanifold/
 scripts/        the pipeline stages
 fluent/         the Fluent UDF (C) that runs the surrogates, and its tests - see fluent/README.md
 run_pipeline.py runs the stages as separate processes
+openfoam/       Fluent single-flame burner rebuilt as an OpenFOAM case, plus a DEFINE_CHEM_STEP
+                counterpart (custom chemistry solver) where a surrogate can be plugged in;
+                see openfoam/README.md
 ```
 
 ## Implementation notes (where the spec leaves choices open)
