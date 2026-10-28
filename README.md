@@ -49,18 +49,38 @@ python scripts/02_autoignition_0d.py --config config.yaml   # any single stage
 ```
 
 All settings (mechanism, streams, envelope, sample counts, network sizes, training schedule,
-certification cases) live in one YAML file. Three setups are included:
+certification cases) live in one YAML file. These setups are included:
 
 | Config | System | Mechanism | Sampled space |
 |---|---|---|---|
 | [`config.yaml`](config.yaml) (default) | the burner's non-premixed CH4/air flame | GA18 (`mechanisms/ga18.yaml`, 18 species, 92 reactions) | 1 atm, Z 0–1 refined around Z_st = 0.050, 300 K up to the flame's burnt states, heat loss only |
-| [`configs/burner_fluent_air.yaml`](configs/burner_fluent_air.yaml) | the same flame with the air exactly as the Fluent case defines it (X_O2 = 0.21, i.e. Y_O2 = 0.233) | GA18 | as above, Z_st = 0.055. **Use this model in Fluent** (`fluent/README.md`) |
+| [`configs/burner_fluent_air.yaml`](configs/burner_fluent_air.yaml) | the same flame with the air exactly as the Fluent case defines it (X_O2 = 0.21, i.e. Y_O2 = 0.233) | GA18 | as above, Z_st = 0.055 (adiabatic exploration; superseded for Fluent) |
+| [`configs/burner_fluent_nonadiabatic.yaml`](configs/burner_fluent_nonadiabatic.yaml) | the same flame and air, explored **non-adiabatically**: losses from adiabatic down to wall-cooled (300 K), reactors that cool while reacting, radiating flamelets, plus a multi-step rollout loss | GA18 | 1 atm, Z 0–1, any enthalpy between the adiabatic mixing line and the wall-cooled composition |
+| [`configs/burner_fluent_recirc.yaml`](configs/burner_fluent_recirc.yaml) | the non-adiabatic setup **plus recirculation**: burnt products (hot or wall-cooled) mixed across mixture fractions into the pure CH4 and air inlet streams, and the reaction that follows | GA18 | as above, plus the states between any burnt state and either inlet stream |
 | [`configs/h2_air_premixed.yaml`](configs/h2_air_premixed.yaml) | premixed H2/air autoignition (the spec's original setup) | Cantera `h2o2.yaml`, 10 species | phi 0.5–2.0, T0 1050–1300 K, 1–5 atm |
 | [`configs/ch4_gri30.yaml`](configs/ch4_gri30.yaml) (experimental) | premixed CH4/air autoignition | GRI-Mech 3.0 (`gri30.yaml`), 53 species | phi 0.6–1.6, T0 1400–1700 K, 1–5 atm |
 
 ```bash
 python run_pipeline.py --config configs/h2_air_premixed.yaml   # writes to data/h2_air_premixed/
 ```
+
+### Model registry
+
+Every trained model is recorded in [`models/REGISTRY.md`](models/REGISTRY.md): a table of all models
+plus one section per model with its exploration settings, data (pairs per regime, flamelets),
+training (latent dimension, epochs, wall time, machine, git commit) and certification (Tier 1–3, the
+cooled-gas and mixing tests, coverage). The machine-readable cards are in `models/cards/` and
+`models/registry.jsonl`. Stage 15 (`scripts/15_register_model.py`) writes them at the end of
+`run_pipeline.py`, and also puts a copy, `model_card.json`, next to the exported Fluent files. Keep
+the registry up to date when a model is used or dropped:
+
+```bash
+python scripts/15_register_model.py --id <model id> --status in-fluent --note "Fluent run 2026-10-29: OOD 3%, peak T 2070 K"
+```
+
+Statuses: `candidate`, `in-fluent`, `superseded`, `discarded`. The sha256 of the Fluent file in each
+card identifies which model a Fluent folder holds. Models trained before the registry existed are
+backfilled from `RESULTS.md` (ids ending in `-nofile`).
 
 The CH4 GRI-Mech case runs end to end and is accurate for single steps, but its closed-loop
 rollouts are not yet stable (see `RESULTS.md`), so treat it as a starting point.

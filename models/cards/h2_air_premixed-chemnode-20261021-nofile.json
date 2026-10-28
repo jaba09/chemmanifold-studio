@@ -1,0 +1,53 @@
+{
+  "id": "h2_air_premixed-chemnode-20261021-nofile",
+  "config": "h2_air_premixed.yaml",
+  "arch": "chemnode",
+  "trained_utc": "2026-10-21T00:00:00+00:00",
+  "status": "superseded",
+  "notes": [
+    "Backfilled on 2026-10-28 from RESULTS.md: trained outside this machine, so files, hashes and training details are not available.",
+    "Latent d 4, more stable than ResNet-FiLM on equilibrium tails."
+  ],
+  "exploration": {
+    "mechanism": "h2o2.yaml",
+    "fuel": "H2",
+    "oxidizer": "air",
+    "P_atm": "1-5",
+    "mode": "premixed",
+    "n_traj": 64,
+    "f_pasr": null,
+    "rollout_loss": "none"
+  },
+  "data": {
+    "n_train": 23156,
+    "n_val": 3158,
+    "pairs_by_regime": {
+      "reactor_0D": 17514,
+      "PaSR": 8800
+    }
+  },
+  "training": {
+    "latent_dim": 4,
+    "n_parameters": 55000,
+    "epochs": 300
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9973,
+      "T_mae_K": 2.11,
+      "T_max_err_K": 67.1,
+      "elemental_residual_max": 8.3e-17
+    },
+    "tier2": {
+      "tau_ign_err_pct": -6.5,
+      "T_final_ml_K": null,
+      "T_final_cantera_K": null
+    },
+    "tier3": {
+      "mean_abs_tau_err_pct": 4.6,
+      "mean_T_mae_manifold_K": 31.7,
+      "mean_nrmse_Y_pct": 0.74
+    }
+  },
+  "files": {}
+}

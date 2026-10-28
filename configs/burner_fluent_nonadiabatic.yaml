@@ -1,0 +1,140 @@
+# ChemManifold Studio configuration - the burner's non-premixed CH4/air flame (GA18), air as the
+# Fluent case defines it (X_O2 = 0.21), with a NON-ADIABATIC exploration of the thermochemical space.
+#
+# Why: the burner gas loses heat to walls at 300-323 K and by radiation, so it can reach any state
+# between the adiabatic one and the same composition cooled to the wall, and keep reacting while it
+# cools. The adiabatic exploration of burner_fluent_air.yaml only allowed a fixed loss of 1.2e5 J/kg
+# (~85 K) applied once to the seed. Here, all derived a priori from the mechanism and the burner's
+# boundary physics (no CFD data):
+#   * enthalpy bounds: from the adiabatic mixing line down to the composition cooled to T_wall;
+#     seed and PaSR losses are a fraction psi of that range (envelope.heat_loss: fraction);
+#   * cooling reactors: 0D reactors that lose heat towards T_wall with time constants of 1 ms-1 s
+#     while reacting (envelope.f_cool, tau_q_range); their states are paired with adiabatic steps;
+#   * radiating flamelets: a second strain sweep with optically thin CO2/H2O radiation;
+#   * a multi-step rollout loss (rollout_loss) against closed-loop drift.
+
+data_dir: ../data/fluent_nonadiabatic     # relative to this file
+seed: 0
+
+chemistry:
+  mechanism: mechanisms/ga18.yaml   # GA18: 18 species, 92 reactions (from the Fluent case)
+  fuel: "CH4:1.0"                   # mass fractions
+  fuel_T: 300.0
+  oxidizer: "O2:0.232909, N2:0.767091"   # mass fractions = X_O2 0.21 / X_N2 0.79, as in Fluent
+  oxidizer_T: 300.0
+  P_atm: 1.0
+
+# Stage 0 - flame reference: counterflow flamelets from low strain to extinction
+flame:
+  transport: mixture-averaged       # closest to Fluent's kinetic-theory diffusivities | unity-Lewis-number
+  width: 0.06                       # m, domain width of the lowest-strain flamelet
+  mdot_fuel_min: 0.02               # kg/m^2/s at the fuel inlet (strain ~6 1/s)
+  strain_factor: 1.5                # inlet mass flux multiplier between flamelets
+  max_flamelets: 16
+  extinction_T: 1000.0              # K, a flamelet below this peak is extinguished
+  holdout_every: 3                  # flamelets 1, 4, 7, ... are kept out of training for stage 11
+  radiation: [false, true]          # adiabatic sweep + a sweep with optically thin gas radiation
+
+# Module 1 - ThermoExplorer (flame mode)
+envelope:
+  mode: flame
+  n_traj: 160
+  f_pasr: 0.35
+  # Sobol u1 -> Z through a piecewise-linear CDF, refined around Z_st = 0.055: 15% of seeds in
+  # Z < 0.0275, 25% in 0.0275-0.055, 25% in 0.055-0.11, 20% in 0.11-0.22, 15% in 0.22-1.
+  z_knots: [0.0, 0.0275, 0.055, 0.11, 0.22, 1.0]
+  u_knots: [0.0, 0.15, 0.40, 0.65, 0.85, 1.0]
+  alpha: [0.0, 1.0]                 # Sobol u2 -> burnt fraction of the seed state
+  heat_loss: fraction               # Sobol u3 -> psi = u3 * psi_max of the loss that cools the seed to T_wall
+  psi_max: 0.85                     # beyond ~0.85 the seeds are below ~600 K, where chemistry is frozen
+  T_wall: 300.0                     # K, coldest wall / inlet of the burner
+  f_cool: 0.35                      # share of the 0D seeds that are cooling reactors (regime 3)
+  tau_q_range: [1.0e-3, 1.0]        # s, log-uniform heat-loss time constant of the cooling reactors
+
+autoignition:
+  dt_base: 1.0e-5                   # s (10 us for CH4)
+  t_max: 2.0e-2                     # s
+  min_steps: 10
+  dT_rise: 400.0                    # premixed mode only
+  rise_frac: 0.9                    # flame mode: stop once 90% of the equilibrium rise is reached...
+  dT_flat: 0.02                     # ...and |T_n - T_{n-1}| < dT_flat K
+  n_consecutive: 25                 # ...for this many consecutive steps
+  cooling_records: 2000             # points recorded along a cooling-reactor trajectory
+
+arclength:
+  boxcox_lambda: 0.10
+  n_pick: 220
+  n_seed: 15
+  strides: [1, 2, 4]
+  floor_frac: 0.05
+
+pasr:
+  n_particles: 400
+  beta_a: 0.7
+  beta_b: 0.7
+  loss_fraction_range: [0.0, 0.85]  # psi per particle: adiabatic to nearly wall-cooled mixtures
+  strides: [1, 2, 4]
+
+# Module 2 - ManifoldPrep
+preprocess:
+  boxcox_lambda: 0.10
+  val_frac: 0.12
+  sigma_y_min: 1.0e-3
+  sigma_dy_min: 1.0e-2
+
+manifold:
+  n_clusters: 4
+  candidate_dims: [2, 3, 4, 6, 8]
+  variance_target: 0.995
+  max_samples: 40000
+
+# Coverage check of the sampled data against the flamelet states (stage 11)
+coverage:
+  radius: 0.5                       # a flame state is covered if a sampled state lies within this
+                                    # distance (in per-variable standard deviations, all species + T)
+
+# Multi-step rollout loss (stages 3 and 7): K chained surrogate steps at the Fluent time step
+rollout_loss:
+  weight: 0.2
+  steps: 8
+  stride: 4                         # 4 x dt_base = 40 us, the step used in Fluent
+  batch_size: 128
+  segments_per_traj: 150
+  start_frac: 0.3                   # switched on after 30% of the epochs
+
+# Module 3/4 - Surrogates & training
+model:
+  hidden: 192
+  n_blocks: 3
+  node_hidden: 128
+  node_substeps: 2
+  latent_dim: auto
+
+training:
+  epochs: 300
+  batch_size: 512
+  lr_max: 2.0e-3
+  weight_decay: 1.0e-5
+  noise_amp: 0.015
+  noise_end_frac: 0.85
+  loss_weights: {inc: 1.0, mass: 1.0, T: 1.0, equil: 0.1, ae: 1.0}
+  equil_threshold: 0.05
+  threads: 4                        # CPU threads; 4 = the performance cores of an M1/M2 MacBook Air ('auto' = torch default)
+  device: auto                      # auto (CPU, or CUDA if present) | cpu | mps | cuda
+
+# Module 5 - Certification (flame mode: cases are seed states (Z, alpha) at 1 atm)
+evaluation:
+  rollout:                          # Z_st, 60% burnt
+    Z: 0.055
+    alpha: 0.6
+    n_steps: 500                    # 5 ms at dt_base
+    stride: 1
+  envelope_grid:                    # lean / stoichiometric / rich seeds that ignite within 5 ms
+    Z: [0.033, 0.055, 0.088]
+    alpha: [0.6, 0.7, 0.8]
+  cooled_grid:                      # burnt gas (alpha = 1) that lost psi of its heat to the walls
+    Z: [0.033, 0.055, 0.088]
+    psi: [0.2, 0.4, 0.6]
+  cooled_rollout:
+    stride: 4                       # 40 us, the Fluent step
+    n_steps: 250                    # 10 ms

@@ -71,14 +71,29 @@ def flamelet_split(cfg, n_flamelets):
     return np.setdiff1d(ids, held), held
 
 
+def wall_temperature(cfg):
+    """Coldest wall (or stream) the flame gas can lose heat to [K]: the lower bound of the
+    physically reachable enthalpy at a given composition."""
+    return float(cfg["envelope"].get("T_wall", 300.0))
+
+
+def heat_loss(gas, Y, h, psi, P, T_wall):
+    """Enthalpy change dh <= 0 that takes the gas (Y, h) a fraction psi in [0, 1] of the way from its
+    current enthalpy to the same composition cooled to T_wall (psi = 1: cooled to the wall)."""
+    gas.TPY = T_wall, P, Y
+    return -float(psi) * max(h - gas.enthalpy_mass, 0.0)
+
+
 class FlameSeeds:
     """Builds physical states at (Z, alpha, dh, flamelet j): a mix of the fresh stream mixture and
     the burnt state of training flamelet j at the same mixture fraction, plus an enthalpy loss
-    dh <= 0. Flamelet 0 (lowest strain, nearest equilibrium) is the default burnt state."""
+    dh <= 0. Flamelet 0 (lowest strain, nearest equilibrium) is the default burnt state.
+    The loss can instead be given as a fraction psi of the largest physical loss (heat_loss)."""
 
     def __init__(self, gas, cfg):
         self.gas, self.cfg = gas, cfg
         self.P = flame_pressure(cfg)
+        self.T_wall = wall_temperature(cfg)
         (self.Yf, self.hf), (self.Yo, self.ho) = stream_states(gas, cfg)
         fl = load_npz(stage_dir(cfg, "flame") / "flamelets.npz")
         self.flamelets, self.raw = [], []
@@ -102,30 +117,50 @@ class FlameSeeds:
         Y = np.array([np.interp(Z, Zg, Yg[:, k]) for k in range(Yg.shape[1])])
         return Y / Y.sum(), float(np.interp(Z, Zg, hg))
 
-    def set_state(self, Z, alpha, dh=0.0, flamelet=0):
-        """Set self.gas to the seed state; returns (Y, h)."""
+    def set_state(self, Z, alpha, dh=0.0, flamelet=0, psi=None):
+        """Set self.gas to the seed state; returns (Y, h). A given psi overrides dh."""
         Yu, hu = self.fresh(Z)
         Yb, hb = self.burnt(Z, flamelet)
         Y = (1 - alpha) * Yu + alpha * Yb
-        h = (1 - alpha) * hu + alpha * hb + dh
+        h = (1 - alpha) * hu + alpha * hb
+        if psi is not None:
+            dh = heat_loss(self.gas, Y, h, psi, self.P, self.T_wall)
+        h = h + dh
+        self.gas.HPY = h, self.P, Y
+        return Y, h
+
+
+    def recirculated(self, Z_p, beta, stream, psi=0.0, flamelet=0):
+        """Set self.gas to beta * (burnt products at Z_p, minus heat-loss fraction psi) + (1 - beta) *
+        pure inlet stream ("fuel" or "air"); returns (Y, h)."""
+        Y_p, h_p = self.burnt(Z_p, flamelet)
+        h_p = h_p + heat_loss(self.gas, Y_p, h_p, psi, self.P, self.T_wall)
+        Y_s, h_s = (self.Yf, self.hf) if stream == "fuel" else (self.Yo, self.ho)
+        Y, h = beta * Y_p + (1 - beta) * Y_s, beta * h_p + (1 - beta) * h_s
         self.gas.HPY = h, self.P, Y
         return Y, h
 
 
 def make_initializer(gas, cfg):
     """Return init(case) that puts `gas` in the initial state of a case (a dict or DataFrame row):
-    premixed cases carry phi, T0, P0; flame cases carry Z, alpha and optionally dh."""
+    premixed cases carry phi, T0, P0; flame cases carry Z, alpha and optionally dh or psi."""
     if is_flame(cfg):
         seeds = FlameSeeds(gas, cfg)
-        return lambda c: seeds.set_state(float(c["Z"]), float(c["alpha"]), float(c.get("dh", 0.0)),
-                                         int(c.get("flamelet", 0)))
+
+        def init(c):
+            psi = c.get("psi")
+            psi = None if psi is None or not np.isfinite(float(psi)) else float(psi)
+            return seeds.set_state(float(c["Z"]), float(c["alpha"]), float(c.get("dh", 0.0)),
+                                   int(c.get("flamelet", 0)), psi)
+        return init
     from .chemistry import set_unburnt
 
     return lambda c: set_unburnt(gas, cfg, float(c["phi"]), float(c["T0"]), float(c["P0"]))
 
 
 def case_label(case):
-    keys = ("Z", "alpha") if "Z" in case else ("phi", "T0", "P0")
+    keys = (("Z", "alpha") + tuple(k for k in ("psi", "tau_q") if case.get(k, 0) == case.get(k, 0)
+                                   and case.get(k, 0) > 0)) if "Z" in case else ("phi", "T0", "P0")
     fmt = {"Z": "Z={:.3f}", "alpha": "alpha={:.2f}", "phi": "phi={:.2f}", "T0": "T0={:.0f}K",
-           "P0": "P0={:.2f}atm"}
+           "P0": "P0={:.2f}atm", "psi": "psi={:.2f}", "tau_q": "tau_q={:.2g}s"}
     return " ".join(fmt[k].format(case[k] / (101325.0 if k == "P0" else 1.0)) for k in keys)

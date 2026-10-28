@@ -1,0 +1,53 @@
+{
+  "id": "h2_air_premixed-resnet_film-20261021-nofile",
+  "config": "h2_air_premixed.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-21T00:00:00+00:00",
+  "status": "superseded",
+  "notes": [
+    "Backfilled on 2026-10-28 from RESULTS.md: trained outside this machine, so files, hashes and training details are not available.",
+    "Original spec setup (phi 0.5-2, T0 1050-1300 K). Drifts on long 1 atm equilibrium tails."
+  ],
+  "exploration": {
+    "mechanism": "h2o2.yaml",
+    "fuel": "H2",
+    "oxidizer": "air",
+    "P_atm": "1-5",
+    "mode": "premixed",
+    "n_traj": 64,
+    "f_pasr": null,
+    "rollout_loss": "none"
+  },
+  "data": {
+    "n_train": 23156,
+    "n_val": 3158,
+    "pairs_by_regime": {
+      "reactor_0D": 17514,
+      "PaSR": 8800
+    }
+  },
+  "training": {
+    "latent_dim": 4,
+    "n_parameters": 234000,
+    "epochs": 300
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9998,
+      "T_mae_K": 0.6,
+      "T_max_err_K": 38.6,
+      "elemental_residual_max": 8.3e-17
+    },
+    "tier2": {
+      "tau_ign_err_pct": -6.5,
+      "T_final_ml_K": null,
+      "T_final_cantera_K": null
+    },
+    "tier3": {
+      "mean_abs_tau_err_pct": 3.8,
+      "mean_T_mae_manifold_K": 61.1,
+      "mean_nrmse_Y_pct": 0.55
+    }
+  },
+  "files": {}
+}

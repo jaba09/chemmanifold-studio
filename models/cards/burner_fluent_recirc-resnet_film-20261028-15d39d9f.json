@@ -1,0 +1,119 @@
+{
+  "id": "burner_fluent_recirc-resnet_film-20261028-15d39d9f",
+  "config": "burner_fluent_recirc.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-28T08:21:00+00:00",
+  "status": "candidate",
+  "notes": [
+    "2026-10-28: Recirculation exploration (PR #7). Mixing test 15 K vs 50 K for nonadiabatic, but rich Z 0.088 closed loop 60-140 K low and cooled lean Z 0.033 psi 0.6 case 179 K low; training stopped at epoch ~289/300 by job limit (best 285 kept). Alternative to nonadiabatic for the first Fluent comparison."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "40 ensembles x 400",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 96129,
+    "n_val": 13109,
+    "pairs_by_regime": {
+      "reactor_0D": 44184,
+      "PaSR": 22400,
+      "flamelet_states": 6803,
+      "wall_cooled_0D": 19851,
+      "recirculation": 16000
+    },
+    "T_range_K": [
+      299.99999999979804,
+      2200.4881259436293
+    ],
+    "flamelets": {
+      "n": 30,
+      "n_radiating": 15,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.746465286597,
+      "peak_T_K": [
+        1652.038357604611,
+        2200.488125283663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 285,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": null,
+    "wall_time_s": 6660.0,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 4,
+    "torch": "2.14.1+cu130",
+    "machine": "Linux x86_64",
+    "git_commit": "14c9c92+recirc (uncommitted at launch; code = 0aeb7de)"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9964313466405202,
+      "T_mae_K": 0.03213476948286558,
+      "T_max_err_K": 5.615681798693686,
+      "elemental_residual_max": 4.759836287741798e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 36.842105263157904,
+      "T_final_ml_K": 2230.498881352489,
+      "T_final_cantera_K": 2242.4491942566465
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 50.124885623020084,
+      "max_abs_tau_err_pct": 100.0,
+      "mean_T_mae_manifold_K": 47.21821338785287,
+      "max_T_mae_manifold_K": 123.59049502918184,
+      "mean_nrmse_Y_pct": 1.9147496765153198,
+      "max_nrmse_Y_pct": 4.214355367210542,
+      "cooled_mean_T_mae_K": 13.46777938507423,
+      "cooled_max_T_mae_K": 71.41397773202462,
+      "cooled_mean_nrmse_Y_pct": 0.7648201506241239,
+      "mixing_mean_T_mae_K": 15.102438970683734,
+      "mixing_max_T_mae_K": 27.446295981534092,
+      "mixing_mean_nrmse_Y_pct": 1.3468007398712665
+    },
+    "coverage_heldout_flamelets": 0.9764982373678026,
+    "export": {
+      "ood_flagged_validation": 0.0011442520405828057,
+      "T_range_K": [
+        299.99999999979804,
+        2201.5309519458547
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "15d39d9ff4eeb92f2a8fc785424de16e46263028ea843e80ecb5f4fc5a0fcfd7",
+    "data_dir": "../data/fluent_recirc",
+    "fluent_model_sha256": "576599c94907fe3be5dc2b91d5d4eed8f3d91b2f0c958477267df210181b8877"
+  }
+}

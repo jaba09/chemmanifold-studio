@@ -1,0 +1,111 @@
+{
+  "id": "burner_fluent_nonadiabatic-resnet_film-20261027-44281c08",
+  "config": "burner_fluent_nonadiabatic.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-27T15:11:17+00:00",
+  "status": "candidate",
+  "notes": [
+    "2026-10-28: Non-adiabatic a priori exploration (PR #7). Ready for Fluent in project files chemmanifold/fluent-surrogado-noadiabatico. Weak spots: slow lean/rich ignitions 1.4-2.4x late at 40 us; products of stoichiometric burning mixed half-and-half into the cold fuel jet collapse to 450 K (mixing test)."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "none",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 82049,
+    "n_val": 11189,
+    "pairs_by_regime": {
+      "reactor_0D": 44184,
+      "PaSR": 22400,
+      "flamelet_states": 6803,
+      "wall_cooled_0D": 19851
+    },
+    "T_range_K": [
+      299.99999999979804,
+      2200.4881259436293
+    ],
+    "flamelets": {
+      "n": 30,
+      "n_radiating": 15,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.746465286597,
+      "peak_T_K": [
+        1652.038357604611,
+        2200.488125283663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 299,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9960695738149158,
+      "T_mae_K": 0.028591726654563197,
+      "T_max_err_K": 2.747271620371521,
+      "elemental_residual_max": 4.734071690730021e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": -100.0,
+      "T_final_ml_K": 2230.082840904053,
+      "T_final_cantera_K": 2242.4491942566465
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 69.52590535366849,
+      "max_abs_tau_err_pct": 122.91666666666663,
+      "mean_T_mae_manifold_K": 21.30861723695393,
+      "max_T_mae_manifold_K": 71.33327809526756,
+      "mean_nrmse_Y_pct": 1.1012423741950639,
+      "max_nrmse_Y_pct": 2.5631237029608824,
+      "cooled_mean_T_mae_K": 5.894091936578222,
+      "cooled_max_T_mae_K": 17.19680375287421,
+      "cooled_mean_nrmse_Y_pct": 0.2254273336808629,
+      "mixing_mean_T_mae_K": 50.07081943758715,
+      "mixing_max_T_mae_K": 120.77858981378546,
+      "mixing_mean_nrmse_Y_pct": 3.0823745789352563
+    },
+    "coverage_heldout_flamelets": 0.9750293772032902,
+    "export": {
+      "ood_flagged_validation": 0.0022343372955581373,
+      "T_range_K": [
+        299.99999999979804,
+        2201.5309519458547
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "44281c08c57006d30c87172b3917aca48e5eadc3a7cb29b294f6303f0112498b",
+    "data_dir": "../data/fluent_nonadiabatic",
+    "fluent_model_sha256": "d288c8bbe7ceeef9357cfd651487b8dd6f26ab9c11a110709f4ca04a02092937"
+  }
+}

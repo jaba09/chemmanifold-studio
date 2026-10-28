@@ -1,7 +1,9 @@
 """Stage 7 (Section 5): train a hard-constrained surrogate with pushforward manifold perturbation.
 
 Reads  04_prep/dataset.npz, 04_prep/scalers.json, 04_prep/thermo.npz, 05_manifold/manifold_report.json.
-Writes 06_models/<arch>/model.pt, 06_models/<arch>/history.csv, 06_models/<arch>/loss.png
+Writes 06_models/<arch>/model.pt, 06_models/<arch>/history.csv, 06_models/<arch>/loss.png,
+       06_models/<arch>/train_info.json (when, how long, where, best epoch) and
+       06_models/<arch>/config_used.yaml (the exact config, for the model registry, stage 15)
 
 Composite loss (Eq. 44), all terms computed per batch:
   L_inc   MSE between normalized step velocities v_pred and v_true (Eq. 43), with v_pred taken
@@ -11,9 +13,18 @@ Composite loss (Eq. 44), all terms computed per batch:
   L_T     MSE of the Newton-recovered temperature, normalized by the std of the training dT.
   L_equil MSE of v_pred on near-equilibrium pairs (|v_true|_inf < threshold): no spurious drift.
   L_AE    autoencoder reconstruction |D(E(y~_t)) - y~_t|^2 (Phy-ChemNODE only).
+  L_roll  (optional, `rollout_loss`) multi-step loss: the surrogate is chained over K steps from the
+          first state of a segment (03_samples/segments.npz) and every step's Box-Cox state (in units
+          of sigma_dy) and temperature (in units of the training dT std) are compared with Cantera.
+          It penalizes the error growth of closed-loop use, which single-step pairs do not see.
+          Switched on after `start_frac` of the epochs, once the single-step map is reasonable.
 """
 
+import platform
+import subprocess
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import matplotlib
 
@@ -22,8 +33,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+import yaml
 
-from chemmanifold.io import base_parser, load_config, load_npz, stage_dir
+from chemmanifold.io import base_parser, load_config, load_npz, save_json, stage_dir
 from chemmanifold.loading import latent_dim, load_prep
 from chemmanifold.models import build_surrogate, resolve_device
 
@@ -56,6 +68,19 @@ def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha):
     return total, {k: float(v.detach()) for k, v in L.items()}, out
 
 
+def rollout_loss(model, seg, idx, sigma_dT):
+    Y, T = seg["Y"][idx, 0], seg["T"][idx, 0]
+    P, h, dt = seg["P"][idx], seg["h"][idx], seg["dt"][idx]
+    K = seg["Y"].shape[1] - 1
+    loss = 0.0
+    for k in range(1, K + 1):
+        out = model(Y, T, P, h, dt)
+        Y, T = out["Y"], out["T"]
+        dy = (model.encode_Y(Y) - model.encode_Y(seg["Y"][idx, k])) / model.sigma_dy
+        loss = loss + (dy ** 2).mean() + (((T - seg["T"][idx, k]) / sigma_dT) ** 2).mean()
+    return loss / K
+
+
 def main(cfg, arch):
     tc = cfg["training"]
     torch.manual_seed(cfg["seed"])
@@ -77,9 +102,17 @@ def main(cfg, arch):
     opt = torch.optim.AdamW(model.net.parameters(), lr=tc["lr_max"], weight_decay=tc["weight_decay"])
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=tc["lr_max"], total_steps=E * steps)
     w = tc["loss_weights"]
+    rl = cfg.get("rollout_loss")
+    seg = None
+    if rl and rl.get("weight", 0) > 0:
+        seg = {k: torch.as_tensor(v, dtype=torch.float64)
+               for k, v in load_npz(stage_dir(cfg, "samples") / "segments.npz").items()}
+        print(f"  rollout loss: {len(seg['dt'])} segments of {seg['Y'].shape[1] - 1} steps, weight {rl['weight']}, "
+              f"from epoch {int(rl.get('start_frac', 0.0) * E) + 1}")
 
     out_dir = stage_dir(cfg, "models", arch)
-    hist, best = [], np.inf
+    t_start, started = time.time(), datetime.now(timezone.utc)
+    hist, best, best_epoch = [], np.inf, 0
     n_params = sum(p.numel() for p in model.net.parameters())
     print(f"  {arch}: {n_params} parameters, latent d={d}, {n_train} train pairs, {E} epochs, "
           f"network on {device}, {torch.get_num_threads()} CPU threads")
@@ -93,6 +126,11 @@ def main(cfg, arch):
             idx = perm[i * bs:(i + 1) * bs]
             b = {k: v[idx] for k, v in train.items()}
             loss, parts, _ = batch_losses(model, b, A, sigma_dT, w, tc["equil_threshold"], alpha)
+            if seg is not None and e > rl.get("start_frac", 0.0) * E:
+                ridx = torch.randint(len(seg["dt"]), (rl["batch_size"],))
+                L_roll = rollout_loss(model, seg, ridx, sigma_dT)
+                loss = loss + rl["weight"] * L_roll
+                parts["roll"] = float(L_roll.detach())
             opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.net.parameters(), 1.0)
@@ -107,13 +145,15 @@ def main(cfg, arch):
         row = {"epoch": e, "alpha": alpha, **{f"train_{k}": v for k, v in agg.items()},
                **{f"val_{k}": v for k, v in vparts.items()}, "val_total": float(vloss), "val_T_mae": T_mae}
         hist.append(row)
-        if float(vloss) < best:
-            best = float(vloss)
+        rolling = seg is None or e > rl.get("start_frac", 0.0) * E
+        if rolling and float(vloss) < best:   # with the rollout loss, only checkpoints trained with it
+            best, best_epoch = float(vloss), e
             state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
             torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": e},
                        out_dir / "model.pt")
         if e == 1 or e % 5 == 0 or e == E:
             print(f"  epoch {e:3d}  alpha={alpha:.4f}  train_inc={agg['inc']:.4f}  val_inc={vparts['inc']:.4f}  "
+                  + (f"train_roll={agg['roll']:.4f}  " if "roll" in agg else "") +
                   f"val_T_MAE={T_mae:.2f}K  ({time.time() - t0:.1f}s)")
 
     h = pd.DataFrame(hist)
@@ -126,6 +166,26 @@ def main(cfg, arch):
     fig.tight_layout()
     fig.savefig(out_dir / "loss.png", dpi=150)
     print(f"  best val loss {best:.4f} -> {out_dir / 'model.pt'}")
+    with open(out_dir / "config_used.yaml", "w") as f:
+        yaml.safe_dump({k: v for k, v in cfg.items() if not k.startswith("_")}, f, sort_keys=False)
+    save_json(out_dir / "train_info.json", dict(
+        started_utc=started.isoformat(timespec="seconds"), wall_time_s=round(time.time() - t_start, 1),
+        config=str(Path(cfg["_config_path"]).name), git_commit=git_commit(), epochs=E, best_epoch=best_epoch,
+        best_val_loss=best, n_parameters=n_params, n_train_pairs=n_train, latent_dim=d, device=str(device),
+        threads=torch.get_num_threads(), torch=torch.__version__, python=platform.python_version(),
+        machine=f"{platform.system()} {platform.machine()}"))
+
+
+def git_commit():
+    try:
+        root = Path(__file__).resolve().parents[1]
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=root, capture_output=True, text=True,
+                             check=True).stdout.strip()
+        dirty = subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=root,
+                               capture_output=True, text=True).stdout.strip()
+        return sha + ("-dirty" if dirty else "")
+    except Exception:
+        return None
 
 
 if __name__ == "__main__":
