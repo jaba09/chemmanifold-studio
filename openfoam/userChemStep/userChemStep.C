@@ -231,7 +231,7 @@ void Foam::userChemStep<ChemistryModel>::solve
         {
             Y[map_[i]] = Y_[i];
         }
-        cm_info info;
+        cm_info info{};     // cm_ood only sets the OOD bits it finds
         cm_ood(model_, &options_, Y, T, p, &info);
         if (info.flags & CM_OOD_ANY)
         {
