@@ -102,8 +102,8 @@ def load_states(path, species):
     path = Path(path)
     if path.is_dir():
         return openfoam_state(path, species)
-    Y, T, P, _ = fluent_state(read_fluent_ascii(path), species)
-    return Y, T, P
+    st = fluent_state(read_fluent_ascii(path), species)
+    return st["Y"], st["T"], st["P"]
 
 
 def sample_cells(Z, T, n, T_min, rng):

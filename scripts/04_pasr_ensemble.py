@@ -19,6 +19,9 @@ flame mode:    fresh = stream mixture at Z (cold mixing line), burnt = the state
                aged adiabatically for a log-uniform time in `age_range` (the reaction that follows the
                mixing), then advanced by one stride for the pair.
 
+               With `pasr.vitiated_ignition` it writes 03_samples/pairs_vitiated.npz (regime 7): an inlet
+               stream mixed with hot products of another mixture fraction, followed through ignition.
+
 Reads  01_envelope/initial_conditions.csv (regime 1 rows).
 Writes 03_samples/pairs_pasr.npz with the same layout as pairs_0d.npz (regime = 1),
        03_samples/pairs_recirc.npz (regime 4, with pasr.recirculation),
@@ -31,7 +34,7 @@ from multiprocessing import Pool
 import numpy as np
 import pandas as pd
 
-from chemmanifold.chemistry import advance_const_p, make_gas, set_unburnt
+from chemmanifold.chemistry import advance_const_p, const_p_reactor, make_gas, set_unburnt
 from chemmanifold.flame import (FlameSeeds, case_label, flame_pressure, heat_loss, is_flame, wall_temperature,
                                z_from_unit)
 from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
@@ -99,6 +102,8 @@ def main(cfg):
         flamelet_pairs(gas, cfg, seeds, rng)
         if p.get("recirculation"):
             recirculation_pairs(gas, cfg, seeds, rng)
+        if p.get("vitiated_ignition"):
+            vitiated_pairs(gas, cfg, seeds, rng)
         if cfg.get("unsteady_flamelets"):
             unsteady_pairs(cfg, seeds, rng)
 
@@ -158,6 +163,71 @@ def recirculation_pairs(gas, cfg, seeds, rng):
     arrays = {k: np.asarray(v) for k, v in out.items()}
     print(f"  {len(arrays['dt'])} recirculation pairs ({n_fail} rejected states)")
     save_npz(stage_dir(cfg, "samples") / "pairs_recirc.npz", **arrays)
+
+
+def vitiated_pairs(gas, cfg, seeds, rng):
+    """Regime 7: ignition of an inlet stream mixed with hot products of ANOTHER mixture fraction.
+
+    Lean products (Z_p below Z_st, still holding O2) mixed into the fuel jet, or rich products mixed
+    into the air, the stream's share log-uniform in stream_share (mostly hot mixtures that can ignite);
+    the 0D reactor is then
+    followed through its induction and ignition (at dt_base, up to t_max) and n_pick states, chosen by
+    arc length in (Box-Cox Y, T) like stage 3, are paired at random time steps of the dt range.
+    The recirculation ensembles (regime 4) only take single aged points of such mixtures, mostly at
+    product shares around 0.5; this follows the whole induction, which is where a CH4 jet entering
+    hot vitiated gas spends its first milliseconds."""
+    from chemmanifold.boxcox import boxcox
+    v = cfg["pasr"]["vitiated_ignition"]
+    dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
+    Z_st = float(load_json(stage_dir(cfg, "flame") / "flame_reference.json")["Z_st"])
+    strides = dt_strides(cfg, "pasr")
+    k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
+    n_max = int(round(v.get("t_max", 0.02) / dt_base))
+    out = {k: [] for k in PAIR_KEYS}
+    for e in range(v["n"]):
+        into_fuel = e % 2 == 0
+        lo, hi = (v.get("Z_p_lean", [0.02, Z_st]) if into_fuel else v.get("Z_p_rich", [Z_st, 0.3]))
+        Z_p = float(10 ** rng.uniform(np.log10(lo), np.log10(hi)))
+        j = int(rng.choice(seeds.train_ids))
+        psi_p = rng.uniform(0.0, v.get("psi_max", 0.3))
+        Y_p, h_p = seeds.burnt(Z_p, j)
+        h_p = h_p + heat_loss(gas, Y_p, h_p, psi_p, seeds.P, T_wall)
+        Y_s, h_s, Z_s = (seeds.Yf, seeds.hf, 1.0) if into_fuel else (seeds.Yo, seeds.ho, 0.0)
+        share = 10 ** rng.uniform(*np.log10(v.get("stream_share", [0.003, 0.5])))
+        b = 1.0 - share                              # mostly hot products with a little cold stream
+        Z = b * Z_p + share * Z_s
+        try:
+            gas.HPY = b * h_p + (1 - b) * h_s, seeds.P, b * Y_p + (1 - b) * Y_s
+            _, net = const_p_reactor(gas)
+            Ys, Ts, hs = [gas.Y.copy()], [gas.T], gas.enthalpy_mass
+            for n in range(1, n_max + 1):
+                net.advance(n * dt_base)
+                Ys.append(gas.Y.copy())
+                Ts.append(gas.T)
+                if n > 50 and abs(Ts[-1] - Ts[-2]) < 0.02 and Ts[-1] - Ts[0] > 200:
+                    break
+        except Exception:
+            continue
+        Ys, Ts = np.array(Ys), np.array(Ts)
+        phi = np.hstack([boxcox(Ys, cfg["arclength"]["boxcox_lambda"]),
+                         10.0 * ((Ts - Ts.min()) / max(np.ptp(Ts), 1e-12))[:, None]])
+        w = np.linalg.norm(np.diff(phi, axis=0), axis=1)
+        w = w + 0.05 * w.mean()
+        idx = rng.choice(len(w), size=min(v.get("n_pick", 150), len(w)), replace=False, p=w / w.sum())
+        for i in idx:
+            for st in rng.choice(strides, size=k_dt, replace=False):
+                gas.HPY = hs, seeds.P, Ys[i]
+                T_in = gas.T
+                advance_const_p(gas, float(st) * dt_base)
+                for k, val in (("Y_in", Ys[i]), ("T_in", T_in), ("P_in", seeds.P), ("h_in", hs),
+                               ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
+                               ("regime", 7), ("traj_id", e)):
+                    out[k].append(val)
+        print(f"  vitiated {e:03d}: products Z_p={Z_p:.3f} psi={psi_p:.2f} into {'fuel' if into_fuel else 'air'} "
+              f"-> Z={Z:.3f}, T {Ts[0]:.0f} -> {Ts[-1]:.0f} K in {len(Ts) - 1} steps")
+    arrays = {k: np.asarray(val) for k, val in out.items()}
+    print(f"  {len(arrays['dt'])} vitiated-ignition pairs")
+    save_npz(stage_dir(cfg, "samples") / "pairs_vitiated.npz", **arrays)
 
 
 PAIR_KEYS = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")
