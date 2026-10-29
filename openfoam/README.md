@@ -99,7 +99,8 @@ userChemStepCoeffs
     oodAction    0;          // 0 = only count cells outside the training data
     checkOOD     true;
     reportCalls  1000000;    // print counters (advanced, OOD by check, ...) every this many calls
-}
+    oodFallback  false;      // true: cells outside the training data are integrated with the
+}                            //  ODE solver of odeCoeffs (hybrid surrogate + direct integration)
 ```
 
 The surrogate is trained on dt = 10-40 us, so run it transient (`ddt Euler`, `deltaT 4e-5`), not

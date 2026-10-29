@@ -13,13 +13,15 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     typename ChemistryModel::reactionThermo& thermo
 )
 :
-    chemistrySolver<ChemistryModel>(thermo),
+    ode<ChemistryModel>(thermo),
     coeffsDict_(this->subOrEmptyDict("userChemStepCoeffs")),
     Y_(this->nSpecie()),
     model_(nullptr),
     map_(this->nSpecie(), -1),
+    oodFallback_(coeffsDict_.getOrDefault<bool>("oodFallback", false)),
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
+    nFallback_(0),
     dtMin_(GREAT), dtMax_(0)
 {
     for (label b=0; b<6; b++) nFlag_[b] = 0;
@@ -78,7 +80,14 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     Info<< "userChemStep: ChemManifold surrogate " << cm_arch(model_)
         << " from " << modelFile << ", trained dt " << cm_dt_min(model_)
         << "-" << cm_dt_max(model_) << " s, T_freeze " << options_.T_freeze
-        << " K, maxSubsteps " << options_.max_substeps << endl;
+        << " K, maxSubsteps " << options_.max_substeps
+        << (oodFallback_ ? ", OOD cells integrated with the ODE solver" : "")
+        << endl;
+    if (oodFallback_ && !options_.check_ood)
+    {
+        FatalErrorInFunction
+            << "oodFallback needs checkOOD true" << exit(FatalError);
+    }
 
     fileName testsFile;
     if (coeffsDict_.readIfPresent("tests", testsFile))
@@ -171,12 +180,13 @@ void Foam::userChemStep<ChemistryModel>::report() const
     Pout<< "userChemStep: " << nCalls_ << " calls, " << nAdvanced_
         << " advanced, " << nFrozen_ << " frozen, OOD " << nOOD_
         << " (" << (nAdvanced_ ? 100.0*nOOD_/nAdvanced_ : 0.0)
-        << " % of advanced), invalid " << nInvalid_ << ", dt capped " << nCapped_
+        << " % of advanced), ODE fallback " << nFallback_ << ", invalid " << nInvalid_ << ", dt capped " << nCapped_
         << ", dt " << dtMin_ << "-" << dtMax_ << " s; OOD by check: T "
         << nFlag_[0] << ", T|Z " << nFlag_[1] << ", p " << nFlag_[2]
         << ", species " << nFlag_[3] << ", manifold " << nFlag_[4]
         << ", data " << nFlag_[5] << endl;
     nCalls_ = nAdvanced_ = nFrozen_ = nOOD_ = nInvalid_ = nCapped_ = 0;
+    nFallback_ = 0;
     for (label b=0; b<6; b++) nFlag_[b] = 0;
     dtMin_ = GREAT;
     dtMax_ = 0;
@@ -211,6 +221,35 @@ void Foam::userChemStep<ChemistryModel>::solve
     for (label i=0; i<nSpecie; i++)
     {
         Y_[i] = c[i]*thermos[i].W()/rho;
+    }
+
+    // Cells outside the training data: integrate them with the ODE solver
+    if (oodFallback_ && model_ && T >= options_.T_freeze)
+    {
+        double Y[CM_MAX_SPECIES];
+        forAll(Y_, i)
+        {
+            Y[map_[i]] = Y_[i];
+        }
+        cm_info info{};     // cm_ood only sets the OOD bits it finds
+        cm_ood(model_, &options_, Y, T, p, &info);
+        if (info.flags & CM_OOD_ANY)
+        {
+            nCalls_++;
+            nAdvanced_++;
+            nOOD_++;
+            nFallback_++;
+            for (label b=0; b<6; b++)
+            {
+                if (info.flags & (1u << b)) nFlag_[b]++;
+            }
+            ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+            if (reportCalls_ > 0 && nCalls_ >= reportCalls_)
+            {
+                report();
+            }
+            return;
+        }
     }
 
     chemStep(Y_, T, p, deltaT);
