@@ -22,7 +22,11 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
     nFallback_(0),
-    dtMin_(GREAT), dtMax_(0)
+    dtMin_(GREAT), dtMax_(0),
+    shadowEvery_(coeffsDict_.getOrDefault<label>("shadowEvery", 0)),
+    shadowPerBin_(coeffsDict_.getOrDefault<label>("shadowPerBin", 2)),
+    shadowIndex_(-1),
+    shadowCount_()
 {
     for (label b=0; b<6; b++) nFlag_[b] = 0;
     cm_default_options(&options_);
@@ -87,6 +91,14 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     {
         FatalErrorInFunction
             << "oodFallback needs checkOOD true" << exit(FatalError);
+    }
+
+    if (shadowEvery_ > 0)
+    {
+        Info<< "userChemStep: shadow DI check every " << shadowEvery_
+            << " time steps, up to " << shadowPerBin_
+            << " cells per (T, Z, inside/OOD) bin, written to shadowDI.csv"
+            << endl;
     }
 
     fileName testsFile;
@@ -193,6 +205,90 @@ void Foam::userChemStep<ChemistryModel>::report() const
 }
 
 
+namespace
+{
+    // Bins of the shadow DI check: 100 K bands from 600 K, Z bands around
+    // Z_st (0.055), inside / outside the training data
+    const double shadowZ[] =
+        {0, 0.01, 0.02, 0.03, 0.045, 0.055, 0.07, 0.1, 0.15, 0.22, 0.4, 1.01};
+    const int nShadowZ = 11;
+    const int nShadowT = 18;
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::shadow
+(
+    const scalarField& c,
+    const scalar T,
+    const scalar p,
+    const scalar deltaT
+) const
+{
+    const label timeIndex = this->mesh().time().timeIndex();
+    if (timeIndex % shadowEvery_ != 0) return;
+    if (timeIndex != shadowIndex_)
+    {
+        shadowIndex_ = timeIndex;
+        shadowCount_.setSize(2*nShadowT*nShadowZ);
+        shadowCount_ = 0;
+    }
+
+    const label nSpecie = this->nSpecie();
+    const auto& thermos = this->specieThermo();
+    scalar rho = 0;
+    for (label i=0; i<nSpecie; i++) rho += c[i]*thermos[i].W();
+    if (rho < VSMALL) return;
+
+    double Y0[CM_MAX_SPECIES];
+    for (label i=0; i<nSpecie; i++) Y0[map_[i]] = c[i]*thermos[i].W()/rho;
+    cm_info oi{};
+    cm_ood(model_, &options_, Y0, T, p, &oi);
+    const int ood = (oi.flags & CM_OOD_ANY) ? 1 : 0;
+    const int bt = std::min(nShadowT - 1, std::max(0, int((T - 600.0)/100.0)));
+    int bz = 0;
+    while (bz < nShadowZ - 1 && oi.Z >= shadowZ[bz + 1]) bz++;
+    label& n = shadowCount_[(ood*nShadowT + bt)*nShadowZ + bz];
+    if (n >= shadowPerBin_) return;
+    n++;
+
+    // Surrogate step from this state
+    double Ys[CM_MAX_SPECIES];
+    for (label k=0; k<nSpecie; k++) Ys[k] = Y0[k];
+    cm_info si{};
+    cm_advance(model_, &options_, Ys, T, p, deltaT, &si);
+
+    // GA18 (odeCoeffs) from the same state
+    scalarField cd(c);
+    scalar Td = T, pd = p, dtd = deltaT, subd = deltaT;
+    ode<ChemistryModel>::solve(cd, Td, pd, dtd, subd);
+    scalar rhod = 0;
+    for (label i=0; i<nSpecie; i++) rhod += cd[i]*thermos[i].W();
+
+    if (!shadowFile_)
+    {
+        shadowFile_.reset(new OFstream(this->mesh().time().path()/"shadowDI.csv"));
+        OFstream& f = shadowFile_();
+        f << "time,T,p,dt,Z,ood_flags,manifold_ratio,data_ratio,T_surrogate,T_DI";
+        for (label k=0; k<nSpecie; k++) f << ",Y0_" << cm_species_name(model_, k);
+        for (label k=0; k<nSpecie; k++) f << ",Ys_" << cm_species_name(model_, k);
+        for (label k=0; k<nSpecie; k++) f << ",Yd_" << cm_species_name(model_, k);
+        f << nl;
+    }
+    double Yd[CM_MAX_SPECIES];
+    for (label i=0; i<nSpecie; i++) Yd[map_[i]] = cd[i]*thermos[i].W()/max(rhod, VSMALL);
+    OFstream& f = shadowFile_();
+    f.precision(9);
+    f << this->mesh().time().value() << ',' << T << ',' << p << ',' << deltaT << ','
+      << oi.Z << ',' << oi.flags << ',' << oi.manifold_ratio << ',' << oi.data_ratio << ','
+      << si.T_out << ',' << Td;
+    for (label k=0; k<nSpecie; k++) f << ',' << Y0[k];
+    for (label k=0; k<nSpecie; k++) f << ',' << Ys[k];
+    for (label k=0; k<nSpecie; k++) f << ',' << Yd[k];
+    f << nl;
+}
+
+
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
 template<class ChemistryModel>
@@ -221,6 +317,12 @@ void Foam::userChemStep<ChemistryModel>::solve
     for (label i=0; i<nSpecie; i++)
     {
         Y_[i] = c[i]*thermos[i].W()/rho;
+    }
+
+    // Shadow DI check (comparison only; the cell's update below is unchanged)
+    if (shadowEvery_ > 0 && model_ && T >= options_.T_freeze)
+    {
+        shadow(c, T, p, deltaT);
     }
 
     // Cells outside the training data: integrate them with the ODE solver

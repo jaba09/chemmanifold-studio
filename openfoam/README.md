@@ -100,8 +100,19 @@ userChemStepCoeffs
     checkOOD     true;
     reportCalls  1000000;    // print counters (advanced, OOD by check, ...) every this many calls
     oodFallback  false;      // true: cells outside the training data are integrated with the
-}                            //  ODE solver of odeCoeffs (hybrid surrogate + direct integration)
+                             //  ODE solver of odeCoeffs (hybrid surrogate + direct integration)
+    shadowEvery  0;          // > 0: shadow DI check every this many time steps (see below)
+    shadowPerBin 2;
+}
 ```
+
+Shadow DI check (comparison only): with `shadowEvery N` (time steps, 0 = off) and `shadowPerBin n`
+(default 2), every N-th step up to n cells per bin of (100 K band of T from 600 K, Z band around
+Z_st, inside/outside the training data) are advanced both by the surrogate and by GA18 (`odeCoeffs`)
+from the same state; T, p, Z, the OOD flags and ratios, the input Y and both outputs go to
+`shadowDI.csv` (in each processor directory). The cell keeps its normal update. The bins spread the
+checks over the thermochemical space rather than over the (mostly cold) cells.
+`tools/shadow_report.py <run> <out>` summarizes them per Z band, T band and time.
 
 The surrogate is trained on dt = 10-40 us, so run it transient (`ddt Euler`, `deltaT 4e-5`), not
 with local time stepping, whose chemistry dt reaches 10 ms.

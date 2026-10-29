@@ -27,6 +27,8 @@ userChemStepCoeffs
     checkOOD     true;
     oodFallback  true;       // cells outside the training data -> GA18 (odeCoeffs)
     reportCalls  15000;      // about one counter line per rank and time step
+    shadowEvery  50;         // every 50 steps (1 ms) a few cells per (T, Z, inside/OOD) bin are also
+    shadowPerBin 2;          //  integrated with GA18 from the same state -> shadowDI.csv (comparison only)
 }
 EOF
 foamDictionary -entry numberOfSubdomains -set "$NP" system/decomposeParDict > /dev/null

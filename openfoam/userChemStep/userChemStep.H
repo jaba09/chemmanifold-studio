@@ -47,6 +47,7 @@ SourceFiles
 #define userChemStep_H
 
 #include "ode.H"
+#include "OFstream.H"
 #include "chemmanifold_core.h"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -93,6 +94,25 @@ class userChemStep
 
         //- Cells per OOD check: T, T|Z, p, species, manifold, data
         mutable label nFlag_[6];
+
+        //- Shadow DI check: every shadowEvery_ time steps (0 = off), up to
+        //  shadowPerBin_ cells per (T, Z, inside/OOD) bin are also integrated
+        //  with GA18 (odeCoeffs) from the same state, and both results are
+        //  written to shadowDI.csv; the cell keeps its normal update
+        label shadowEvery_;
+        label shadowPerBin_;
+        mutable label shadowIndex_;
+        mutable labelList shadowCount_;
+        mutable autoPtr<OFstream> shadowFile_;
+
+        //- Run the shadow check on this cell if its bin still has room
+        void shadow
+        (
+            const scalarField& c,
+            const scalar T,
+            const scalar p,
+            const scalar deltaT
+        ) const;
 
 
     // Private Member Functions
