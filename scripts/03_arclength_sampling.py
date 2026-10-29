@@ -10,6 +10,9 @@ With `rollout_loss` in the config it also writes multi-step segments for stage 7
 `segments_per_traj` random starts per trajectory, each followed for `steps` adiabatic steps of
 stride x dt_base (slices of the trajectory, or Cantera re-integration for wall-cooled ones).
 
+Equilibrium tails of stage 2 (tail_* arrays, optional) are paired the same way as wall-cooled
+states, each advanced adiabatically over every stride with Cantera; these pairs get regime 6.
+
 Reads  02_autoignition/traj_*.npz.
 Writes 03_samples/pairs_0d.npz with arrays Y_in, T_in, P_in, h_in, dt, Y_out, T_out, regime, traj_id,
        03_samples/segments.npz with arrays Y [N, K+1, Ns], T [N, K+1], P, h, dt (rollout loss only).
@@ -55,6 +58,9 @@ def main(cfg):
         tr = load_npz(f)
         tid = int(f.stem.split("_")[1])
         idx = select_indices(tr["Y"], tr["T"], cfg, rng)
+        if "tail_T" in tr:
+            tail = {k: tr[f"tail_{k}"] for k in ("Y", "T", "P", "h")}
+            cooling_pairs(gas, tail, np.arange(len(tail["T"])), tid, cfg, out, regime=6)
         if float(tr.get("tau_q", 0.0)) > 0:
             cooling_pairs(gas, tr, idx, tid, cfg, out)
             continue
@@ -72,8 +78,9 @@ def main(cfg):
         rollout_segments(gas, files, cfg, rng)
     arrays = {k: np.concatenate(v) for k, v in out.items()}
     n_cool = int((arrays["regime"] == 3).sum())
+    n_tail = int((arrays["regime"] == 6).sum())
     print(f"  {len(arrays['dt'])} 0D transition pairs from {len(files)} trajectories "
-          f"({n_cool} of them adiabatic steps from wall-cooled states)")
+          f"({n_cool} of them adiabatic steps from wall-cooled states, {n_tail} from equilibrium tails)")
     save_npz(stage_dir(cfg, "samples") / "pairs_0d.npz", **arrays)
 
 
@@ -106,7 +113,7 @@ def rollout_segments(gas, files, cfg, rng):
     save_npz(stage_dir(cfg, "samples") / "segments.npz", **arrays)
 
 
-def cooling_pairs(gas, tr, idx, tid, cfg, out):
+def cooling_pairs(gas, tr, idx, tid, cfg, out, regime=3):
     dt_base = cfg["autoignition"]["dt_base"]
     for s in cfg["arclength"]["strides"]:
         Y_out, T_out = [], []
@@ -122,7 +129,7 @@ def cooling_pairs(gas, tr, idx, tid, cfg, out):
         out["dt"].append(np.full(len(idx), s * dt_base))
         out["Y_out"].append(np.array(Y_out))
         out["T_out"].append(np.array(T_out))
-        out["regime"].append(np.full(len(idx), 3, dtype=np.int64))
+        out["regime"].append(np.full(len(idx), regime, dtype=np.int64))
         out["traj_id"].append(np.full(len(idx), tid))
 
 
