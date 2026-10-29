@@ -10,8 +10,8 @@ flame mode:    reaction of the seed state (Z, alpha, dh) toward equilibrium. Eq.
                (1 - exp(-dt/tau_q))), recorded until the gas is within 50 K of T_wall or t = 5 tau_q,
                on at most `cooling_records` points. These trajectories only supply *states*: stage 3
                pairs them with adiabatic chemistry steps, which is what the surrogate learns.
-               Equilibrium tail (autoignition.equilibrium_tail, optional): once an adiabatic trajectory
-               stops (burnt and flat), the reactor keeps going for t_end more seconds and n_records
+               Equilibrium tail (autoignition.equilibrium_tail, optional): once a burnt adiabatic
+               trajectory stops hot (flat, or at t_max, above T_min), the reactor keeps going for t_end more seconds and n_records
                log-spaced states are saved as tail_t, tail_Y, tail_T, tail_P, tail_h. Burnt gas spends
                milliseconds relaxing its radicals (OH, O, H, CO) towards equilibrium, far longer than the
                flat-T stop criterion keeps; stage 3 pairs these states with adiabatic steps (regime 6).
@@ -72,7 +72,7 @@ def integrate(gas, cfg, init, case):
                 break
     out = {k: np.asarray(v) for k, v in rec.items()}
     tail = a.get("equilibrium_tail")
-    if tail and streak >= a["n_consecutive"]:
+    if tail and rec["T"][-1] >= float(tail.get("T_min", 1200.0)):   # hot at the stop (flat or t_max)
         t_stop = rec["t"][-1]
         t_rel = np.geomspace(a["dt_base"], float(tail["t_end"]), int(tail["n_records"]))
         tr = {k: [] for k in ("t", "Y", "T", "P", "h")}

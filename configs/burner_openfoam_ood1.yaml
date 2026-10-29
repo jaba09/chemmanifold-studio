@@ -11,6 +11,7 @@
 #     30 ms after the flat-T stop. OOD cells were burnt lean gas at equilibrium (Z ~ 0.028, flagged by
 #     the manifold check), and in the flame core the surrogate held OH ~2x and CO ~1.4x the DI values
 #     with T ~35 K low: both are the slow radical-recombination tail the 0D runs cut off.
+#     Most 0D seeds start cold (psi up to 0.85), so burnt_seeds adds 64 nearly burnt, hot seeds.
 #
 # ChemManifold Studio configuration - the burner's non-premixed CH4/air flame (GA18), air as the
 # Fluent case defines it (X_O2 = 0.21), with a NON-ADIABATIC exploration of the thermochemical space.
@@ -82,6 +83,11 @@ envelope:
   T_wall: 300.0                     # K, coldest wall / inlet of the burner
   f_cool: 0.35                      # share of the 0D seeds that are cooling reactors (regime 3)
   tau_q_range: [1.0e-3, 1.0]        # s, log-uniform heat-loss time constant of the cooling reactors
+  burnt_seeds:                      # hot products leaving the flame, followed to equilibrium (regime 0 + tail)
+    n: 64
+    Z_range: [0.01, 0.3]            # log-uniform
+    alpha: [0.85, 1.0]
+    psi_max: 0.2
 
 autoignition:
   dt_base: 1.0e-5                   # s (10 us for CH4)
@@ -94,7 +100,8 @@ autoignition:
   cooling_records: 2000             # points recorded along a cooling-reactor trajectory
   equilibrium_tail:                 # regime 6: keep relaxing after the flat-T stop
     t_end: 3.0e-2                   # s after the stop
-    n_records: 24                   # log-spaced states, each paired with adiabatic steps
+    n_records: 40                   # log-spaced states, each paired with adiabatic steps
+    T_min: 1200.0                   # K, only reactors this hot at the stop
 
 arclength:
   boxcox_lambda: 0.10

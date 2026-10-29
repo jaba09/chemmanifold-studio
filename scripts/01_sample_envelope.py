@@ -11,6 +11,9 @@ flame mode:    (Z, alpha, heat loss, flamelet[, cooling time]) of the burner fla
                loss of the seed (cooling it to `T_wall`), instead of a fixed dh up to heat_loss_max.
                A share `f_cool` of the 0D seeds become cooling reactors (regime 3): they lose heat
                towards T_wall with a time constant tau_q, log-uniform in `tau_q_range`, while reacting.
+               `burnt_seeds` (optional) adds n regime-0 seeds that start nearly burnt (alpha in its
+               range, small psi, Z log-uniform in Z_range): hot products that stage 2 follows towards
+               equilibrium (with autoignition.equilibrium_tail), the state of the gas leaving the flame.
 
 Output: 01_envelope/initial_conditions.csv (regime 0 = 0D trajectory, 1 = PaSR micromixing,
         3 = 0D trajectory with heat loss to the walls).
@@ -53,12 +56,29 @@ def main(cfg):
         tau_q = np.where(regime == 3, 10.0 ** (lo + u[:, -1] * (hi - lo)), 0.0)
         df = pd.DataFrame({"id": np.arange(n), "Z": Z, "alpha": alpha, "dh": dh, "psi": psi,
                            "flamelet": flamelet, "tau_q": tau_q, "P0": flame_pressure(cfg), "regime": regime})
+        if env.get("burnt_seeds") and env.get("heat_loss", "absolute") == "fraction":
+            df = pd.concat([df, burnt_seeds(cfg, env["burnt_seeds"], train_ids, n)], ignore_index=True)
     else:
         df = premixed_envelope(env, u, regime)
     out = stage_dir(cfg, "envelope") / "initial_conditions.csv"
     df.to_csv(out, index=False)
     print(f"  {n0d} 0D trajectories ({int((regime == 3).sum())} with wall heat loss) + {n - n0d} PaSR "
           f"ensembles -> {out}")
+
+
+def burnt_seeds(cfg, b, train_ids, id0):
+    u = qmc.Sobol(d=4, scramble=True, seed=cfg["seed"] + 1).random(int(b["n"]))
+    lz = np.log10(b["Z_range"])
+    Z = 10.0 ** (lz[0] + u[:, 0] * (lz[1] - lz[0]))
+    alpha = b["alpha"][0] + u[:, 1] * (b["alpha"][1] - b["alpha"][0])
+    psi = u[:, 2] * b["psi_max"]
+    flamelet = train_ids[np.minimum((u[:, 3] * len(train_ids)).astype(int), len(train_ids) - 1)]
+    seeds = FlameSeeds(make_gas(cfg), cfg)
+    dh = np.array([seeds.set_state(z, a, flamelet=j, psi=s)[1] - seeds.set_state(z, a, flamelet=j)[1]
+                   for z, a, j, s in zip(Z, alpha, flamelet, psi)])
+    print(f"  + {len(Z)} burnt seeds (Z {b['Z_range']}, alpha {b['alpha']}, psi <= {b['psi_max']})")
+    return pd.DataFrame({"id": id0 + np.arange(len(Z)), "Z": Z, "alpha": alpha, "dh": dh, "psi": psi,
+                         "flamelet": flamelet, "tau_q": 0.0, "P0": flame_pressure(cfg), "regime": 0})
 
 
 def premixed_envelope(env, u, regime):
