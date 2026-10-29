@@ -4,7 +4,9 @@
   "arch": "resnet_film",
   "trained_utc": "2026-10-29T10:30:09+00:00",
   "status": "candidate",
-  "notes": [],
+  "notes": [
+    "2026-10-29: OpenFOAM hybrid from the lit start, 25 ms (comparison in the OOD loop): GA18 8.7% at start, 1.7-4.4% after; flame zone mean |dT| vs DI 21->12 K, cold; Tmax 16-44 K low"
+  ],
   "exploration": {
     "mechanism": "mechanisms/ga18.yaml",
     "fuel": "CH4:1.0",
