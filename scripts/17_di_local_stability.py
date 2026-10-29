@@ -127,7 +127,7 @@ def reference(gas, Y, T, P, dt, steps, keep):
         net.advance((k + 1) * dt)
         out[k] = r.T
         if k in keep:
-            Ys[k] = r.thermo.Y.copy()
+            Ys[k] = r.phase.Y.copy()
     return out, Ys
 
 
