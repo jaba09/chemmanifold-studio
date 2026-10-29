@@ -7,7 +7,9 @@ Writes 06_models/<arch>/model.pt, 06_models/<arch>/history.csv, 06_models/<arch>
 
 Composite loss (Eq. 44), all terms computed per batch:
   L_inc   MSE between normalized step velocities v_pred and v_true (Eq. 43), with v_pred taken
-          from the raw network candidate relative to the clean input state.
+          from the raw network candidate relative to the clean input state. With
+          training.dt_scaled_loss the increments (and dT in L_T) are normalized by their std at the
+          pair's own time step, so every dt of a wide dt_range weighs the same.
   L_mass  mean squared elemental residual A(Y_cand - Y_t) of the *unprojected* candidate (in units
           of 1e-2), so the network itself learns to be near-conservative and the projection stays small.
   L_T     MSE of the Newton-recovered temperature, normalized by the std of the training dT.
@@ -47,15 +49,35 @@ def to_tensors(ds, mask):
     return {k: torch.as_tensor(ds[k][mask], dtype=torch.float64) for k in keys}
 
 
+def dt_scales(train, val, sigma_min):
+    """training.dt_scaled_loss: increments and dT normalized by their std among the training pairs
+    with the same time step (log10 dt to 0.1), not by one global std. With a wide dt_range the long
+    steps have increments orders of magnitude larger, and a global scale makes the short steps (the
+    ones the solver calls most in hot cells) nearly free in the loss."""
+    key = lambda d: torch.round(torch.log10(d["dt"]) * 10).long()
+    kt = key(train)
+    dy = train["yt_out"] - train["yt_in"]
+    dT = train["T_out"] - train["T_in"]
+    bins = torch.unique(kt)
+    sy = torch.stack([torch.clamp(dy[kt == k].std(0), min=sigma_min) for k in bins])
+    sT = torch.stack([torch.clamp(dT[kt == k].std(), min=1.0) for k in bins])
+    for d in (train, val):
+        j = torch.argmin((key(d)[:, None] - bins[None, :]).abs(), dim=1)
+        d["sdy"], d["sdT"] = sy[j], sT[j]
+    return bins, sy, sT
+
+
 def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha):
     sdy = model.sigma_dy
+    sdy_loss = b.get("sdy", sdy)            # per-sample scales with training.dt_scaled_loss
+    sigma_dT = b.get("sdT", sigma_dT)
     Y_in, T_in = b["Y_in"], b["T_in"]
     if alpha > 0:  # pushforward perturbation, projected back onto the polytope (Section 5.2)
         noisy = b["yt_in"] + alpha * sdy * torch.randn_like(b["yt_in"])
         Y_in, T_in = model.project_state(b["Y_in"], noisy, b["h_in"], b["T_in"])
     out = model(Y_in, T_in, b["P_in"], b["h_in"], b["dt"])
-    v_true = (b["yt_out"] - b["yt_in"]) / sdy
-    v_pred = (out["yt_cand"] - b["yt_in"]) / sdy
+    v_true = (b["yt_out"] - b["yt_in"]) / sdy_loss
+    v_pred = (out["yt_cand"] - b["yt_in"]) / sdy_loss
     L = {}
     L["inc"] = ((v_pred - v_true) ** 2).mean()
     L["mass"] = ((((out["Y_cand"] - b["Y_in"]) @ A.T) / MASS_SCALE) ** 2).mean()
@@ -68,7 +90,7 @@ def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha):
     return total, {k: float(v.detach()) for k, v in L.items()}, out
 
 
-def rollout_loss(model, seg, idx, sigma_dT):
+def rollout_loss(model, seg, idx, sigma_dT, sigma_dy=None):
     Y, T = seg["Y"][idx, 0], seg["T"][idx, 0]
     P, h, dt = seg["P"][idx], seg["h"][idx], seg["dt"][idx]
     K = seg["Y"].shape[1] - 1
@@ -76,7 +98,7 @@ def rollout_loss(model, seg, idx, sigma_dT):
     for k in range(1, K + 1):
         out = model(Y, T, P, h, dt)
         Y, T = out["Y"], out["T"]
-        dy = (model.encode_Y(Y) - model.encode_Y(seg["Y"][idx, k])) / model.sigma_dy
+        dy = (model.encode_Y(Y) - model.encode_Y(seg["Y"][idx, k])) / (model.sigma_dy if sigma_dy is None else sigma_dy)
         loss = loss + (dy ** 2).mean() + (((T - seg["T"][idx, k]) / sigma_dT) ** 2).mean()
     return loss / K
 
@@ -96,6 +118,11 @@ def main(cfg, arch):
 
     train, val = to_tensors(ds, ~ds["is_val"]), to_tensors(ds, ds["is_val"])
     sigma_dT = float(torch.clamp((train["T_out"] - train["T_in"]).std(), min=1.0))
+    roll_sdy, roll_sdT = None, sigma_dT
+    if tc.get("dt_scaled_loss"):
+        bins, sy, sT = dt_scales(train, val, float(cfg["preprocess"]["sigma_dy_min"]))
+        print("  dt-scaled loss, dT std per time step: " + ", ".join(
+            f"{10 ** (k / 10):.2g}s {t:.3g}K" for k, t in zip(bins.tolist(), sT.tolist())))
     n_train = len(train["dt"])
     bs, E = tc["batch_size"], tc["epochs"]
     steps = (n_train + bs - 1) // bs
@@ -107,6 +134,9 @@ def main(cfg, arch):
     if rl and rl.get("weight", 0) > 0:
         seg = {k: torch.as_tensor(v, dtype=torch.float64)
                for k, v in load_npz(stage_dir(cfg, "samples") / "segments.npz").items()}
+        if tc.get("dt_scaled_loss"):    # the rollout steps are scaled like the pairs at their dt
+            j = int(torch.argmin((bins - torch.round(torch.log10(seg["dt"][0]) * 10).long()).abs()))
+            roll_sdy, roll_sdT = sy[j], float(sT[j])
         print(f"  rollout loss: {len(seg['dt'])} segments of {seg['Y'].shape[1] - 1} steps, weight {rl['weight']}, "
               f"from epoch {int(rl.get('start_frac', 0.0) * E) + 1}")
 
@@ -128,7 +158,7 @@ def main(cfg, arch):
             loss, parts, _ = batch_losses(model, b, A, sigma_dT, w, tc["equil_threshold"], alpha)
             if seg is not None and e > rl.get("start_frac", 0.0) * E:
                 ridx = torch.randint(len(seg["dt"]), (rl["batch_size"],))
-                L_roll = rollout_loss(model, seg, ridx, sigma_dT)
+                L_roll = rollout_loss(model, seg, ridx, roll_sdT, roll_sdy)
                 loss = loss + rl["weight"] * L_roll
                 parts["roll"] = float(L_roll.detach())
             opt.zero_grad()
