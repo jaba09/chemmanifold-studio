@@ -11,7 +11,8 @@ With `rollout_loss` in the config it also writes multi-step segments for stage 7
 stride x dt_base (slices of the trajectory, or Cantera re-integration for wall-cooled ones).
 
 With a top-level dt_range the strides span it log-uniformly (chemmanifold.io.dt_strides); those above
-arclength.max_slice_stride are re-integrated with Cantera from the selected states.
+arclength.max_slice_stride, or below dt_base, are re-integrated with Cantera from the selected states
+(dt_range.per_state of them per state, at random).
 
 Equilibrium tails of stage 2 (tail_* arrays, optional) are paired the same way as wall-cooled
 states, each advanced adiabatically over every stride with Cantera; these pairs get regime 6.
@@ -34,7 +35,8 @@ def slice_strides(cfg):
     so short trajectories still give pairs at every dt."""
     st = dt_strides(cfg, "arclength")
     cap = cfg["arclength"].get("max_slice_stride", max(st))
-    return [s for s in st if s <= cap] or [min(st)], [s for s in st if s > cap]
+    sliced = [s for s in st if isinstance(s, int) and s <= cap]
+    return sliced or [1], [s for s in st if s not in sliced]
 
 
 def select_indices(Y, T, cfg, rng):
@@ -78,7 +80,7 @@ def main(cfg):
             continue
         sliced, readvanced = slice_strides(cfg)
         if readvanced:
-            cooling_pairs(gas, tr, idx, tid, cfg, out, regime=0, strides=readvanced)
+            readvance_pairs(gas, tr, idx, tid, cfg, out, readvanced, rng)
         for s in sliced:                                                   # Eq. 15
             out["Y_in"].append(tr["Y"][idx])
             out["T_in"].append(tr["T"][idx])
@@ -128,7 +130,31 @@ def rollout_segments(gas, files, cfg, rng):
     save_npz(stage_dir(cfg, "samples") / "segments.npz", **arrays)
 
 
+def readvance_pairs(gas, tr, idx, tid, cfg, out, strides, rng, regime=0):
+    """Pairs at the time steps that slicing cannot give (fractions of dt_base, or longer than
+    max_slice_stride): each selected state is advanced with Cantera over dt_range.per_state of them,
+    drawn at random, so the data covers the dt range without multiplying its size."""
+    dt_base = cfg["autoignition"]["dt_base"]
+    k = min(int(cfg.get("dt_range", {}).get("per_state", len(strides))), len(strides))
+    rows = {key: [] for key in out}
+    for i in idx:
+        for s in rng.choice(strides, size=k, replace=False):
+            gas.HPY = tr["h"][i], tr["P"][i], tr["Y"][i]
+            advance_const_p(gas, float(s) * dt_base)
+            for key, v in (("Y_in", tr["Y"][i]), ("T_in", tr["T"][i]), ("P_in", tr["P"][i]), ("h_in", tr["h"][i]),
+                           ("dt", float(s) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T), ("regime", regime),
+                           ("traj_id", tid)):
+                rows[key].append(v)
+    for key, v in rows.items():
+        if v:
+            out[key].append(np.asarray(v, dtype=np.int64 if key in ("regime", "traj_id") else float))
+
+
 def cooling_pairs(gas, tr, idx, tid, cfg, out, regime=3, strides=None):
+    if cfg.get("dt_range"):     # a few random time steps per state over the whole dt range
+        readvance_pairs(gas, tr, idx, tid, cfg, out, strides or dt_strides(cfg, "arclength"),
+                        np.random.default_rng(cfg["seed"] + tid + 1000 * regime), regime)
+        return
     dt_base = cfg["autoignition"]["dt_base"]
     for s in strides or dt_strides(cfg, "arclength"):
         Y_out, T_out = [], []

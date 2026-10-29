@@ -25,14 +25,16 @@ def dt_strides(cfg, section):
     """Chemistry time steps of the transition pairs, as integer multiples of autoignition.dt_base.
 
     With a top-level `dt_range: {min, max, n}` [s] the strides are n log-spaced steps over that range
-    (the range of time steps the CFD solver will ask for, given by the user at first), so the
-    surrogate learns Y(t + dt) in a single jump for any dt in it. Without it, `<section>.strides`."""
+    (the range of chemistry time steps the CFD solver will ask for, e.g. Fluent's tau_cell; given by the
+    user at first), so the surrogate learns Y(t + dt) in a single jump for any dt in it. Strides below
+    1 are fractions of dt_base. Without dt_range, `<section>.strides`."""
     r = cfg.get("dt_range")
     if not r:
         return list(cfg[section]["strides"])
     base = cfg["autoignition"]["dt_base"]
-    s = np.unique(np.maximum(1, np.round(np.geomspace(r["min"] / base, r["max"] / base, int(r.get("n", 8))))))
-    return [int(v) for v in s]
+    s = np.geomspace(r["min"] / base, r["max"] / base, int(r.get("n", 8)))
+    s = np.where(s >= 1, np.round(s), s)             # whole multiples of dt_base above it, fractions below
+    return [int(v) if v >= 1 else float(f"{v:.3g}") for v in np.unique(s)]
 
 
 def load_config(path):
