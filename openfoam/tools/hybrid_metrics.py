@@ -72,6 +72,7 @@ def main():
     ap.add_argument("--log", default=None)
     ap.add_argument("--out", required=True)
     ap.add_argument("--T-hot", type=float, default=600.0)
+    ap.add_argument("--T-flame", type=float, default=1600.0, help="K; the flame zone of the second |dT| column")
     a = ap.parse_args()
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -86,6 +87,10 @@ def main():
         r = dict(t_ms=t, hot_cells=int(hot.sum()), mean_abs_dT=float(dT.mean()),
                  p95_abs_dT=float(np.quantile(dT, 0.95)), max_abs_dT=float(dT.max()),
                  Tmax_DI=float(A["temperature"].max()), Tmax_run=float(B["temperature"].max()))
+        flame = (A["temperature"] > a.T_flame) | (B["temperature"] > a.T_flame)
+        dTf = (B["temperature"] - A["temperature"])[flame]
+        r.update(flame_cells=int(flame.sum()), flame_mean_abs_dT=float(np.abs(dTf).mean()),
+                 flame_mean_dT=float(dTf.mean()))
         for s in ("oh", "co"):
             ref = A[s][hot]
             m = ref > 1e-3 * ref.max()
@@ -106,11 +111,14 @@ def main():
         f.write(f"# {a.label} vs DI (celdas con T > {a.T_hot:.0f} K en alguna de las dos)\n\n")
         if overall is not None:
             f.write(f"Fracción de celdas avanzadas integradas con GA18 (global): {overall:.1%}\n\n")
-        f.write("| t [ms] | celdas | media abs dT [K] | p95 [K] | máx [K] | Tmax DI | Tmax run | err OH | err CO | GA18 |\n")
-        f.write("|---|---|---|---|---|---|---|---|---|---|\n")
+        f.write(f"Zona de llama: celdas con T > {a.T_flame:.0f} K en alguna de las dos.\n\n")
+        f.write("| t [ms] | celdas | media abs dT [K] | p95 [K] | máx [K] | celdas llama | media abs dT llama [K] | "
+                "media dT llama [K] | Tmax DI | Tmax run | err OH | err CO | GA18 |\n")
+        f.write("|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
         for r in res:
             f.write(f"| {r['t_ms']:.1f} | {r['hot_cells']} | {r['mean_abs_dT']:.1f} | {r['p95_abs_dT']:.0f} | "
-                    f"{r['max_abs_dT']:.0f} | {r['Tmax_DI']:.0f} | {r['Tmax_run']:.0f} | {r['rel_err_oh']:.0%} | "
+                    f"{r['max_abs_dT']:.0f} | {r['flame_cells']} | {r['flame_mean_abs_dT']:.1f} | {r['flame_mean_dT']:+.1f} | "
+                    f"{r['Tmax_DI']:.0f} | {r['Tmax_run']:.0f} | {r['rel_err_oh']:.0%} | "
                     f"{r['rel_err_co']:.0%} | {r.get('ga18_share', float('nan')):.1%} |\n")
     if common:
         t = common[-1]
