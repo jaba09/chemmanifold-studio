@@ -6,7 +6,10 @@ transport model: "mixture-averaged" (default) is closest to Fluent's kinetic-the
 "unity-Lewis-number" makes Z and h exact conserved scalars. `flame.radiation` lists the families to
 solve: [false] adiabatic only (default); [false, true] adds a second strain sweep with optically thin
 gas radiation (CO2, H2O, Cantera's radiation model), whose states carry the radiative heat loss of
-a real flame. Flamelets are numbered across families, adiabatic first.
+a real flame. A radiating sweep that starts below the radiative extinction limit skips the
+extinguished low strains and starts at the first burning one; `flame.radiation_mdot_fuel_min` starts
+it at a higher strain than the adiabatic sweep (thick low-strain flames radiate away most of their
+heat in an optically thin model). Flamelets are numbered across families, adiabatic first.
 
 Writes 00_flame/flamelets.npz        every flamelet grid point: Z, Y, T, h, strain index
        00_flame/burnt_reference.npz  lowest-strain flamelet resampled on a Z grid (burnt state per Z)
@@ -38,17 +41,22 @@ def solve_flamelets(gas, cfg, radiation=False):
     f.oxidizer_inlet.Y, f.oxidizer_inlet.T = c["oxidizer"], c["oxidizer_T"]
     f.set_refine_criteria(ratio=3, slope=0.08, curve=0.15, prune=0.02)
 
-    mdot = fc["mdot_fuel_min"]
+    mdot = fc.get("radiation_mdot_fuel_min", fc["mdot_fuel_min"]) if radiation else fc["mdot_fuel_min"]
     tag = "radiating " if radiation else ""
     out = []
     for i in range(fc["max_flamelets"]):
         f.fuel_inlet.mdot, f.oxidizer_inlet.mdot = mdot, mdot * ratio
         try:
-            f.solve(loglevel=0, auto=(i == 0))
+            f.solve(loglevel=0, auto=not out)
         except ct.CanteraError:
             print(f"  {tag}flamelet {i}: solver failed, stopping the strain sweep")
             break
         T_max, a = float(f.T.max()), float(f.strain_rate("max"))
+        if T_max < fc["extinction_T"] and not out:
+            # radiative extinction at the low-strain end: try the next strain from a fresh guess
+            print(f"  {tag}flamelet {i}: extinguished at strain ~{a:.1f} 1/s (low-strain limit), next strain")
+            mdot *= fc["strain_factor"]
+            continue
         if T_max < fc["extinction_T"]:
             print(f"  {tag}flamelet {i}: extinguished at strain ~{a:.0f} 1/s")
             break
