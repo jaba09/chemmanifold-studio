@@ -183,7 +183,7 @@ def _transient(job):
             if gas.T > T_min:
                 cand.append(i)
         for i in rng.permutation(cand)[:n_pts]:
-            s = int(rng.choice(strides))
+            s = float(rng.choice(strides))
             gas.HPY = hs[i], P, Ys[i]
             Y_in, T_in = gas.Y.copy(), gas.T
             try:

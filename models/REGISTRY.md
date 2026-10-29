@@ -338,6 +338,8 @@ Fluent file sha256: `80f52a0a39bdadfda3b9859094bfc962a8494b1a0cfa983fb30ec7ddfa0
 
 Config `burner_openfoam_ood1.yaml`, resnet_film, trained 2026-10-29T13:14:08+00:00, status **candidate**.
 
+- 2026-10-29: OOD loop iteration 2, OpenFOAM hybrid from the lit start, 25 ms: GA18 0.1-0.4% (2.6% in the first 2.5 ms); flame zone mean |dT| vs DI 39 (5 ms) -> 5 K (25 ms), bias -4 K; early ignition of the CH4 jet in hot lean products (+300 K at 2.5 ms, inside the sampled space); shadow DI median one-step increment error T 14%, OH 14%, CO 7%
+
 | Exploration | |
 |---|---|
 | mechanism | mechanisms/ga18.yaml |

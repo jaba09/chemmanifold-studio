@@ -4,7 +4,9 @@
   "arch": "resnet_film",
   "trained_utc": "2026-10-29T13:14:08+00:00",
   "status": "candidate",
-  "notes": [],
+  "notes": [
+    "2026-10-29: OOD loop iteration 2, OpenFOAM hybrid from the lit start, 25 ms: GA18 0.1-0.4% (2.6% in the first 2.5 ms); flame zone mean |dT| vs DI 39 (5 ms) -> 5 K (25 ms), bias -4 K; early ignition of the CH4 jet in hot lean products (+300 K at 2.5 ms, inside the sampled space); shadow DI median one-step increment error T 14%, OH 14%, CO 7%"
+  ],
   "exploration": {
     "mechanism": "mechanisms/ga18.yaml",
     "fuel": "CH4:1.0",
