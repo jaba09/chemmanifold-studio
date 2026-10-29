@@ -35,7 +35,8 @@ Usage
             oodAction    0;      // 0 = flag OOD cells only, 1 = leave them unreacted
             checkOOD     true;
             reportCalls  0;      // print counters every this many cell calls (0 = off)
-        }
+            oodFallback  false;  // true: integrate OOD cells with the ODE solver
+        }                        //  (odeCoeffs) instead of the surrogate
 
 SourceFiles
     userChemStep.C
@@ -45,7 +46,7 @@ SourceFiles
 #ifndef userChemStep_H
 #define userChemStep_H
 
-#include "chemistrySolver.H"
+#include "ode.H"
 #include "chemmanifold_core.h"
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -60,7 +61,7 @@ namespace Foam
 template<class ChemistryModel>
 class userChemStep
 :
-    public chemistrySolver<ChemistryModel>
+    public ode<ChemistryModel>
 {
     // Private data
 
@@ -79,11 +80,15 @@ class userChemStep
         //- OpenFOAM species index -> model species index
         labelList map_;
 
+        //- Integrate cells outside the training data with the ODE solver
+        bool oodFallback_;
+
         //- Print the counters every this many calls (0 = never)
         label reportCalls_;
 
         //- Counters since the last report: calls, advanced, frozen, OOD, invalid, capped
         mutable label nCalls_, nAdvanced_, nFrozen_, nOOD_, nInvalid_, nCapped_;
+        mutable label nFallback_;
         mutable scalar dtMin_, dtMax_;
 
         //- Cells per OOD check: T, T|Z, p, species, manifold, data
