@@ -269,6 +269,41 @@ def write_model_file(path, arch, model, scalers, thermo, cfg, dt_range, ood_tabl
     Path(path).write_text("\n".join(lines) + "\n")
 
 
+def read_model_arrays(path):
+    """Every A record of an exported model file as {name: array (or float if it has one value)}."""
+    arrays = {}
+    for line in Path(path).read_text().splitlines():
+        parts = line.split()
+        if len(parts) > 3 and parts[0] == "A":
+            v = np.array(parts[3:], dtype=float)
+            arrays[parts[1]] = v if v.size > 1 else v[0]
+    return arrays
+
+
+def read_ood_tables(path):
+    """The OOD tables (A records named ood.*) of an exported model file, reshaped as `ood` expects."""
+    tables = {k: v for k, v in read_model_arrays(path).items() if k.startswith("ood.")}
+    if "ood.vq_K" in tables:
+        K, d = int(tables["ood.vq_K"]), int(tables["ood.vq_d"])
+        F = tables["ood.vq_centroid"].size // K
+        tables["ood.vq_centroid"] = tables["ood.vq_centroid"].reshape(K, F)
+        tables["ood.vq_mean"] = tables["ood.vq_mean"].reshape(K, F)
+        tables["ood.vq_basis"] = tables["ood.vq_basis"].reshape(K, F, d)
+        tables["ood.vq_threshold"] = np.atleast_1d(tables["ood.vq_threshold"])
+        tables["ood.landmarks"] = tables["ood.landmarks"].reshape(-1, F)
+    return tables
+
+
+def model_file_scalers(path):
+    """(scalers, A) of an exported model file: what `ood` needs, without loading the network."""
+    a = read_model_arrays(path)
+    Ns, Ne = int(a["n_species"]), int(a["n_elements"])
+    scalers = dict(boxcox_lambda=float(a["boxcox_lambda"]), mu_y=np.atleast_1d(a["mu_y"]),
+                   sigma_y=np.atleast_1d(a["sigma_y"]), ctx_mu=np.atleast_1d(a["ctx_mu"]),
+                   ctx_sigma=np.atleast_1d(a["ctx_sigma"]))
+    return scalers, np.asarray(a["A"]).reshape(Ne, Ns)
+
+
 def write_test_vectors(path, cases, expected):
     """Plain-text cases for cm_selftest: per line dt P T Y... | T_out Y_out... flags mr dr Z n_sub hrr."""
     Ns = cases["Y"].shape[1]

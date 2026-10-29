@@ -31,29 +31,9 @@ from sklearn.neighbors import NearestNeighbors
 from chemmanifold.boxcox import boxcox
 from chemmanifold.chemistry import advance_const_p, make_gas
 from chemmanifold.fluent import (OOD_ANY, FLAG_NAMES, advance, fluent_state, formation_enthalpies, ood,
-                                 ood_features, read_fluent_ascii)
+                                 ood_features, read_fluent_ascii, read_ood_tables)
 from chemmanifold.io import base_parser, load_config, load_npz, require, stage_dir
 from chemmanifold.loading import load_surrogate
-
-
-def read_tables(path):
-    """The OOD tables (A records named ood.*) of an exported model file."""
-    tables = {}
-    for line in require(path).read_text().splitlines():
-        parts = line.split()
-        if len(parts) > 3 and parts[0] == "A" and parts[1].startswith("ood."):
-            v = np.array(parts[3:], dtype=float)
-            tables[parts[1]] = v if v.size > 1 else v[0]
-    F = None
-    if "ood.vq_K" in tables:
-        K, d = int(tables["ood.vq_K"]), int(tables["ood.vq_d"])
-        F = tables["ood.vq_centroid"].size // K
-        tables["ood.vq_centroid"] = tables["ood.vq_centroid"].reshape(K, F)
-        tables["ood.vq_mean"] = tables["ood.vq_mean"].reshape(K, F)
-        tables["ood.vq_basis"] = tables["ood.vq_basis"].reshape(K, F, d)
-        tables["ood.vq_threshold"] = np.atleast_1d(tables["ood.vq_threshold"])
-        tables["ood.landmarks"] = tables["ood.landmarks"].reshape(-1, F)
-    return tables
 
 
 def main(cfg, arch, run_path, label, dt, n_cells, T_min):
@@ -63,7 +43,7 @@ def main(cfg, arch, run_path, label, dt, n_cells, T_min):
     species = list(gas.species_names)
     P0 = cfg["chemistry"]["P_atm"] * ct.one_atm
     st = fluent_state(read_fluent_ascii(run_path), species, P0)
-    tables = read_tables(stage_dir(cfg, "fluent", arch) / "chemmanifold_model.txt")
+    tables = read_ood_tables(require(stage_dir(cfg, "fluent", arch) / "chemmanifold_model.txt"))
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
     dt_range = (float(ds["dt"].min()), float(ds["dt"].max()))
     dt = dt or dt_range[1]

@@ -139,6 +139,7 @@ streams, the envelope, and `dt_base`/`t_max`.
 | 12 | `12_export_fluent.py` | – | 5, 6, 7 | `08_fluent/<arch>/chemmanifold_model.txt`, `chemmanifold_tests.txt` |
 | 13 | `13_fluent_compare.py` (by hand) | – | two Fluent ASCII exports | `08_fluent/compare_<label>/` |
 | 14 | `14_fluent_apriori.py` (by hand) | – | a Fluent ASCII export, 5, 7, 12 | `08_fluent/apriori_<label>_<arch>/` |
+| 16 | `16_coverage_gaps.py` (by hand, flame mode) | – | Fluent ASCII exports, 0, 12 | `08_fluent/gaps_<label>/` (incl. `proposed_exploration.yaml`) |
 
 Transition-pair files share one layout: `Y_in, T_in, P_in, h_in, dt, Y_out, T_out, regime, traj_id`
 (regime 0 = 0D reactor, 1 = PaSR micromixing, 2 = flamelet states in flame mode).

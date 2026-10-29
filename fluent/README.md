@@ -19,6 +19,7 @@ fluent/
 scripts/12_export_fluent.py    trained model -> chemmanifold_model.txt + chemmanifold_tests.txt
 scripts/13_fluent_compare.py   surrogate Fluent run vs reference Fluent run (direct GA18)
 scripts/14_fluent_apriori.py   per-cell Cantera check of a Fluent solution + coverage maps
+scripts/16_coverage_gaps.py    where a Fluent solution leaves the sampled space -> exploration proposals
 ```
 
 **Use ResNet-FiLM.** Phy-ChemNODE is supported in the same way, but it is not stable on this flame yet.
@@ -233,8 +234,40 @@ How to read it:
   Common places are the flame base near the burner rim, cooled states near the walls, and the rich
   core. Compare the error maps of stage 13 with these regions.
 * A region that keeps growing during the iterations is the warning sign.
-* To cover such states, retrain with more seeds there. Useful knobs are `envelope.z_knots`/`u_knots`,
-  `heat_loss_max`, and `pasr.dh_range`.
+* To cover such states, change the exploration (not the training data) and retrain. Useful knobs are
+  `envelope.z_knots`/`u_knots`, `heat_loss_max` or `psi_max`, `pasr.dh_range` or
+  `pasr.loss_fraction_range`, and the flamelet strain range. Stage 16 tells you which ones.
+
+### Mapping the gaps to exploration settings (stage 16)
+
+The UDF does not save the states of the OOD cells: the UDMs hold the last step only, and the CSV log
+holds counts. To plan a new exploration, save the solution at a few times during the run (3–4 `.dat`
+files are enough in a transient) and export each with *File > Export > Solution Data…* (ASCII, Cell
+Center, comma). Include *Temperature*, *Absolute Pressure*, the 18 mass fractions, the *X* and *Y
+Coordinates*, and *Strain Rate* (under *Velocity*). *User Defined Memory 1* is optional; with it the
+script also checks that its offline flags agree with the UDF's. Then:
+
+```bash
+python scripts/16_coverage_gaps.py --run t1.csv t2.csv t3.csv --label surr \
+    --model chemmanifold_model.txt --ini chemmanifold.ini
+```
+
+It recomputes the six checks for every cell at T ≥ 600 K and places each cell in the coordinates the
+exploration is set with: Z, the heat-loss fraction psi (0 = adiabatic mixing at Z, 1 = cooled to
+`T_wall`; negative = more enthalpy than adiabatic mixing, from differential diffusion), the progress
+c relative to the lowest-strain flamelet, and the strain rate against the stage-0 flamelets. It writes
+`data/08_fluent/gaps_<label>/`:
+* `gaps.json`: OOD share per snapshot and per check, the species that leave their sampled range, and
+  the largest gaps as (Z band, psi band) cells;
+* `gaps.png`: T–Z and psi–Z maps with the sampled bounds, OOD share per `z_knots` band, species out of
+  range, strain histogram vs the flamelet range, and the OOD cells in the burner;
+* `gaps_cells.csv`: every hot cell with its flags and coordinates;
+* `proposed_exploration.yaml`: suggested config values (seed shares per Z band, `psi_max` or
+  `heat_loss_max`, `flame.mdot_fuel_min`), each with the reason. Nothing is applied automatically.
+
+The CFD solution is only a diagnostic here. It tells you where to explore, and the new states still
+come from Cantera through stages 0–4. Fluent's strain rate |S| is not the counterflow strain that
+stage 0 reports, so read that comparison as an order of magnitude.
 
 ## 6. How good is the surrogate in Fluent?
 

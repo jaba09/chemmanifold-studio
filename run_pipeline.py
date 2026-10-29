@@ -1,7 +1,8 @@
 """Run the full ChemManifold pipeline. Each stage is a separate process that reads its inputs from
 and writes its outputs to `data_dir`, so any stage can be re-run on its own. Stages 0 (flame
 reference) and 11 (flame coverage) run only for `envelope.mode: flame`. Stage 12 exports the
-models for the Fluent UDF; stages 13-14 (Fluent comparisons) need Fluent exports and run by hand;
+models for the Fluent UDF; stages 13-14 (Fluent comparisons) and 16 (coverage gaps of a Fluent
+solution) need Fluent exports and run by hand;
 stage 15 records each trained model in the registry (models/REGISTRY.md).
 
     python run_pipeline.py                       # everything, both architectures
