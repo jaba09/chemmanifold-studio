@@ -10,6 +10,9 @@ With `rollout_loss` in the config it also writes multi-step segments for stage 7
 `segments_per_traj` random starts per trajectory, each followed for `steps` adiabatic steps of
 stride x dt_base (slices of the trajectory, or Cantera re-integration for wall-cooled ones).
 
+With a top-level dt_range the strides span it log-uniformly (chemmanifold.io.dt_strides); those above
+arclength.max_slice_stride are re-integrated with Cantera from the selected states.
+
 Equilibrium tails of stage 2 (tail_* arrays, optional) are paired the same way as wall-cooled
 states, each advanced adiabatically over every stride with Cantera; these pairs get regime 6.
 
@@ -22,12 +25,21 @@ import numpy as np
 
 from chemmanifold.boxcox import boxcox
 from chemmanifold.chemistry import advance_const_p, make_gas
-from chemmanifold.io import base_parser, load_config, load_npz, save_npz, stage_dir
+from chemmanifold.io import base_parser, dt_strides, load_config, load_npz, save_npz, stage_dir
+
+
+def slice_strides(cfg):
+    """(strides paired by slicing the trajectory, strides re-integrated with Cantera). With a wide
+    dt_range, steps above arclength.max_slice_stride are advanced from the selected states instead,
+    so short trajectories still give pairs at every dt."""
+    st = dt_strides(cfg, "arclength")
+    cap = cfg["arclength"].get("max_slice_stride", max(st))
+    return [s for s in st if s <= cap] or [min(st)], [s for s in st if s > cap]
 
 
 def select_indices(Y, T, cfg, rng):
     a = cfg["arclength"]
-    s_max = max(a["strides"])
+    s_max = max(slice_strides(cfg)[0])
     L = len(T)
     n_avail = L - s_max                        # admissible n in {0, ..., L - s_max - 1}
     T_lo, T_hi = T.min(), T.max()
@@ -64,7 +76,10 @@ def main(cfg):
         if float(tr.get("tau_q", 0.0)) > 0:
             cooling_pairs(gas, tr, idx, tid, cfg, out)
             continue
-        for s in cfg["arclength"]["strides"]:                              # Eq. 15
+        sliced, readvanced = slice_strides(cfg)
+        if readvanced:
+            cooling_pairs(gas, tr, idx, tid, cfg, out, regime=0, strides=readvanced)
+        for s in sliced:                                                   # Eq. 15
             out["Y_in"].append(tr["Y"][idx])
             out["T_in"].append(tr["T"][idx])
             out["P_in"].append(tr["P"][idx])
@@ -113,9 +128,9 @@ def rollout_segments(gas, files, cfg, rng):
     save_npz(stage_dir(cfg, "samples") / "segments.npz", **arrays)
 
 
-def cooling_pairs(gas, tr, idx, tid, cfg, out, regime=3):
+def cooling_pairs(gas, tr, idx, tid, cfg, out, regime=3, strides=None):
     dt_base = cfg["autoignition"]["dt_base"]
-    for s in cfg["arclength"]["strides"]:
+    for s in strides or dt_strides(cfg, "arclength"):
         Y_out, T_out = [], []
         for i in idx:
             gas.HPY = tr["h"][i], tr["P"][i], tr["Y"][i]

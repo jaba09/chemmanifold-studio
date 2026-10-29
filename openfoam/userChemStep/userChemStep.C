@@ -26,7 +26,8 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     shadowEvery_(coeffsDict_.getOrDefault<label>("shadowEvery", 0)),
     shadowPerBin_(coeffsDict_.getOrDefault<label>("shadowPerBin", 2)),
     shadowIndex_(-1),
-    shadowCount_()
+    shadowCount_(),
+    dtHist_(2*80, 0)
 {
     for (label b=0; b<6; b++) nFlag_[b] = 0;
     cm_default_options(&options_);
@@ -122,6 +123,7 @@ Foam::userChemStep<ChemistryModel>::userChemStep
 template<class ChemistryModel>
 Foam::userChemStep<ChemistryModel>::~userChemStep()
 {
+    writeDtHistogram();
     if (model_)
     {
         cm_free(model_);
@@ -186,8 +188,25 @@ void Foam::userChemStep<ChemistryModel>::chemStep
 
 
 template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::writeDtHistogram() const
+{
+    label total = 0;
+    forAll(dtHist_, i) total += dtHist_[i];
+    if (total == 0) return;
+    OFstream f(this->mesh().time().path()/"dtHistogram.csv");
+    f << "log10_dt_lo,log10_dt_hi,cells_below_T_freeze,cells_above_T_freeze" << nl;
+    for (label b=0; b<80; b++)
+    {
+        f << -8 + 0.1*b << ',' << -8 + 0.1*(b + 1) << ',' << dtHist_[b] << ','
+          << dtHist_[80 + b] << nl;
+    }
+}
+
+
+template<class ChemistryModel>
 void Foam::userChemStep<ChemistryModel>::report() const
 {
+    writeDtHistogram();
     // Per processor: chemistry runs cell by cell, so no reduction here
     Pout<< "userChemStep: " << nCalls_ << " calls, " << nAdvanced_
         << " advanced, " << nFrozen_ << " frozen, OOD " << nOOD_
@@ -317,6 +336,11 @@ void Foam::userChemStep<ChemistryModel>::solve
     for (label i=0; i<nSpecie; i++)
     {
         Y_[i] = c[i]*thermos[i].W()/rho;
+    }
+
+    {
+        const label b = std::min(79, std::max(0, int(floor((log10(max(deltaT, 1e-30)) + 8.0)/0.1))));
+        dtHist_[(T >= options_.T_freeze ? 80 : 0) + b]++;
     }
 
     // Shadow DI check (comparison only; the cell's update below is unchanged)

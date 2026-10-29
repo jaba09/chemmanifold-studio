@@ -105,6 +105,14 @@ class userChemStep
         mutable labelList shadowCount_;
         mutable autoPtr<OFstream> shadowFile_;
 
+        //- Histogram of the chemistry time steps (counts only, no values):
+        //  log10(dt) bins of 0.1 from 1e-8 s to 1 s, for cells below and
+        //  above T_freeze; rewritten to dtHistogram.csv at each report
+        mutable List<label> dtHist_;
+
+        //- Write dtHistogram.csv
+        void writeDtHistogram() const;
+
         //- Run the shadow check on this cell if its bin still has room
         void shadow
         (

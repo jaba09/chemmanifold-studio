@@ -114,6 +114,17 @@ from the same state; T, p, Z, the OOD flags and ratios, the input Y and both out
 checks over the thermochemical space rather than over the (mostly cold) cells.
 `tools/shadow_report.py <run> <out>` summarizes them per Z band, T band and time.
 
+**Chemistry time-step histogram.** Fluent's stiff laminar finite-rate chemistry advances each cell over
+tau_cell = 0.1 min(t_convection, t_diffusion); OpenFOAM calls the chemistry with the flow time step.
+The function object in `tauCellHistogram/` (build with its `Allwmake`, then `#include
+"tauCellHistogram"` in `functions`, see `quemadorUnico/system/tauCellHistogram`) computes the
+equivalent tau_cell per cell (t_conv = dx/|U|, t_diff = dx^2 (alpha + alphat)/rho, dx the in-plane
+cell size of the wedge) and keeps only a histogram of log10(tau_cell) and of the dt the chemistry
+got, for cold and hot cells, in `postProcessing/tauCellHistogram/histogram.csv`. It sets the
+`dt_range` of the next exploration (`chemmanifold.io.dt_strides`), so the surrogate learns
+Y(t + dt) in one jump over the time steps the solver asks for. userChemStep also writes the
+histogram of the dt it was called with (`dtHistogram.csv`, per processor).
+
 The surrogate is trained on dt = 10-40 us, so run it transient (`ddt Euler`, `deltaT 4e-5`), not
 with local time stepping, whose chemistry dt reaches 10 ms.
 

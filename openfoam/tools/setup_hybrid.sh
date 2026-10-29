@@ -12,6 +12,10 @@ cp "$MODEL/chemmanifold_model.txt" "$RUN/"
 [ -f "$MODEL/chemmanifold_tests.txt" ] && cp "$MODEL/chemmanifold_tests.txt" "$RUN/"
 cd "$RUN"
 grep -q userChemStep system/controlDict || sed -i 's/^application .*/&\n\nlibs                (userChemStep);/' system/controlDict
+# histogram of tau_cell = 0.1 min(t_conv, t_diff) (Fluent's chemistry step), counts only
+[ -f system/tauCellHistogram ] || cp "$(dirname "$0")/../quemadorUnico/system/tauCellHistogram" system/
+grep -q '#include "tauCellHistogram"' system/controlDict || \
+    sed -i '0,/^functions/{/^functions/{n;s/^{/{\n    #include "tauCellHistogram"/}}' system/controlDict
 foamDictionary -entry chemistryType/solver -set userChemStep constant/chemistryProperties > /dev/null
 TESTS=""
 [ -f chemmanifold_tests.txt ] && TESTS='tests "chemmanifold_tests.txt";'

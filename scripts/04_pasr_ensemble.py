@@ -34,7 +34,7 @@ import pandas as pd
 from chemmanifold.chemistry import advance_const_p, make_gas, set_unburnt
 from chemmanifold.flame import (FlameSeeds, case_label, flame_pressure, heat_loss, is_flame, wall_temperature,
                                z_from_unit)
-from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir
+from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
 from chemmanifold.unsteady_flamelet import ZFlamelet, chi_profile, run_transient, z_grid
 
 
@@ -66,7 +66,7 @@ def main(cfg):
             dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
             if p.get("dh_scale_by_alpha", False):
                 dh = dh * alpha
-        strides = rng.choice(p["strides"], size=p["n_particles"])
+        strides = rng.choice(dt_strides(cfg, "pasr"), size=p["n_particles"])
         for i, (a, d, s) in enumerate(zip(alpha, dh, strides)):
             Y_mix = (1 - a) * Y_fresh + a * Y_burnt                        # Eq. 16
             h_mix = (1 - a) * h_fresh + a * h_burnt
@@ -108,7 +108,7 @@ def flamelet_pairs(gas, cfg, seeds, rng):
     out = {k: [] for k in ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")}
     for j in seeds.train_ids:
         for Y, h in zip(*seeds.raw[j]):
-            s = rng.choice(p["strides"])
+            s = rng.choice(dt_strides(cfg, "pasr"))
             gas.HPY = h, seeds.P, Y
             Y_in, T_in = gas.Y.copy(), gas.T
             advance_const_p(gas, s * dt_base)
@@ -138,7 +138,7 @@ def recirculation_pairs(gas, cfg, seeds, rng):
         beta = rng.beta(rc.get("beta_a", 0.7), rc.get("beta_b", 0.7), size=rc["n_particles"])
         aged = rng.uniform(size=rc["n_particles"]) < rc.get("f_aged", 0.5)
         ages = 10.0 ** rng.uniform(lo, hi, size=rc["n_particles"])
-        strides = rng.choice(p["strides"], size=rc["n_particles"])
+        strides = rng.choice(dt_strides(cfg, "pasr"), size=rc["n_particles"])
         for b, a, age, s in zip(beta, aged, ages, strides):
             try:
                 gas.HPY = b * h_p + (1 - b) * h_s, seeds.P, b * Y_p + (1 - b) * Y_s
@@ -166,7 +166,7 @@ PAIR_KEYS = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "
 def _transient(job):
     """Worker: run one unsteady-flamelet transient and pair a subsample of its snapshot states."""
     cfg, j = job["cfg"], job
-    uf, dt_base, strides = cfg["unsteady_flamelets"], cfg["autoignition"]["dt_base"], cfg["pasr"]["strides"]
+    uf, dt_base, strides = cfg["unsteady_flamelets"], cfg["autoignition"]["dt_base"], dt_strides(cfg, "pasr")
     gas = make_gas(cfg)
     rng = np.random.default_rng(j["seed"])
     P, T_wall = flame_pressure(cfg), wall_temperature(cfg)
