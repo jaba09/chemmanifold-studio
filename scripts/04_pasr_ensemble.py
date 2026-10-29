@@ -21,15 +21,21 @@ flame mode:    fresh = stream mixture at Z (cold mixing line), burnt = the state
 
 Reads  01_envelope/initial_conditions.csv (regime 1 rows).
 Writes 03_samples/pairs_pasr.npz with the same layout as pairs_0d.npz (regime = 1),
-       03_samples/pairs_recirc.npz (regime 4, with pasr.recirculation).
+       03_samples/pairs_recirc.npz (regime 4, with pasr.recirculation),
+       03_samples/pairs_unsteady.npz (regime 5, with unsteady_flamelets) and
+       03_samples/unsteady_flamelets.json (one line per transient: kind, strain, tau_q, T_max path).
 """
+
+from multiprocessing import Pool
 
 import numpy as np
 import pandas as pd
 
 from chemmanifold.chemistry import advance_const_p, make_gas, set_unburnt
-from chemmanifold.flame import FlameSeeds, case_label, heat_loss, is_flame, wall_temperature, z_from_unit
-from chemmanifold.io import base_parser, load_config, require, save_npz, stage_dir
+from chemmanifold.flame import (FlameSeeds, case_label, flame_pressure, heat_loss, is_flame, wall_temperature,
+                               z_from_unit)
+from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir
+from chemmanifold.unsteady_flamelet import ZFlamelet, chi_profile, run_transient, z_grid
 
 
 def main(cfg):
@@ -93,6 +99,8 @@ def main(cfg):
         flamelet_pairs(gas, cfg, seeds, rng)
         if p.get("recirculation"):
             recirculation_pairs(gas, cfg, seeds, rng)
+        if cfg.get("unsteady_flamelets"):
+            unsteady_pairs(cfg, seeds, rng)
 
 
 def flamelet_pairs(gas, cfg, seeds, rng):
@@ -150,6 +158,113 @@ def recirculation_pairs(gas, cfg, seeds, rng):
     arrays = {k: np.asarray(v) for k, v in out.items()}
     print(f"  {len(arrays['dt'])} recirculation pairs ({n_fail} rejected states)")
     save_npz(stage_dir(cfg, "samples") / "pairs_recirc.npz", **arrays)
+
+
+PAIR_KEYS = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")
+
+
+def _transient(job):
+    """Worker: run one unsteady-flamelet transient and pair a subsample of its snapshot states."""
+    cfg, j = job["cfg"], job
+    uf, dt_base, strides = cfg["unsteady_flamelets"], cfg["autoignition"]["dt_base"], cfg["pasr"]["strides"]
+    gas = make_gas(cfg)
+    rng = np.random.default_rng(j["seed"])
+    P, T_wall = flame_pressure(cfg), wall_temperature(cfg)
+    fl = ZFlamelet(gas, j["Z"], j["Y0"], j["h0"], P, T_wall)
+    snaps, Tmax = run_transient(gas, fl, j["kind"], j["a"], j["t_end"], j["tau_q"],
+                                tuple(uf.get("dt_bounds", [1e-5, 1e-3])), uf.get("n_snapshots", 30),
+                                uf.get("max_steps", 2000))
+    out = {k: [] for k in PAIR_KEYS}
+    n_pts, T_min = uf.get("points_per_snapshot", 25), uf.get("T_min_pair", 350.0)
+    for _, Ys, hs in snaps:
+        cand = []
+        for i in range(1, len(fl.Z) - 1):
+            gas.HPY = hs[i], P, Ys[i]
+            if gas.T > T_min:
+                cand.append(i)
+        for i in rng.permutation(cand)[:n_pts]:
+            s = int(rng.choice(strides))
+            gas.HPY = hs[i], P, Ys[i]
+            Y_in, T_in = gas.Y.copy(), gas.T
+            try:
+                advance_const_p(gas, s * dt_base)
+            except Exception:
+                continue
+            for k, v in (("Y_in", Y_in), ("T_in", T_in), ("P_in", P), ("h_in", hs[i]), ("dt", s * dt_base),
+                         ("Y_out", gas.Y.copy()), ("T_out", gas.T), ("regime", 5), ("traj_id", j["id"])):
+                out[k].append(v)
+    return dict(pairs=out, Tmax=Tmax, t=[t for t, _, _ in snaps], snaps=snaps if j["kind"] == "extinction" else [])
+
+
+def unsteady_pairs(cfg, seeds, rng):
+    uf = cfg["unsteady_flamelets"]
+    ref = load_json(stage_dir(cfg, "flame") / "flame_reference.json")
+    strains = np.asarray(ref["strain_rates"])
+    a_ext = float(strains.max())                       # highest burning strain of the sweep
+    Z = z_grid(uf.get("n_z", 61), ref["Z_st"])
+    t_chi, t_max = uf.get("t_end_chi", 3.0), uf.get("t_max", 0.2)
+    chi_st = lambda a: float(chi_profile(np.array([ref["Z_st"]]), a)[0])
+    train = np.asarray(seeds.train_ids)
+
+    def start(jf):
+        Zg, Yg, hg = seeds.flamelets[int(jf)]
+        Y = np.column_stack([np.interp(Z, Zg, Yg[:, k]) for k in range(Yg.shape[1])])
+        return Y / Y.sum(1, keepdims=True), np.interp(Z, Zg, hg)
+
+    def job(kind, jf, a, tau_q=0.0, Y0=None, h0=None):
+        if Y0 is None:
+            Y0, h0 = start(jf)
+        t_end = 3.0 * tau_q if kind == "cooling" else t_chi / max(chi_st(a), 1e-9)
+        return dict(cfg=cfg, kind=kind, flamelet=int(jf), a=float(a), tau_q=float(tau_q), Z=Z, Y0=Y0, h0=h0,
+                    t_end=min(t_end, t_max), seed=int(rng.integers(2**31)))
+
+    def logu(lo, hi):
+        return float(10 ** rng.uniform(np.log10(lo), np.log10(hi)))
+
+    upper = train[strains[train] >= np.median(strains[train])]
+    jobs = []
+    for _ in range(uf.get("extinction", {}).get("n", 0)):
+        jobs.append(job("extinction", rng.choice(upper), a_ext * rng.uniform(*uf["extinction"].get("factor", [1.3, 4.0]))))
+    for _ in range(uf.get("cooling", {}).get("n", 0)):
+        jf = rng.choice(train)
+        jobs.append(job("cooling", jf, strains[jf], logu(*uf["cooling"].get("tau_q_range", [1e-3, 0.1]))))
+    for _ in range(uf.get("strain_jump", {}).get("n", 0)):
+        jf = rng.choice(train)
+        a = min(strains[jf] * logu(*uf["strain_jump"].get("factor", [0.1, 10.0])), a_ext)
+        jobs.append(job("strain_jump", jf, a))
+    for i, jb in enumerate(jobs):
+        jb["id"] = i
+    workers = int(uf.get("workers", 4))
+    with Pool(workers) as pool:
+        res = pool.map(_transient, jobs, chunksize=1)
+
+    # reignition: partially extinguished snapshots (T_max in reignition.T_range) relaxed at low strain
+    rj = uf.get("reignition", {})
+    pool_snaps = [s for r in res for s, T in zip(r["snaps"], r["Tmax"]) if rj and rj.get("T_range", [1100, 1700])[0]
+                  <= T <= rj.get("T_range", [1100, 1700])[1]]
+    jobs2 = []
+    for _ in range(rj.get("n", 0) if pool_snaps else 0):
+        _, Y0, h0 = pool_snaps[int(rng.integers(len(pool_snaps)))]
+        jobs2.append(job("reignition", -1, a_ext * logu(*rj.get("strain_factor", [0.01, 0.3])), Y0=Y0, h0=h0))
+    for i, jb in enumerate(jobs2):
+        jb["id"] = len(jobs) + i
+    if jobs2:
+        with Pool(workers) as pool:
+            res += pool.map(_transient, jobs2, chunksize=1)
+    jobs += jobs2
+
+    arrays = {k: np.asarray([v for r in res for v in r["pairs"][k]]) for k in PAIR_KEYS}
+    log = []
+    for jb, r in zip(jobs, res):
+        log.append(dict(id=jb["id"], kind=jb["kind"], flamelet=jb["flamelet"], strain=jb["a"], tau_q=jb["tau_q"],
+                        t_end=r["t"][-1] if r["t"] else 0.0, T_max=r["Tmax"], n_pairs=len(r["pairs"]["dt"])))
+        print(f"  unsteady {jb['id']:03d} {jb['kind']:<11s} a={jb['a']:8.1f} 1/s tau_q={jb['tau_q']:.2g}s "
+              f"T_max {r['Tmax'][0] if r['Tmax'] else 0:.0f}->{r['Tmax'][-1] if r['Tmax'] else 0:.0f} K "
+              f"pairs={len(r['pairs']['dt'])}")
+    print(f"  {len(arrays['dt'])} unsteady-flamelet pairs from {len(jobs)} transients "
+          f"(highest burning strain {a_ext:.0f} 1/s, {len(Z)} Z points)")
+    save_npz(stage_dir(cfg, "samples") / "pairs_unsteady.npz", **arrays)
+    save_json(stage_dir(cfg, "samples") / "unsteady_flamelets.json", log)
 
 
 if __name__ == "__main__":

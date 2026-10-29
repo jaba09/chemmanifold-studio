@@ -57,6 +57,7 @@ certification cases) live in one YAML file. These setups are included:
 | [`configs/burner_fluent_air.yaml`](configs/burner_fluent_air.yaml) | the same flame with the air exactly as the Fluent case defines it (X_O2 = 0.21, i.e. Y_O2 = 0.233) | GA18 | as above, Z_st = 0.055 (adiabatic exploration; superseded for Fluent) |
 | [`configs/burner_fluent_nonadiabatic.yaml`](configs/burner_fluent_nonadiabatic.yaml) | the same flame and air, explored **non-adiabatically**: losses from adiabatic down to wall-cooled (300 K), reactors that cool while reacting, radiating flamelets, plus a multi-step rollout loss | GA18 | 1 atm, Z 0–1, any enthalpy between the adiabatic mixing line and the wall-cooled composition |
 | [`configs/burner_fluent_recirc.yaml`](configs/burner_fluent_recirc.yaml) | the non-adiabatic setup **plus recirculation**: burnt products (hot or wall-cooled) mixed across mixture fractions into the pure CH4 and air inlet streams, and the reaction that follows | GA18 | as above, plus the states between any burnt state and either inlet stream |
+| [`configs/burner_fluent_strain.yaml`](configs/burner_fluent_strain.yaml) | the recirculation setup **plus strain rate**: flamelets from 0.6 1/s to extinction (adiabatic and radiating) and unsteady flamelets in Z space (extinction, reignition, cooling, strain jumps), more lean/rich seeds | GA18 | as above, plus the states a strain-rate field drives the flame through |
 | [`configs/h2_air_premixed.yaml`](configs/h2_air_premixed.yaml) | premixed H2/air autoignition (the spec's original setup) | Cantera `h2o2.yaml`, 10 species | phi 0.5–2.0, T0 1050–1300 K, 1–5 atm |
 | [`configs/ch4_gri30.yaml`](configs/ch4_gri30.yaml) (experimental) | premixed CH4/air autoignition | GRI-Mech 3.0 (`gri30.yaml`), 53 species | phi 0.6–1.6, T0 1400–1700 K, 1–5 atm |
 
@@ -140,9 +141,11 @@ streams, the envelope, and `dt_base`/`t_max`.
 | 13 | `13_fluent_compare.py` (by hand) | – | two Fluent ASCII exports | `08_fluent/compare_<label>/` |
 | 14 | `14_fluent_apriori.py` (by hand) | – | a Fluent ASCII export, 5, 7, 12 | `08_fluent/apriori_<label>_<arch>/` |
 | 16 | `16_coverage_gaps.py` (by hand, flame mode) | – | Fluent ASCII exports, 0, 12 | `08_fluent/gaps_<label>/` (incl. `proposed_exploration.yaml`) |
+| 17 | `17_di_local_stability.py` (by hand) | – | an OpenFOAM time dir or Fluent ASCII export, model files from 12 | `08_fluent/stability_<label>/` |
 
 Transition-pair files share one layout: `Y_in, T_in, P_in, h_in, dt, Y_out, T_out, regime, traj_id`
-(regime 0 = 0D reactor, 1 = PaSR micromixing, 2 = flamelet states in flame mode).
+(regime 0 = 0D reactor, 1 = PaSR micromixing, 2 = flamelet states in flame mode, 3 = wall-cooled 0D,
+4 = recirculation, 5 = unsteady flamelets).
 
 ## Package layout
 
