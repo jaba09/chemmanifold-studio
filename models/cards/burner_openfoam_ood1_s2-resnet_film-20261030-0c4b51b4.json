@@ -1,0 +1,120 @@
+{
+  "id": "burner_openfoam_ood1_s2-resnet_film-20261030-0c4b51b4",
+  "config": "burner_openfoam_ood1_s2.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-30T13:57:01+00:00",
+  "status": "candidate",
+  "notes": [],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "24 ensembles x 300",
+    "strain_range": "flamelets 0.004 kg/m2/s x 1.5^k, up to 26",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 139907,
+    "n_val": 19078,
+    "pairs_by_regime": {
+      "reactor_0D": 79311,
+      "PaSR": 22400,
+      "flamelet_states": 10642,
+      "wall_cooled_0D": 19143,
+      "recirculation": 7200,
+      "unsteady_flamelets": 14529,
+      "equilibrium_tail_0D": 5760
+    },
+    "T_range_K": [
+      299.9999999996482,
+      2203.43113157936
+    ],
+    "flamelets": {
+      "n": 40,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1338.0939793199793,
+        2205.563114607663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 291,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 13800.5,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 1,
+    "torch": "2.15.0+cu132",
+    "machine": "Linux x86_64",
+    "git_commit": "8223f4b"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9950905967692999,
+      "T_mae_K": 0.030539843154651553,
+      "T_max_err_K": 24.571328246159283,
+      "elemental_residual_max": 5.389552893922898e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 27.027027027027025,
+      "T_final_ml_K": 2202.9199112437936,
+      "T_final_cantera_K": 2198.362433182397
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 18.814872076293394,
+      "max_abs_tau_err_pct": 27.027027027027025,
+      "mean_T_mae_manifold_K": 26.5452427963654,
+      "max_T_mae_manifold_K": 128.90253005719765,
+      "mean_nrmse_Y_pct": 0.4142628522256626,
+      "max_nrmse_Y_pct": 0.9001544037428512,
+      "cooled_mean_T_mae_K": 5.241831398873345,
+      "cooled_max_T_mae_K": 14.701721468828321,
+      "cooled_mean_nrmse_Y_pct": 0.3151829382336222,
+      "mixing_mean_T_mae_K": 89.62782000088977,
+      "mixing_max_T_mae_K": 529.9495922712069,
+      "mixing_mean_nrmse_Y_pct": 2.3212849032700675
+    },
+    "export": {
+      "ood_flagged_validation": 0.0026732361882796938,
+      "T_range_K": [
+        299.99999999976893,
+        2204.0125623963886
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "0c4b51b47e1a47f487f1ac5760dfce0c65d2a9e2dadcf89d6abfeaa8293f93bd",
+    "data_dir": "s2",
+    "fluent_model_sha256": "aa505a7c800bdf57643be82adcecb7c90247629099420da769deeefdc14ccae5"
+  }
+}
