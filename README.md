@@ -142,6 +142,8 @@ streams, the envelope, and `dt_base`/`t_max`.
 | 14 | `14_fluent_apriori.py` (by hand) | – | a Fluent ASCII export, 5, 7, 12 | `08_fluent/apriori_<label>_<arch>/` |
 | 16 | `16_coverage_gaps.py` (by hand, flame mode) | – | Fluent ASCII exports, 0, 12 | `08_fluent/gaps_<label>/` (incl. `proposed_exploration.yaml`) |
 | 17 | `17_di_local_stability.py` (by hand) | – | an OpenFOAM time dir or Fluent ASCII export, model files from 12 | `08_fluent/stability_<label>/` |
+| 18 | `18_offline_benchmark.py` (by hand) | – | model files from 12 (any number, with seeds); optional CFD results table to rank against | `07_eval/benchmark_<label>/` or `--out` |
+| – | `train_seeds.py` (by hand) | – | a config whose stages 0-6 are done | `<data_dir>_seeds/s<k>/`, exports copied to `--dest/<name>/seed<k>/` |
 
 Transition-pair files share one layout: `Y_in, T_in, P_in, h_in, dt, Y_out, T_out, regime, traj_id`
 (regime 0 = 0D reactor, 1 = PaSR micromixing, 2 = flamelet states in flame mode, 3 = wall-cooled 0D,

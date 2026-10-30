@@ -1,0 +1,39 @@
+# Fixed CFD evaluation protocol of the burner (PROTOCOL.md). Change it only with a new version
+# number: reports made with different versions are not comparable.
+version: 1
+
+case:
+  base: "lit start, setFieldsDict lean phi 0.5 burnt gas at 1480 K in fff-fluid-fuel + fff-fluid-mixing"
+  solver: "rhoReactingBuoyantFoam (openfoam.com v2412), Euler, dt 2e-5 s, PIMPLE 1 outer / 2 correctors"
+  ranks: 2                      # cost (s per step) is only comparable at the same number of ranks
+  t_end_ms: 100
+  writes: {start_up_every_ms: 0.5, until_ms: 5, then_every_ms: 2.5}
+  userChemStep: {T_freeze: 600, maxSubsteps: 50, checkOOD: true, shadowEvery: 50, shadowPerBin: 2}
+  modes:
+    hybrid: oodFallback true    # GA18 in the cells flagged outside the training data
+    pure: oodFallback false     # surrogate everywhere (Fluent has no hybrid mode)
+
+t_min_valid_ms: 50              # a run that stops earlier gets no valid score
+phases:                         # (t0, t1] in ms
+  arranque: [0, 5]              # start-up and ignition of the jet in the initial burnt gas
+  transicion: [5, 22.5]         # reported, not scored
+  llama: [22.5, 100]            # established flame (snapshots 25 ... 100 ms)
+drift_window_ms: [25, 100]      # linear fit of the flame |dT| against time
+final_window_ms: [90, 100]
+
+T_hot: 600                      # K; cells hotter than this in DI or the run (= T_freeze)
+T_flame: 1600                   # K; flame cells
+T_ignition: 1600                # K; ignition time = first step with domain Tmax above this
+zones:                          # state zones, classified on the DI state; only non-flame hot cells
+  reactiva: {Z: [0.03, 0.3]}    # mixing / reacting layer around the flame
+  quemado_pobre: {Z: [0, 0.03]} # lean burnt gas: the initial gas and its diluted, cooled products
+  rica: {Z: [0.3, 1.01]}        # fuel-rich jet side
+  boquilla: {x_max: 0.03, r_max: 0.015}   # m; box at the fuel nozzle where the flame starts
+species: [oh, co, ch4, h]       # volume-weighted L1 relative error and total-amount ratio
+flame_shape: {T_iso: 1500, r_axis: 0.002}   # K, m; volume above T_iso, flame base and tip on the axis
+
+advisory_targets:               # for reading the reports, not a pass/fail rule
+  absdT_llama_K: 10
+  deriva_K_por_10ms: 1
+  d_t_ign_ms: 0.25
+  L1_oh: 0.5
