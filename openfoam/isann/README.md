@@ -86,3 +86,14 @@ data directory (03_samples for the replay, 04_prep for the scalers, 06_models fo
 The daemon trains on 2 threads, so a 4-core machine runs 2 CFD ranks next to it. Touch
 `<run dir>/isann/STOP` to stop the daemon. After a restart of the run, each rank loads the model
 named in the control file again at its first step.
+
+## First run (2026-10-30)
+
+Burner, lit start, 0-50 ms, parent ood7. DI phase to 11.2 ms (the grid had not saturated, so
+the first training was forced at 8 ms; that round was rejected by the rollout gate and the next one
+accepted), then six accepted networks (v1 at 11.2 ms ... v6 at 36.2 ms) out of 12 rounds. Flame
+(T > 1600 K) mean |T - T_DI| 2.0-3.4 K from 25 to 50 ms, against 3.5-5.7 K for the ood1 hybrid and
+~10 K for the ood7 hybrid; OH error 33-90 % against ~300 % for ood1. GA18 share 0.14-0.5 % of the
+hot cells with the network. 7.9 s/step in the DI phase, 4.2 s/step with the network (2 ranks).
+The network is adapted to this flame: it is not an a priori model. Full report (Spanish):
+`/mnt/project-files/chemmanifold/isann/INFORME-ISANN.md`.
