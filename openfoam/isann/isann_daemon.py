@@ -166,9 +166,7 @@ class Daemon:
         sel = self.rng.choice(len(allp["dt"]), size=min(n_rep, len(allp["dt"])), replace=False)
         np.savez(smp / "pairs_0d.npz", **{key: v[sel] for key, v in allp.items()})
         np.savez(smp / "pairs_pasr.npz", **online)
-        seg = self.parent_dir / "03_samples" / "segments.npz"
-        if seg.exists():
-            shutil.copy(seg, smp / "segments.npz")
+        self.write_segments(smp, online, c)
         # Config: the parent's, warm-started from the current network, in the parent's units
         cfg = copy.deepcopy(self.parent_cfg)
         cfg["data_dir"] = "."
@@ -182,9 +180,42 @@ class Daemon:
                  patience=int(c["patience"]), pct_start=float(c.get("pct_start", 0.2)), threads=int(c["threads"]))
         if not c.get("rollout_loss", True):
             cfg.pop("rollout_loss", None)
+        else:   # warm start: from the first epoch, weighted by training.rollout_weight
+            cfg["rollout_loss"].update(start_frac=0.0, weight=float(c.get("rollout_weight", 0.5)))
         with open(rd / "config.yaml", "w") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
         return rd, n_on, len(sel)
+
+    def write_segments(self, smp, online, c):
+        """Rollout-loss segments: the parent's a priori ones plus GA18 (Cantera) continuations of
+        up to training.online_segments online states, seg_steps steps at their own dt. A step of the
+        CFD is one network call, so a cell's chemistry is a chain of calls: one-step pairs alone do
+        not teach the network to stay stable along that chain (round 1 drifted -60 to -110 K in 2 ms
+        in cooled lean gas while its one-step error was 18x lower than the parent's)."""
+        import cantera as ct
+        parent = np.load(self.parent_dir / "03_samples" / "segments.npz")
+        K = parent["Y"].shape[1] - 1
+        n = min(int(c.get("online_segments", 4000)), len(online["dt"]))
+        sel = self.rng.choice(len(online["dt"]), size=n, replace=False)
+        Ys, Ts = np.empty((n, K + 1, len(self.species))), np.empty((n, K + 1))
+        ok = np.ones(n, bool)
+        for j, i in enumerate(sel):
+            try:
+                self.gas.TPY = online["T_in"][i], online["P_in"][i], online["Y_in"][i]
+                r = ct.IdealGasConstPressureReactor(self.gas, clone=True)
+                net = ct.ReactorNet([r])
+                net.rtol, net.atol = 1e-8, 1e-14
+                Ys[j, 0], Ts[j, 0] = r.thermo.Y, r.T
+                for k in range(1, K + 1):
+                    net.advance(k * online["dt"][i])
+                    Ys[j, k], Ts[j, k] = r.thermo.Y, r.T
+            except ct.CanteraError:
+                ok[j] = False
+        seg = dict(Y=np.concatenate([parent["Y"], Ys[ok]]), T=np.concatenate([parent["T"], Ts[ok]]),
+                   P=np.concatenate([parent["P"], online["P_in"][sel][ok]]),
+                   h=np.concatenate([parent["h"], online["h_in"][sel][ok]]),
+                   dt=np.concatenate([parent["dt"], online["dt"][sel][ok]]))
+        np.savez(smp / "segments.npz", **seg)
 
     def current_model_pt(self):
         if self.state["version"] == 0:
@@ -231,8 +262,10 @@ class Daemon:
             res[name].update(self.rollouts(m, arrays, dt_range))
         g = self.cfg["gate"]
         c, n = res["candidate"], res["current"]
-        # strictly better one-step error on the held-out online pairs, rollouts not worse than max_ratio
-        ok = c["T_mae"] < n["T_mae"] and c["roll_T"] <= g["max_ratio"] * n["roll_T"]
+        # strictly better one-step error on the held-out online pairs; on the rollouts, no more failed
+        # states (|dT| > roll_fail_K after roll_steps) and a median not worse than max_ratio
+        ok = c["T_mae"] < n["T_mae"] and c["roll_fail"] <= n["roll_fail"] and \
+            c["roll_T_p50"] <= g["max_ratio"] * n["roll_T_p50"] + 0.1
         if self.state["version"] == 0:   # the first network must also be usable in absolute terms
             ok = ok and c["T_mae"] < g["first_T_mae"]
         res["n_holdout"] = int(ho.sum())
@@ -259,7 +292,8 @@ class Daemon:
             Y, T, *_ = advance(model, Y, T, P, dt, *dt_range)
         e = np.abs(T - ref_T)
         e[~np.isfinite(e)] = 1e4
-        return dict(roll_T=float(e.mean()), roll_T_p95=float(np.quantile(e, 0.95)))
+        return dict(roll_T=float(e.mean()), roll_T_p50=float(np.median(e)), roll_T_p95=float(np.quantile(e, 0.95)),
+                    roll_fail=int((e > float(g["roll_fail_K"])).sum()))
 
     def train_round(self, why, info):
         k = len(self.state["rounds"]) + 1
