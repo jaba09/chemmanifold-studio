@@ -328,7 +328,14 @@ class Daemon:
             log(f"round {k}: accepted -> version {v} from step {from_step}", self.logf)
         else:
             log(f"round {k}: rejected, the run keeps version {self.state['version']}", self.logf)
-            self.state["retry_after"] = int(info.get("step", 0)) + int(self.cfg["retrain"]["min_gap"])
+            # back off after consecutive rejections: in the first run, rounds 9-12 (untrusted bins)
+            # could not improve on the current network at all and were retrained every 3.5 ms
+            n_rej = 1
+            for r in reversed(self.state["rounds"]):
+                if r["gate"]["accepted"]:
+                    break
+                n_rej += 1
+            self.state["retry_after"] = int(info.get("step", 0)) + int(self.cfg["retrain"]["min_gap"]) * 2 ** min(n_rej - 1, 4)
         self.state["rounds"].append(rec)
         self.save_state()
 

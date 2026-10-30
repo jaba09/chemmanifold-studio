@@ -132,6 +132,8 @@ def read_status(run_dir):
             continue
     if not frames:
         return pd.DataFrame()
+    # after a restart a rank appends the steps it repeats (from the last write): keep the last copy
+    frames = [f.drop_duplicates("step", keep="last") for f in frames]
     last = min(int(f["step"].max()) for f in frames)
     df = pd.concat([f[f["step"] <= last] for f in frames]).groupby("step").sum(numeric_only=True)
     df["version"] = pd.concat(frames).groupby("step")["version"].max()

@@ -503,9 +503,15 @@ void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
     {
         if (!isannStatus_)
         {
-            isannStatus_.reset(new OFstream(this->mesh().time().path()/"isannStatus.csv"));
-            isannStatus_() << "step,version,hot,di_phase,ood,untrusted,ann,shadow,shadow_bad,"
-                "candidates,stored,boxes,replaced,untrusted_bins" << nl;
+            // appended to, so a restarted run keeps the status of the steps before the restart
+            const fileName path(this->mesh().time().path()/"isannStatus.csv");
+            const bool exists = isFile(path);
+            isannStatus_.reset(new OFstream(path, IOstreamOption(), IOstreamOption::APPEND));
+            if (!exists)
+            {
+                isannStatus_() << "step,version,hot,di_phase,ood,untrusted,ann,shadow,shadow_bad,"
+                    "candidates,stored,boxes,replaced,untrusted_bins" << nl;
+            }
         }
         label nUntrusted = 0;
         forAll(trustBad_, b)
