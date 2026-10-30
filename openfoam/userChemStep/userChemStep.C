@@ -4,6 +4,18 @@
 
 #include "userChemStep.H"
 #include <cctype>
+#include <fstream>
+#include <sstream>
+
+namespace
+{
+    // Bins of the shadow DI check: 100 K bands from 600 K, Z bands around
+    // Z_st (0.055), inside / outside the training data
+    const double shadowZ[] =
+        {0, 0.01, 0.02, 0.03, 0.045, 0.055, 0.07, 0.1, 0.15, 0.22, 0.4, 1.01};
+    const int nShadowZ = 11;
+    const int nShadowT = 18;
+}
 
 // * * * * * * * * * * * * * * * * Constructors  * * * * * * * * * * * * * * //
 
@@ -30,7 +42,18 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     shadowPerBin_(coeffsDict_.getOrDefault<label>("shadowPerBin", 2)),
     shadowIndex_(-1),
     shadowCount_(),
-    dtHist_(2*80, 0)
+    dtHist_(2*80, 0),
+    isann_(coeffsDict_.found("isann")),
+    isannDict_(coeffsDict_.subOrEmptyDict("isann")),
+    isannControl_(isannDict_.getOrDefault<fileName>("control", "isann/control")),
+    isannWriteEvery_(isannDict_.getOrDefault<label>("writeEvery", 25)),
+    isannActive_(false), isannVersion_(0), isannStep_(-1),
+    iHot_(0), iDI_(0), iOOD_(0), iUntrusted_(0), iANN_(0), iShadow_(0), iShadowBad_(0),
+    trustTAbs_(isannDict_.getOrDefault<scalar>("trustTAbs", 1.0)),
+    trustRel_(isannDict_.getOrDefault<scalar>("trustRel", 0.3)),
+    trustOHAbs_(isannDict_.getOrDefault<scalar>("trustOHAbs", 5e-5)),
+    trustMin_(isannDict_.getOrDefault<label>("trustMin", 2)),
+    iOHmodel_(-1)
 {
     for (label b=0; b<6; b++) nFlag_[b] = 0;
     forAll(this->specieThermo(), i)
@@ -107,6 +130,50 @@ Foam::userChemStep<ChemistryModel>::userChemStep
             << "oodFallback needs checkOOD true" << exit(FatalError);
     }
 
+    if (isann_)
+    {
+        if (!cm_has_ood(model_))
+        {
+            FatalErrorInFunction
+                << "isann needs a model file with OOD tables (the parent)" << exit(FatalError);
+        }
+        if (oodFallback_)
+        {
+            FatalErrorInFunction
+                << "isann replaces oodFallback: set oodFallback false" << exit(FatalError);
+        }
+        options_.check_ood = 1;
+        store_.reset(new isannStore(Pstream::myProcNo(), this->mesh().time().timeIndex()));
+        isannStore& st = *store_;
+        st.cap = isannDict_.getOrDefault<label>("capPerBox", 2);
+        st.wT = isannDict_.getOrDefault<scalar>("boxT", 25);
+        st.wZ = isannDict_.getOrDefault<scalar>("boxSqrtZ", 0.02);
+        st.wLogY = isannDict_.getOrDefault<scalar>("boxLogY", 0.25);
+        st.wLogDt = isannDict_.getOrDefault<scalar>("boxLogDt", 0.1);
+        st.yFloor = isannDict_.getOrDefault<scalar>("boxYFloor", 1e-8);
+        const wordList keys(isannDict_.getOrDefault<wordList>
+        (
+            "boxSpecies", wordList({"CO2", "CO", "OH", "H", "CH4", "O2", "CH2O", "HO2"})
+        ));
+        for (const word& w : keys)
+        {
+            forAll(thermos, i)
+            {
+                if (thermos[i].name() == w) st.keySpecies.push_back(map_[i]);
+            }
+        }
+        forAll(thermos, i)
+        {
+            if (thermos[i].name() == "OH") iOHmodel_ = map_[i];
+        }
+        trustN_.setSize(nShadowT*nShadowZ, 0);
+        trustBad_.setSize(nShadowT*nShadowZ, 0);
+        if (shadowEvery_ <= 0) shadowEvery_ = 10;
+        Info<< "userChemStep: ISANN, DI phase (every cell on the ODE solver) until "
+            << isannControl_ << " names a model; dedup grid of " << st.keySpecies.size() + 3
+            << " coordinates, " << st.cap << " pairs per box" << endl;
+    }
+
     if (shadowEvery_ > 0)
     {
         Info<< "userChemStep: shadow DI check every " << shadowEvery_
@@ -137,6 +204,13 @@ template<class ChemistryModel>
 Foam::userChemStep<ChemistryModel>::~userChemStep()
 {
     writeDtHistogram();
+    if (store_)
+    {
+        isannBeginStep();     // last status line
+        std::vector<std::string> names;
+        for (label k=0; k<cm_n_species(model_); k++) names.push_back(cm_species_name(model_, k));
+        store_->write(this->mesh().time().path()/"isannPairs.csv", names);
+    }
     if (model_)
     {
         cm_free(model_);
@@ -238,17 +312,6 @@ void Foam::userChemStep<ChemistryModel>::report() const
 }
 
 
-namespace
-{
-    // Bins of the shadow DI check: 100 K bands from 600 K, Z bands around
-    // Z_st (0.055), inside / outside the training data
-    const double shadowZ[] =
-        {0, 0.01, 0.02, 0.03, 0.045, 0.055, 0.07, 0.1, 0.15, 0.22, 0.4, 1.01};
-    const int nShadowZ = 11;
-    const int nShadowT = 18;
-}
-
-
 template<class ChemistryModel>
 void Foam::userChemStep<ChemistryModel>::shadow
 (
@@ -310,6 +373,22 @@ void Foam::userChemStep<ChemistryModel>::shadow
     }
     double Yd[CM_MAX_SPECIES];
     for (label i=0; i<nSpecie; i++) Yd[map_[i]] = cd[i]*thermos[i].W()/max(rhod, VSMALL);
+    if (isann_ && isannActive_)
+    {
+        // The shadow pair is a GA18 label too; and it rates the network in this bin
+        isannKeep(Y0, T, p, deltaT, oi.Z, Yd, Td, 3);
+        iShadow_++;
+        if (!ood)
+        {
+            const bool bad = mag(si.T_out - Td) > max(trustTAbs_, trustRel_*mag(Td - T))
+                || (iOHmodel_ >= 0 && mag(Ys[iOHmodel_] - Yd[iOHmodel_])
+                    > max(trustOHAbs_, trustRel_*mag(Yd[iOHmodel_] - Y0[iOHmodel_])));
+            const label b = trustBin(T, oi.Z);
+            trustN_[b] = 0.9*trustN_[b] + 1;
+            trustBad_[b] = 0.9*trustBad_[b] + (bad ? 1 : 0);
+            if (bad) iShadowBad_++;
+        }
+    }
     OFstream& f = shadowFile_();
     f.precision(9);
     f << this->mesh().time().value() << ',' << T << ',' << p << ',' << deltaT << ','
@@ -319,6 +398,134 @@ void Foam::userChemStep<ChemistryModel>::shadow
     for (label k=0; k<nSpecie; k++) f << ',' << Ys[k];
     for (label k=0; k<nSpecie; k++) f << ',' << Yd[k];
     f << nl;
+}
+
+
+template<class ChemistryModel>
+Foam::label Foam::userChemStep<ChemistryModel>::trustBin(const scalar T, const scalar Z)
+{
+    const int bt = std::min(nShadowT - 1, std::max(0, int((T - 600.0)/100.0)));
+    int bz = 0;
+    while (bz < nShadowZ - 1 && Z >= shadowZ[bz + 1]) bz++;
+    return bt*nShadowZ + bz;
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::massFractions(const scalarField& c, double* Y) const
+{
+    const auto& thermos = this->specieThermo();
+    scalar rho = 0;
+    forAll(c, i) rho += c[i]*thermos[i].W();
+    forAll(c, i) Y[map_[i]] = c[i]*thermos[i].W()/max(rho, VSMALL);
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::isannKeep
+(
+    const double* Y0, const scalar T0, const scalar p, const scalar dt,
+    const scalar Z, const double* Y1, const scalar T1, const int reason
+) const
+{
+    const label n = cm_n_species(model_);
+    const label step = this->mesh().time().timeIndex();
+    const scalar time = this->mesh().time().value();
+    const int version = isannVersion_;
+    store_->offer
+    (
+        store_->key(T0, Z, Y0, dt),
+        [&](isannRecord& r)
+        {
+            r.step = step; r.time = time; r.reason = reason; r.version = version;
+            r.T0 = T0; r.p = p; r.dt = dt; r.Z = Z; r.T1 = T1;
+            r.Y0.assign(Y0, Y0 + n);
+            r.Y1.assign(Y1, Y1 + n);
+        }
+    );
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::isannPoll(const label timeIndex) const
+{
+    std::ifstream in(fileName(this->mesh().time().globalPath()/isannControl_).c_str());
+    if (!in) return;
+    label version = 0, fromStep = 0;
+    std::string modelFile, keyword;
+    while (in >> keyword)
+    {
+        if (keyword == "version") in >> version;
+        else if (keyword == "model") in >> modelFile;
+        else if (keyword == "fromStep") in >> fromStep;
+    }
+    if (version <= isannVersion_ || timeIndex < fromStep || modelFile.empty()) return;
+
+    fileName path(modelFile);
+    if (!path.isAbsolute()) path = this->mesh().time().globalPath()/path;
+    char err[512];
+    cm_model* m = cm_load(path.c_str(), err, sizeof(err));
+    if (!m || cm_n_species(m) != cm_n_species(model_))
+    {
+        Pout<< "userChemStep: ISANN cannot load " << path << ": "
+            << (m ? "different species" : err) << ", keeping version " << isannVersion_ << endl;
+        if (m) cm_free(m);
+        return;
+    }
+    for (label k=0; k<cm_n_species(m); k++)
+    {
+        if (strcmp(cm_species_name(m, k), cm_species_name(model_, k)) != 0)
+        {
+            Pout<< "userChemStep: ISANN " << path << " orders the species differently, ignored" << endl;
+            cm_free(m);
+            return;
+        }
+    }
+    cm_free(model_);
+    model_ = m;
+    isannVersion_ = version;
+    isannActive_ = true;
+    trustN_ = 0;
+    trustBad_ = 0;
+    if (Pstream::master())
+    {
+        Info<< "userChemStep: ISANN version " << version << " (" << path
+            << ") in use from step " << timeIndex << endl;
+    }
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
+{
+    const label timeIndex = this->mesh().time().timeIndex();
+    if (isannStep_ >= 0)
+    {
+        if (!isannStatus_)
+        {
+            isannStatus_.reset(new OFstream(this->mesh().time().path()/"isannStatus.csv"));
+            isannStatus_() << "step,version,hot,di_phase,ood,untrusted,ann,shadow,shadow_bad,"
+                "candidates,stored,boxes,replaced,untrusted_bins" << nl;
+        }
+        label nUntrusted = 0;
+        forAll(trustBad_, b)
+        {
+            if (trustBad_[b] >= trustMin_ && trustBad_[b] > 0.5*trustN_[b]) nUntrusted++;
+        }
+        isannStatus_() << isannStep_ << ',' << isannVersion_ << ',' << iHot_ << ',' << iDI_ << ','
+            << iOOD_ << ',' << iUntrusted_ << ',' << iANN_ << ',' << iShadow_ << ',' << iShadowBad_ << ','
+            << store_->nCandidates << ',' << store_->nStored() << ',' << store_->nBoxes() << ','
+            << store_->nReplaced << ',' << nUntrusted << endl;
+        if (isannWriteEvery_ > 0 && isannStep_ % isannWriteEvery_ == 0)
+        {
+            std::vector<std::string> names;
+            for (label k=0; k<cm_n_species(model_); k++) names.push_back(cm_species_name(model_, k));
+            store_->write(this->mesh().time().path()/"isannPairs.csv", names);
+        }
+    }
+    iHot_ = iDI_ = iOOD_ = iUntrusted_ = iANN_ = iShadow_ = iShadowBad_ = 0;
+    isannStep_ = timeIndex;
+    isannPoll(timeIndex);
 }
 
 
@@ -355,6 +562,57 @@ void Foam::userChemStep<ChemistryModel>::solve
     {
         const label b = std::min(79, std::max(0, int(floor((log10(max(deltaT, 1e-30)) + 8.0)/0.1))));
         dtHist_[(T >= options_.T_freeze ? 80 : 0) + b]++;
+    }
+
+    if (isann_)
+    {
+        if (this->mesh().time().timeIndex() != isannStep_) isannBeginStep();
+        double Y0[CM_MAX_SPECIES];
+        forAll(Y_, i) Y0[map_[i]] = Y_[i];
+        cm_info info{};
+        int reason = -1;
+        if (T >= options_.T_freeze)
+        {
+            iHot_++;
+            cm_ood(model_, &options_, Y0, T, p, &info);
+            if (!isannActive_) reason = 0;
+            else if (info.flags & CM_OOD_ANY) reason = 1;
+            else
+            {
+                const label b = trustBin(T, info.Z);
+                if (trustBad_[b] >= trustMin_ && trustBad_[b] > 0.5*trustN_[b]) reason = 2;
+            }
+        }
+        else if (!isannActive_)
+        {
+            // DI phase: cold cells on GA18 too, as in the DI run, but not kept
+            ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+            return;
+        }
+        if (reason < 0 && isannActive_ && shadowEvery_ > 0 && T >= options_.T_freeze)
+        {
+            shadow(c, T, p, deltaT);
+        }
+        if (reason >= 0)
+        {
+            const scalar T0 = T;
+            ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+            double Y1[CM_MAX_SPECIES];
+            massFractions(c, Y1);
+            isannKeep(Y0, T0, p, deltaT, info.Z, Y1, T, reason);
+            if (reason == 0) iDI_++;
+            else if (reason == 1) iOOD_++;
+            else iUntrusted_++;
+            return;
+        }
+        if (T >= options_.T_freeze) iANN_++;
+        chemStep(Y_, T, p, deltaT);
+        for (label i=0; i<nSpecie; i++)
+        {
+            c[i] = max(0.0, rho*Y_[i]/thermos[i].W());
+        }
+        subDeltaT = deltaT;
+        return;
     }
 
     // Shadow DI check (comparison only; the cell's update below is unchanged)
