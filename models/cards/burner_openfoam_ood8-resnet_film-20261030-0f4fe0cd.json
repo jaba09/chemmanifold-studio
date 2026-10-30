@@ -1,0 +1,125 @@
+{
+  "id": "burner_openfoam_ood8-resnet_film-20261030-0f4fe0cd",
+  "config": "burner_openfoam_ood8.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-30T12:20:01+00:00",
+  "status": "candidate",
+  "notes": [
+    "2026-10-30: 2026-10-30 OOD loop iter 8 (CFD only as diagnostic): start-gas radicals now right (OH, H ~0.85x DI at 2.5 ms) but plain hybrid still ignites the nozzle early (+307 K at 2.5 ms, 115 cells); with userChemStep odeInduction (900 1700 1e-4 0.01) the 2.5 ms flame error is 10 K (max 38 K), GA18 0.3%. Certification: T1 0.02 K, tau +2.7%, cooled 8.5 K, mixing 99.5 K (max 580 K), envelope 7.6 K."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "24 ensembles x 300",
+    "strain_range": "flamelets 0.004 kg/m2/s x 1.5^k, up to 26",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 197291,
+    "n_val": 26903,
+    "pairs_by_regime": {
+      "reactor_0D": 79311,
+      "PaSR": 22400,
+      "flamelet_states": 10642,
+      "wall_cooled_0D": 19143,
+      "recirculation": 7200,
+      "unsteady_flamelets": 14529,
+      "equilibrium_tail_0D": 5760,
+      "vitiated_ignition": 47605,
+      "burnt_relaxation": 17604
+    },
+    "T_range_K": [
+      299.9999999996482,
+      2203.43113157936
+    ],
+    "flamelets": {
+      "n": 40,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1338.0939793199793,
+        2205.563114607663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 300,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 11405.1,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 2,
+    "torch": "2.9.1",
+    "machine": "Linux x86_64",
+    "git_commit": "71470b8"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.993961707611819,
+      "T_mae_K": 0.02481017106667535,
+      "T_max_err_K": 5.91285311105139,
+      "elemental_residual_max": 5.386220124005113e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 2.702702702702695,
+      "T_final_ml_K": 2193.4219446104917,
+      "T_final_cantera_K": 2198.3624332400177
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 7.487793338047144,
+      "max_abs_tau_err_pct": 18.274111675126896,
+      "mean_T_mae_manifold_K": 7.637362059243524,
+      "max_T_mae_manifold_K": 25.54081495311499,
+      "mean_nrmse_Y_pct": 0.3780844166060838,
+      "max_nrmse_Y_pct": 0.9345195743895937,
+      "cooled_mean_T_mae_K": 8.525960950234781,
+      "cooled_max_T_mae_K": 32.118986211974494,
+      "cooled_mean_nrmse_Y_pct": 0.5394095524072356,
+      "mixing_mean_T_mae_K": 99.46859680181079,
+      "mixing_max_T_mae_K": 579.7351870309044,
+      "mixing_mean_nrmse_Y_pct": 2.491271939977825
+    },
+    "coverage_heldout_flamelets": 0.9839098954143202,
+    "export": {
+      "ood_flagged_validation": 0.0023417462736497786,
+      "T_range_K": [
+        299.9999999996482,
+        2204.0125623963886
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "0f4fe0cde2283226c7c33ddf21b97bd3db1fc6b4a1e59434e3171f24b0884e9e",
+    "data_dir": "../data/openfoam_ood8",
+    "fluent_model_sha256": "91820bb24a5ba0a2f7bd3e269e26a80c0a7e8a0eb2ee359e1bec5bb8c0e94e62"
+  }
+}
