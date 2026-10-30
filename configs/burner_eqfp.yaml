@@ -1,0 +1,249 @@
+# ChemManifold Studio configuration - equilibrium as a FIXED POINT of the chemistry step (2026-10-30).
+#
+# = burner_eqfp_base.yaml (ood8 data, warm start from ood7) + three changes, all physics-only
+#   (Cantera states; no CFD state is used for training):
+#   * pasr.equilibrium_fixed_point (regime 9): HP equilibrium states on a grid of Z (lean to rich)
+#     x heat loss psi (adiabatic to nearly wall-cooled, 450-2300 K), paired with themselves at every
+#     time step: F(Y_eq, dt) = Y_eq;
+#   * pasr.equilibrium_perturbed (regime 8): every case starts at that equilibrium with each radical
+#     (H, O, OH, HO2, H2O2, CH3, HCO, ...) multiplied by its own factor 10^u, u in +-1.5, and the
+#     majors corrected so that the elements and the enthalpy stay those of the equilibrium state
+#     (conserve_elements); Cantera then follows the relaxation back to it;
+#   * training.radical_loss and training.fixed_point: relative errors for OH, H, O, HO2 (increment
+#     error over the size of the true increment plus 1% of the radical's level) and for the
+#     equilibrium pairs, so that an OH change of 10x the true one near equilibrium is no longer free.
+# Why: the hybrids of ood1-ood8 pump radicals into hot lean burnt gas (OH 10-20x, H ~1000x DI),
+# which ignites the CH4 jet early and cools the far lean gas (propuestas-mejora.md, B1 + C1).
+#
+data_dir: ../data/eqfp             # relative to this file
+seed: 0
+
+chemistry:
+  mechanism: mechanisms/ga18.yaml   # GA18: 18 species, 92 reactions (from the Fluent case)
+  fuel: "CH4:1.0"                   # mass fractions
+  fuel_T: 300.0
+  oxidizer: "O2:0.232909, N2:0.767091"   # mass fractions = X_O2 0.21 / X_N2 0.79, as in Fluent
+  oxidizer_T: 300.0
+  P_atm: 1.0
+
+# Stage 0 - flame reference: counterflow flamelets from low strain to extinction
+flame:
+  transport: unity-Lewis-number      # as rhoReactingBuoyantFoam (mixture-averaged for Fluent)
+  width: 0.15                       # m, domain width (wide enough for the thick low-strain flamelets)
+  mdot_fuel_min: 0.004              # kg/m^2/s at the fuel inlet (strain ~0.6 1/s)
+  radiation_mdot_fuel_min: 0.02     # the radiating sweep starts here: below ~2 1/s an optically thin
+                                    # flamelet this wide is quenched by its own radiation
+  strain_factor: 1.5                # inlet mass flux multiplier between flamelets
+  max_flamelets: 26                 # enough steps of 1.5x to reach extinction from ~1 1/s
+  extinction_T: 1000.0              # K, a flamelet below this peak is extinguished
+  holdout_every: 3                  # flamelets 1, 4, 7, ... are kept out of training for stage 11
+  radiation: [false, true]          # adiabatic sweep + a sweep with optically thin gas radiation
+
+# Module 1 - ThermoExplorer (flame mode)
+envelope:
+  mode: flame
+  n_traj: 160
+  f_pasr: 0.35
+  # Sobol u1 -> Z through a piecewise-linear CDF, refined around Z_st = 0.055: 20% of seeds in
+  # Z < 0.0275, 22% in 0.0275-0.055, 22% in 0.055-0.11, 16% in 0.11-0.22, 20% in 0.22-1.
+  z_knots: [0.0, 0.0275, 0.055, 0.11, 0.22, 1.0]
+  u_knots: [0.0, 0.22, 0.40, 0.62, 0.80, 1.0]
+  alpha: [0.0, 1.0]                 # Sobol u2 -> burnt fraction of the seed state
+  heat_loss: fraction               # Sobol u3 -> psi = u3 * psi_max of the loss that cools the seed to T_wall
+  psi_max: 0.85                     # beyond ~0.85 the seeds are below ~600 K, where chemistry is frozen
+  T_wall: 300.0                     # K, coldest wall / inlet of the burner
+  f_cool: 0.35                      # share of the 0D seeds that are cooling reactors (regime 3)
+  tau_q_range: [1.0e-3, 1.0]        # s, log-uniform heat-loss time constant of the cooling reactors
+  burnt_seeds:                      # hot products leaving the flame, followed to equilibrium (regime 0 + tail)
+    n: 64
+    Z_range: [0.01, 0.3]            # log-uniform
+    alpha: [0.85, 1.0]
+    psi_max: 0.2
+
+autoignition:
+  dt_base: 1.0e-5                   # s (10 us for CH4)
+  t_max: 2.0e-2                     # s
+  min_steps: 10
+  dT_rise: 400.0                    # premixed mode only
+  rise_frac: 0.9                    # flame mode: stop once 90% of the equilibrium rise is reached...
+  dT_flat: 0.02                     # ...and |T_n - T_{n-1}| < dT_flat K
+  n_consecutive: 25                 # ...for this many consecutive steps
+  cooling_records: 2000             # points recorded along a cooling-reactor trajectory
+  equilibrium_tail:                 # regime 6: keep relaxing after the flat-T stop
+    t_end: 3.0e-2                   # s after the stop
+    n_records: 40                   # log-spaced states, each paired with adiabatic steps
+    T_min: 1200.0                   # K, only reactors this hot at the stop
+
+arclength:
+  boxcox_lambda: 0.10
+  n_pick: 220
+  n_seed: 15
+  strides: [1, 2, 4]
+  floor_frac: 0.05
+
+pasr:
+  n_particles: 400
+  beta_a: 0.7
+  beta_b: 0.7
+  loss_fraction_range: [0.0, 0.85]  # psi per particle: adiabatic to nearly wall-cooled mixtures
+  vitiated_ignition:                # regime 7: products + a little of the other stream, through ignition
+    n: 160                          # alternately lean products into fuel / rich products into air
+    Z_p_lean: [0.02, 0.055]         # log-uniform; leaner products are too cold to ignite anything
+    Z_p_rich: [0.055, 0.3]
+    psi_max: 0.15                   # heat-loss fraction of the products
+    stream_share: [0.003, 0.5]      # log-uniform share of the cold stream
+    t_max: 0.02                     # s, followed at dt_base until burnt and flat
+    n_pick: 300                     # states per case, one pasr stride each
+    time_share: 0.5                 # share of the picks uniform in time (the rest by arc length)
+  burnt_relaxation:                 # regime 8: burnt gas relaxing to equilibrium
+    n: 240                          # half from HP equilibrium with radicals x 10^u, half frozen-cooled
+    Z_range: [0.005, 0.3]           # log-uniform
+    psi_max: 0.5                    # heat-loss fraction
+    radical_decades: 1.5            # u uniform in +-1.5
+    T_min: 800                      # K; colder starts are skipped
+    t_max: 0.02                     # s at dt_base
+    n_pick: 60                      # states per case, log-uniform in time
+  burnt_relaxation_lean:            # regime 8 again, lean and cold: Z 0.002-0.06, T >= 450 K
+    n: 300
+    Z_range: [0.002, 0.06]
+    psi_max: 0.85
+    radical_decades: 1.5
+    T_min: 450
+    t_max: 0.03
+    n_pick: 60
+  equilibrium_perturbed:            # regime 8: equilibrium with each radical x its own 10^u, relaxing back
+    n: 300
+    Z_range: [0.005, 0.3]           # log-uniform, lean to rich
+    psi_max: 0.85                   # adiabatic to nearly wall-cooled
+    radical_decades: 1.5            # u uniform in +-1.5, per radical (independent_radicals)
+    independent_radicals: true
+    conserve_elements: true         # majors absorb the change: same elements and enthalpy as Y_eq
+    all_from_equilibrium: true      # no frozen-cooled starts (burnt_relaxation has those)
+    T_min: 450
+    t_max: 0.03
+    n_pick: 60
+  equilibrium_fixed_point:          # regime 9: F(Y_eq, dt) = Y_eq at every stride
+    Z_range: [0.005, 0.3]
+    n_z: 40                         # log-spaced, jittered inside each cell
+    psi_max: 0.85
+    n_psi: 12
+    n_flamelets: 3                  # training flamelets giving the elements and enthalpy
+    T_range: [450.0, 2300.0]
+  recirculation:                    # products at Z_p (loss psi_p) mixed into pure CH4 or pure air
+    n_ensembles: 24                 # alternately into the air and into the fuel
+    n_particles: 300
+    psi_range: [0.0, 0.85]
+    beta_a: 0.7                     # beta(0.7, 0.7) share of products in each particle
+    beta_b: 0.7
+    f_aged: 0.5                     # half the particles react after mixing before being paired...
+    age_range: [1.0e-5, 5.0e-3]     # ...for a log-uniform time in this range [s]
+  strides: [1, 2, 4]
+
+# Unsteady flamelets in Z space (stage 4, regime 5): chemmanifold/unsteady_flamelet.py
+unsteady_flamelets:
+  n_z: 61                           # grid points in Z, refined around Z_st
+  workers: 4                        # parallel transients
+  t_end_chi: 3.0                    # strain transients last 3 stoichiometric diffusion times 1/chi_st...
+  t_max: 0.2                        # ...capped at this [s]
+  dt_bounds: [1.0e-5, 1.0e-3]       # s, splitting step (2% of 1/chi_max, 5% of tau_q)
+  max_steps: 2000
+  n_snapshots: 30                   # snapshots kept along each transient
+  points_per_snapshot: 15           # random Z points of each snapshot paired with a chemistry step
+  T_min_pair: 350.0                 # K, colder points are left out (frozen chemistry)
+  extinction:                       # strain stepped to factor x the highest burning strain
+    n: 10
+    factor: [1.2, 4.0]
+  reignition:                       # partially extinguished snapshots relaxed at a low strain
+    n: 8
+    T_range: [1100.0, 1700.0]       # K, peak T of the snapshots used as starts
+    strain_factor: [0.005, 0.3]     # x the highest burning strain, log-uniform
+  cooling:                          # flamelet at its own strain losing heat to T_wall
+    n: 12
+    tau_q_range: [1.0e-3, 0.1]      # s, log-uniform
+  strain_jump:                      # strain multiplied by a log-uniform factor (capped at extinction)
+    n: 8
+    factor: [0.1, 10.0]
+
+# Module 2 - ManifoldPrep
+preprocess:
+  boxcox_lambda: 0.10
+  val_frac: 0.12
+  sigma_y_min: 1.0e-3
+  sigma_dy_min: 1.0e-2
+  scalers_from: ../data/ood7_parent/04_prep/scalers.json   # the parent's units (warm start)
+
+manifold:
+  n_clusters: 4
+  candidate_dims: [2, 3, 4, 6, 8]
+  variance_target: 0.995
+  max_samples: 40000
+
+# Coverage check of the sampled data against the flamelet states (stage 11)
+coverage:
+  radius: 0.5                       # a flame state is covered if a sampled state lies within this
+                                    # distance (in per-variable standard deviations, all species + T)
+
+# Multi-step rollout loss (stages 3 and 7): K chained surrogate steps at the Fluent time step
+rollout_loss:
+  weight: 0.2
+  steps: 8
+  stride: 4                         # 4 x dt_base = 40 us, the step used in Fluent
+  batch_size: 128
+  segments_per_traj: 150
+  start_frac: 0.0                   # from the first epoch: the parent was already trained with it
+
+# Module 3/4 - Surrogates & training
+model:
+  hidden: 192
+  n_blocks: 3
+  node_hidden: 128
+  node_substeps: 2
+  latent_dim: 12                    # that of the parent ood7 (its manifold report)
+
+training:
+  init_from: ../data/ood7_parent/06_models/resnet_film/model.pt   # warm start from ood7
+  epochs: 60                        # 300 from scratch (~3 h); the parent is already near the optimum
+  patience: 15                      # stop after 15 epochs without validation improvement
+  batch_size: 512
+  lr_max: 5.0e-4                    # 2e-3 from scratch; lower so the warm start is not thrown away
+  weight_decay: 1.0e-5
+  noise_amp: 0.005                  # 0.015 from scratch; full noise again would undo the parent
+  noise_end_frac: 0.7
+  loss_weights: {inc: 1.0, mass: 1.0, T: 1.0, equil: 0.1, ae: 1.0, rad: 0.02, fp: 0.05}
+                                    # rad, fp: the ood7 parent has L_rad ~0.14, L_fp ~0.03 against
+                                    # L_inc ~0.0014, and OH increments ~1000x the true ones in regime 8
+  radical_loss:                     # L_rad: relative increment error of these radicals
+    species: [OH, H, O, HO2]
+    rel_floor: 0.01                 # denominator |dY_true| + 1% of the radical's level...
+    abs_floor: 1.0e-10              # ...+ this, so frozen traces do not divide by zero
+  fixed_point:                      # L_fp on the regime-9 pairs: all species and T must not move
+    rel_floor: 0.01
+    abs_floor: 1.0e-9
+    T_tol: 1.0                      # K
+  equil_threshold: 0.05
+  threads: 2                        # CPU threads; 4 = the performance cores of an M1/M2 MacBook Air ('auto' = torch default)
+  device: auto                      # auto (CPU, or CUDA if present) | cpu | mps | cuda
+
+# Module 5 - Certification (flame mode: cases are seed states (Z, alpha) at 1 atm)
+evaluation:
+  rollout:                          # Z_st, 60% burnt
+    Z: 0.055
+    alpha: 0.6
+    n_steps: 500                    # 5 ms at dt_base
+    stride: 1
+  envelope_grid:                    # lean / stoichiometric / rich seeds that ignite within 5 ms
+    Z: [0.033, 0.055, 0.088]
+    alpha: [0.6, 0.7, 0.8]
+  cooled_grid:                      # burnt gas (alpha = 1) that lost psi of its heat to the walls
+    Z: [0.033, 0.055, 0.088]
+    psi: [0.2, 0.4, 0.6]
+  cooled_rollout:
+    stride: 4                       # 40 us, the Fluent step
+    n_steps: 250                    # 10 ms
+  mixing_cases:                     # products (Z_p, psi) mixed into a pure inlet stream, beta = product share
+    - {Z_p: 0.088, psi: 0.0, stream: air, beta: 0.5}
+    - {Z_p: 0.15, psi: 0.2, stream: air, beta: 0.3}
+    - {Z_p: 0.088, psi: 0.4, stream: air, beta: 0.7}
+    - {Z_p: 0.033, psi: 0.4, stream: air, beta: 0.5}
+    - {Z_p: 0.055, psi: 0.0, stream: fuel, beta: 0.5}
+    - {Z_p: 0.055, psi: 0.4, stream: fuel, beta: 0.8}

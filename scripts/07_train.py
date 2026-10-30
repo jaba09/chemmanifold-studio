@@ -14,12 +14,27 @@ Composite loss (Eq. 44), all terms computed per batch:
           of 1e-2), so the network itself learns to be near-conservative and the projection stays small.
   L_T     MSE of the Newton-recovered temperature, normalized by the std of the training dT.
   L_equil MSE of v_pred on near-equilibrium pairs (|v_true|_inf < threshold): no spurious drift.
+  L_rad   (optional, `training.radical_loss`) relative error of the radicals' increments (OH, H, O,
+          HO2 by default): |dY_pred - dY_true| over |dY_true| + rel_floor * Y + abs_floor, in mass
+          fractions after the projection, through a pseudo-Huber penalty. The Box-Cox increments of
+          L_inc are scaled by their std over the whole data set, set by the flame, so an increment
+          of OH that is 10x the true one in burnt gas near equilibrium costs almost nothing there.
+  L_fp    (optional, `training.fixed_point`) on the equilibrium pairs (regime 9, F(Y_eq, dt) = Y_eq):
+          every species' change relative to rel_floor * Y_eq + abs_floor, and the temperature change
+          in units of T_tol, also pseudo-Huber: equilibrium must be a fixed point of the step.
   L_AE    autoencoder reconstruction |D(E(y~_t)) - y~_t|^2 (Phy-ChemNODE only).
   L_roll  (optional, `rollout_loss`) multi-step loss: the surrogate is chained over K steps from the
           first state of a segment (03_samples/segments.npz) and every step's Box-Cox state (in units
           of sigma_dy) and temperature (in units of the training dT std) are compared with Cantera.
           It penalizes the error growth of closed-loop use, which single-step pairs do not see.
           Switched on after `start_frac` of the epochs, once the single-step map is reasonable.
+
+Warm start: `training.init_from` (a parent model.pt, with preprocess.scalers_from set to the
+parent's scalers.json so the units match) starts from the parent network instead of from the
+identity map; use fewer epochs and a lower lr_max. `training.patience` stops when the validation
+loss has not improved for that many epochs. `--seed` sets the training seed (weights, batches,
+noise; the data stay those of the config's seed) and `--tag` names the output 06_models/<arch>_<tag>,
+so several seeds of one configuration live side by side.
 """
 
 import platform
@@ -38,7 +53,7 @@ import torch
 import yaml
 
 from chemmanifold.io import base_parser, load_config, load_npz, save_json, stage_dir
-from chemmanifold.loading import latent_dim, load_prep
+from chemmanifold.loading import latent_dim, load_prep, model_dir_name
 from chemmanifold.models import build_surrogate, resolve_device
 
 MASS_SCALE = 1e-2
@@ -46,7 +61,42 @@ MASS_SCALE = 1e-2
 
 def to_tensors(ds, mask):
     keys = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "yt_in", "yt_out")
-    return {k: torch.as_tensor(ds[k][mask], dtype=torch.float64) for k in keys}
+    d = {k: torch.as_tensor(ds[k][mask], dtype=torch.float64) for k in keys}
+    d["regime"] = torch.as_tensor(ds["regime"][mask], dtype=torch.long)
+    return d
+
+
+def pseudo_huber(r):
+    """~r^2/2 for small r, ~|r| for large: relative errors of 100x must not swamp the batch."""
+    return torch.sqrt(1.0 + r ** 2) - 1.0
+
+
+class RelativeTerms:
+    """L_rad and L_fp (training.radical_loss, training.fixed_point); both read mass fractions."""
+
+    def __init__(self, tc, species):
+        rl, fp = tc.get("radical_loss") or {}, tc.get("fixed_point") or {}
+        self.rad = [species.index(s) for s in rl.get("species", ["OH", "H", "O", "HO2"]) if s in species] if rl else []
+        self.rad_rel, self.rad_abs = float(rl.get("rel_floor", 0.01)), float(rl.get("abs_floor", 1e-10))
+        self.fp = bool(fp)
+        self.fp_rel, self.fp_abs = float(fp.get("rel_floor", 0.01)), float(fp.get("abs_floor", 1e-9))
+        self.fp_T, self.fp_regime = float(fp.get("T_tol", 1.0)), int(fp.get("regime", 9))
+
+    def __call__(self, b, out, L):
+        zero = out["Y"].sum() * 0.0
+        if self.rad:
+            Yi, Yo, Yp = b["Y_in"][:, self.rad], b["Y_out"][:, self.rad], out["Y"][:, self.rad]
+            den = (Yo - Yi).abs() + self.rad_rel * torch.maximum(Yi, Yo) + self.rad_abs
+            L["rad"] = pseudo_huber((Yp - Yo) / den).mean()
+        else:
+            L["rad"] = zero
+        m = b["regime"] == self.fp_regime if self.fp else None
+        if self.fp and m.any():
+            Yi = b["Y_in"][m]
+            r = (out["Y"][m] - Yi) / (self.fp_rel * Yi + self.fp_abs)
+            L["fp"] = pseudo_huber(r).mean() + pseudo_huber((out["T"][m] - b["T_in"][m]) / self.fp_T).mean()
+        else:
+            L["fp"] = zero
 
 
 def dt_scales(train, val, sigma_min):
@@ -67,7 +117,7 @@ def dt_scales(train, val, sigma_min):
     return bins, sy, sT
 
 
-def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha):
+def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha, rel=None):
     sdy = model.sigma_dy
     sdy_loss = b.get("sdy", sdy)            # per-sample scales with training.dt_scaled_loss
     sigma_dT = b.get("sdT", sigma_dT)
@@ -86,7 +136,9 @@ def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha):
     L["equil"] = (v_pred[eq] ** 2).mean() if eq.any() else v_pred.sum() * 0.0
     ae = out["extras"].get("ae_recon")
     L["ae"] = ((ae.to(torch.float64) - out["yt_in"]) ** 2).mean() if ae is not None else v_pred.sum() * 0.0
-    total = sum(weights[k] * L[k] for k in L)
+    if rel is not None:
+        rel(b, out, L)
+    total = sum(weights.get(k, 0.0) * L[k] for k in L)
     return total, {k: float(v.detach()) for k, v in L.items()}, out
 
 
@@ -103,9 +155,10 @@ def rollout_loss(model, seg, idx, sigma_dT, sigma_dy=None):
     return loss / K
 
 
-def main(cfg, arch):
+def main(cfg, arch, seed=None, tag=None):
     tc = cfg["training"]
-    torch.manual_seed(cfg["seed"])
+    seed = int(cfg["seed"] if seed is None else seed)
+    torch.manual_seed(seed)
     if tc.get("threads", "auto") != "auto":
         torch.set_num_threads(int(tc["threads"]))
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
@@ -115,6 +168,18 @@ def main(cfg, arch):
     device = resolve_device(tc.get("device", "auto"))
     model.net.to(device)
     A = model.project.A
+    if tc.get("init_from"):
+        parent = Path(cfg["_config_path"]).parent / tc["init_from"]
+        ck = torch.load(parent, map_location="cpu", weights_only=False)
+        sd = ck["state_dict"]
+        for k in ("mu_y", "sigma_y", "ctx_mu", "ctx_sigma", "sigma_dy"):
+            if not torch.allclose(sd[k], getattr(model, k)):
+                raise ValueError(f"warm start: scaler {k} of {parent} differs from 04_prep - set "
+                                 "preprocess.scalers_from to the parent's scalers.json and re-run stage 5")
+        model.load_state_dict(sd)
+        model.net.to(device)
+        print(f"  warm start from {parent} (epoch {ck.get('epoch')})")
+    rel = RelativeTerms(tc, list(scalers["species"]))
 
     train, val = to_tensors(ds, ~ds["is_val"]), to_tensors(ds, ds["is_val"])
     sigma_dT = float(torch.clamp((train["T_out"] - train["T_in"]).std(), min=1.0))
@@ -140,7 +205,8 @@ def main(cfg, arch):
         print(f"  rollout loss: {len(seg['dt'])} segments of {seg['Y'].shape[1] - 1} steps, weight {rl['weight']}, "
               f"from epoch {int(rl.get('start_frac', 0.0) * E) + 1}")
 
-    out_dir = stage_dir(cfg, "models", arch)
+    out_dir = stage_dir(cfg, "models", model_dir_name(arch, tag))
+    patience = int(tc.get("patience", 0))
     t_start, started = time.time(), datetime.now(timezone.utc)
     hist, best, best_epoch = [], np.inf, 0
     n_params = sum(p.numel() for p in model.net.parameters())
@@ -155,7 +221,7 @@ def main(cfg, arch):
         for i in range(steps):
             idx = perm[i * bs:(i + 1) * bs]
             b = {k: v[idx] for k, v in train.items()}
-            loss, parts, _ = batch_losses(model, b, A, sigma_dT, w, tc["equil_threshold"], alpha)
+            loss, parts, _ = batch_losses(model, b, A, sigma_dT, w, tc["equil_threshold"], alpha, rel)
             if seg is not None and e > rl.get("start_frac", 0.0) * E:
                 ridx = torch.randint(len(seg["dt"]), (rl["batch_size"],))
                 L_roll = rollout_loss(model, seg, ridx, roll_sdT, roll_sdy)
@@ -170,7 +236,7 @@ def main(cfg, arch):
                 agg[k] = agg.get(k, 0.0) + v / steps
         model.eval()
         with torch.no_grad():
-            vloss, vparts, vout = batch_losses(model, val, A, sigma_dT, w, tc["equil_threshold"], 0.0)
+            vloss, vparts, vout = batch_losses(model, val, A, sigma_dT, w, tc["equil_threshold"], 0.0, rel)
             T_mae = float((vout["T"] - val["T_out"]).abs().mean())
         row = {"epoch": e, "alpha": alpha, **{f"train_{k}": v for k, v in agg.items()},
                **{f"val_{k}": v for k, v in vparts.items()}, "val_total": float(vloss), "val_T_mae": T_mae}
@@ -181,9 +247,14 @@ def main(cfg, arch):
             state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
             torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": e},
                        out_dir / "model.pt")
+        elif rolling and patience and e - best_epoch >= patience:
+            print(f"  early stop at epoch {e}: no validation improvement since epoch {best_epoch}")
+            break
         if e == 1 or e % 5 == 0 or e == E:
             print(f"  epoch {e:3d}  alpha={alpha:.4f}  train_inc={agg['inc']:.4f}  val_inc={vparts['inc']:.4f}  "
-                  + (f"train_roll={agg['roll']:.4f}  " if "roll" in agg else "") +
+                  + (f"train_roll={agg['roll']:.4f}  " if "roll" in agg else "")
+                  + (f"val_rad={vparts['rad']:.4f}  " if rel.rad else "")
+                  + (f"val_fp={vparts['fp']:.4f}  " if rel.fp else "") +
                   f"val_T_MAE={T_mae:.2f}K  ({time.time() - t0:.1f}s)")
 
     h = pd.DataFrame(hist)
@@ -200,7 +271,8 @@ def main(cfg, arch):
         yaml.safe_dump({k: v for k, v in cfg.items() if not k.startswith("_")}, f, sort_keys=False)
     save_json(out_dir / "train_info.json", dict(
         started_utc=started.isoformat(timespec="seconds"), wall_time_s=round(time.time() - t_start, 1),
-        config=str(Path(cfg["_config_path"]).name), git_commit=git_commit(), epochs=E, best_epoch=best_epoch,
+        config=str(Path(cfg["_config_path"]).name), git_commit=git_commit(), epochs=E, epochs_run=e,
+        best_epoch=best_epoch, seed=seed, init_from=tc.get("init_from"),
         best_val_loss=best, n_parameters=n_params, n_train_pairs=n_train, latent_dim=d, device=str(device),
         threads=torch.get_num_threads(), torch=torch.__version__, python=platform.python_version(),
         machine=f"{platform.system()} {platform.machine()}"))
@@ -221,5 +293,7 @@ def git_commit():
 if __name__ == "__main__":
     p = base_parser(__doc__)
     p.add_argument("--arch", choices=["resnet_film", "chemnode"], default="resnet_film")
+    p.add_argument("--seed", type=int, default=None, help="training seed (default: the config's seed)")
+    p.add_argument("--tag", default=None, help="write to 06_models/<arch>_<tag> (e.g. s1 for seed 1)")
     a = p.parse_args()
-    main(load_config(a.config), a.arch)
+    main(load_config(a.config), a.arch, a.seed, a.tag)
