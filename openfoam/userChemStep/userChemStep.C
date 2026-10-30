@@ -19,6 +19,7 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     model_(nullptr),
     map_(this->nSpecie(), -1),
     oodFallback_(coeffsDict_.getOrDefault<bool>("oodFallback", false)),
+    odeAbove_(coeffsDict_.getOrDefault<scalar>("odeAbove", GREAT)),
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
     nFallback_(0),
@@ -359,7 +360,7 @@ void Foam::userChemStep<ChemistryModel>::solve
         }
         cm_info info{};     // cm_ood only sets the OOD bits it finds
         cm_ood(model_, &options_, Y, T, p, &info);
-        if (info.flags & CM_OOD_ANY)
+        if ((info.flags & CM_OOD_ANY) || T >= odeAbove_)
         {
             nCalls_++;
             nAdvanced_++;

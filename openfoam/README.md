@@ -101,6 +101,9 @@ userChemStepCoeffs
     reportCalls  1000000;    // print counters (advanced, OOD by check, ...) every this many calls
     oodFallback  false;      // true: cells outside the training data are integrated with the
                              //  ODE solver of odeCoeffs (hybrid surrogate + direct integration)
+    odeAbove     1e30;       // K; with oodFallback, cells at or above this T also go to the ODE
+                             //  solver: 0 checks the coupling (must match DI), a T sweep shows
+                             //  which temperature band of surrogate cells causes an error
     shadowEvery  0;          // > 0: shadow DI check every this many time steps (see below)
     shadowPerBin 2;
 }

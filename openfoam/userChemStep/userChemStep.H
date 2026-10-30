@@ -36,7 +36,9 @@ Usage
             checkOOD     true;
             reportCalls  0;      // print counters every this many cell calls (0 = off)
             oodFallback  false;  // true: integrate OOD cells with the ODE solver
-        }                        //  (odeCoeffs) instead of the surrogate
+                                 //  (odeCoeffs) instead of the surrogate
+            odeAbove     1e30;   // K; with oodFallback, cells at or above this T also go to
+        }                        //  the ODE solver (a test of the coupling: 0 = all cells)
 
 SourceFiles
     userChemStep.C
@@ -83,6 +85,9 @@ class userChemStep
 
         //- Integrate cells outside the training data with the ODE solver
         bool oodFallback_;
+
+        //- With oodFallback: cells at or above this T go to the ODE solver too
+        scalar odeAbove_;
 
         //- Print the counters every this many calls (0 = never)
         label reportCalls_;
