@@ -113,7 +113,7 @@ class Daemon:
         n_kept, n_new = self.counts()
         if step < self.state.get("retry_after", 0):   # after a failed or rejected round
             return None, {}
-        if self.state["version"] == 0:
+        if self.state["version"] == 0 and not self.cfg["di"].get("skip", False):
             c = self.cfg["di"]
             w = st[st["step"] > step - c["window"]]
             boxes = st["boxes"].to_numpy()
@@ -266,7 +266,8 @@ class Daemon:
         # states (|dT| > roll_fail_K after roll_steps) and a median not worse than max_ratio
         ok = c["T_mae"] < n["T_mae"] and c["roll_fail"] <= n["roll_fail"] and \
             c["roll_T_p50"] <= g["max_ratio"] * n["roll_T_p50"] + 0.1
-        if self.state["version"] == 0:   # the first network must also be usable in absolute terms
+        if self.state["version"] == 0 and not self.cfg["di"].get("skip", False):
+            # the first network after a DI phase must also be usable in absolute terms
             ok = ok and c["T_mae"] < g["first_T_mae"]
         res["n_holdout"] = int(ho.sum())
         res["accepted"] = bool(ok)
