@@ -1,0 +1,123 @@
+{
+  "id": "burner_openfoam_ood3-resnet_film-20261029-2a81d9b8",
+  "config": "burner_openfoam_ood3.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-29T20:36:45+00:00",
+  "status": "superseded",
+  "notes": [
+    "2026-10-30: 2026-10-30 OOD loop iter 4 (hybrid hyb4, lit start, GA18 in OOD cells, 25 ms; CFD used only as diagnostic): GA18 share 0.8%, flame-zone (T>1600 K) mean |dT| vs DI 24-57 K with a cold bias of 24-49 K at Z 0.055-0.2 (ood1: 5 K), Tmax 50-120 K low; early nozzle ignition +267 K at 2.5 ms not fixed. Certification: T1 0.30 K, tau_ign +8%, mixing 8.8 K, cooled 24 K. The per-dt loss fixed tau and mixing but the wide dt range still costs accuracy in the burnt flame at the 2e-5 s step."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "40 ensembles x 400",
+    "strain_range": "flamelets 0.004 kg/m2/s x 1.5^k, up to 26",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 171903,
+    "n_val": 23441,
+    "pairs_by_regime": {
+      "reactor_0D": 105900,
+      "PaSR": 22400,
+      "flamelet_states": 10642,
+      "wall_cooled_0D": 19209,
+      "recirculation": 16000,
+      "unsteady_flamelets": 15433,
+      "equilibrium_tail_0D": 5760
+    },
+    "T_range_K": [
+      299.9999999996482,
+      2218.5785037925166
+    ],
+    "flamelets": {
+      "n": 40,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1338.0939793199793,
+        2205.563114607663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 290,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 10949.4,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 4,
+    "torch": "2.9.1",
+    "machine": "Linux x86_64",
+    "git_commit": "48b7f62-dirty"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9879948226410618,
+      "T_mae_K": 0.3036737218706136,
+      "T_max_err_K": 488.3402390342328,
+      "elemental_residual_max": 5.482482389148928e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 8.108108108108098,
+      "T_final_ml_K": 2192.92642576695,
+      "T_final_cantera_K": 2198.3624332400177
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 6.608570694865106,
+      "max_abs_tau_err_pct": 13.197969543147197,
+      "mean_T_mae_manifold_K": 46.60983097052528,
+      "max_T_mae_manifold_K": 270.1696561130612,
+      "mean_nrmse_Y_pct": 0.5628694059225868,
+      "max_nrmse_Y_pct": 2.255940426795577,
+      "cooled_mean_T_mae_K": 24.215297035811155,
+      "cooled_max_T_mae_K": 182.42556136031817,
+      "cooled_mean_nrmse_Y_pct": 1.7473788854076158,
+      "mixing_mean_T_mae_K": 8.819654563864944,
+      "mixing_max_T_mae_K": 36.05359609814153,
+      "mixing_mean_nrmse_Y_pct": 0.8365629128749007
+    },
+    "coverage_heldout_flamelets": 0.9794851166532582,
+    "export": {
+      "ood_flagged_validation": 0.0020050339149353695,
+      "T_range_K": [
+        299.9999999996482,
+        2244.2096062637147
+      ],
+      "dt_range_s": [
+        1.0000000000000002e-06,
+        0.05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "2a81d9b8de3d82baaa1c7744675b7d9ba2a665aa6f44a2c70e6430bfc0269d88",
+    "data_dir": "../data/openfoam_ood3",
+    "fluent_model_sha256": "0c0f036c0970c6363376d63e60a417a323a183957d114226918e851b1d0eed7b"
+  }
+}
