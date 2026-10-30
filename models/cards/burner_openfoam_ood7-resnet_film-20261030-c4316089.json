@@ -1,0 +1,125 @@
+{
+  "id": "burner_openfoam_ood7-resnet_film-20261030-c4316089",
+  "config": "burner_openfoam_ood7.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-30T07:51:23+00:00",
+  "status": "candidate",
+  "notes": [
+    "2026-10-30: 2026-10-30 OOD loop iter 7 (hybrid hyb7, 25 ms; CFD only as diagnostic): regime 8 fixed most of the early nozzle ignition (2.5 ms: 20 flame cells +56 K, was 118 cells +306 K; GA18 0.2%); flame-zone mean |dT| vs DI 6-12 K to 25 ms; but ~4300 lean far-field cells (Z 0.005-0.028, 560-1280 K) 60-390 K too cold with OH ~20x DI (lean cooled products dissociate), all-hot-cell mean |dT| 15 K; GA18 9.3% overall (bursts to 35%). Certification: T1 0.03 K, tau +5.4%, cooled 22.9 K, mixing 22.3 K, envelope 17.3 K."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "24 ensembles x 300",
+    "strain_range": "flamelets 0.004 kg/m2/s x 1.5^k, up to 26",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 188805,
+    "n_val": 25746,
+    "pairs_by_regime": {
+      "reactor_0D": 79311,
+      "PaSR": 22400,
+      "flamelet_states": 10642,
+      "wall_cooled_0D": 19143,
+      "recirculation": 7200,
+      "unsteady_flamelets": 14529,
+      "equilibrium_tail_0D": 5760,
+      "vitiated_ignition": 47605,
+      "burnt_relaxation": 7961
+    },
+    "T_range_K": [
+      299.9999999996482,
+      2203.43113157936
+    ],
+    "flamelets": {
+      "n": 40,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1338.0939793199793,
+        2205.563114607663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 299,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 10911.2,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 2,
+    "torch": "2.9.1",
+    "machine": "Linux x86_64",
+    "git_commit": "3558567"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9941736963111988,
+      "T_mae_K": 0.028322467061030917,
+      "T_max_err_K": 13.657939063462209,
+      "elemental_residual_max": 5.38681041033579e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 5.405405405405404,
+      "T_final_ml_K": 2193.9191864525296,
+      "T_final_cantera_K": 2198.3624332400177
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 3.652535784515475,
+      "max_abs_tau_err_pct": 6.666666666666665,
+      "mean_T_mae_manifold_K": 17.336146604866737,
+      "max_T_mae_manifold_K": 66.38342794261298,
+      "mean_nrmse_Y_pct": 0.36710659833708886,
+      "max_nrmse_Y_pct": 1.4882315268123583,
+      "cooled_mean_T_mae_K": 22.863038852612572,
+      "cooled_max_T_mae_K": 80.7678853969804,
+      "cooled_mean_nrmse_Y_pct": 1.5000047604018987,
+      "mixing_mean_T_mae_K": 22.329775818224746,
+      "mixing_max_T_mae_K": 76.85694921445227,
+      "mixing_mean_nrmse_Y_pct": 1.6488664695372834
+    },
+    "coverage_heldout_flamelets": 0.9837087691069992,
+    "export": {
+      "ood_flagged_validation": 0.002019731220383749,
+      "T_range_K": [
+        299.9999999996482,
+        2203.7987607548043
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "c431608947f8ba50784bb430547dde9df8694b6bfa119831ad9393601642d830",
+    "data_dir": "../data/openfoam_ood7",
+    "fluent_model_sha256": "c76554c88060368209e6a3017e0213c5fff13caa7f38bdb5394cd65b754c7b8c"
+  }
+}

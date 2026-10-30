@@ -21,7 +21,7 @@ def main(cfg):
     samples = stage_dir(cfg, "samples")
     parts = [load_npz(samples / "pairs_0d.npz"), load_npz(samples / "pairs_pasr.npz")]
     for extra in ("pairs_flamelet.npz", "pairs_recirc.npz", "pairs_unsteady.npz", "pairs_vitiated.npz",
-                  "pairs_relax.npz"):  # flame mode
+                  "pairs_relax.npz", "pairs_relax_lean.npz"):  # flame mode
         if (samples / extra).exists():
             parts.append(load_npz(samples / extra))
     data = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}

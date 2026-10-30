@@ -111,6 +111,8 @@ def main(cfg):
             vitiated_pairs(gas, cfg, seeds, rng)
         if p.get("burnt_relaxation"):
             relaxation_pairs(gas, cfg, seeds, rng)
+        if p.get("burnt_relaxation_lean"):
+            relaxation_pairs(gas, cfg, seeds, rng, "burnt_relaxation_lean", "pairs_relax_lean.npz")
         if cfg.get("unsteady_flamelets"):
             unsteady_pairs(cfg, seeds, rng)
 
@@ -246,7 +248,7 @@ PAIR_KEYS = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "
 RADICALS = ("H", "O", "OH", "HO2", "H2O2", "CH3", "HCO", "CH2", "CH2(S)", "CH3O", "CH2O")
 
 
-def relaxation_pairs(gas, cfg, seeds, rng):
+def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pairs_relax.npz"):
     """Regime 8: burnt gas relaxing to its equilibrium, the state most of a lit burner sits in.
 
     Products at Z (log-uniform in Z_range, a training flamelet's burnt state) lose a fraction psi of
@@ -257,7 +259,7 @@ def relaxation_pairs(gas, cfg, seeds, rng):
     one-step increments are tiny and the radical levels are orders of magnitude below the flame's, so
     a surrogate that never saw them can pump radicals into hot lean gas: those radicals then ignite
     any fuel mixed into it too early."""
-    v = cfg["pasr"]["burnt_relaxation"]
+    v = cfg["pasr"][key]
     dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
     strides = dt_strides(cfg, "pasr")
     k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
@@ -308,7 +310,7 @@ def relaxation_pairs(gas, cfg, seeds, rng):
                   f"T {T_in:.0f} K")
     arrays = {k: np.asarray(val) for k, val in out.items()}
     print(f"  {len(arrays['dt'])} burnt-relaxation pairs")
-    save_npz(stage_dir(cfg, "samples") / "pairs_relax.npz", **arrays)
+    save_npz(stage_dir(cfg, "samples") / out_name, **arrays)
 
 
 def _transient(job):
