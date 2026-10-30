@@ -67,6 +67,9 @@ from chemmanifold.io import base_parser, load_config, stage_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 FAMILIES = ["equilibrium", "cooled", "lean_hot", "vitiated", "partial", "flamelet"]
+# "indata": the states the model itself does not flag as outside its data at the start (all families).
+# In the OpenFOAM hybrid the flagged cells go to GA18, so its flame error comes from cells like these.
+GROUPS = ["all", "indata"] + FAMILIES
 RADICALS = ["OH", "H", "CO"]
 Y_FLOOR = 1e-12                       # radical levels below this are not compared in log space
 
@@ -419,7 +422,7 @@ def main(cfg, args):
     # per label (seed), mode and family; then mean and range over seeds per model
     per_seed = {}
     for (label, mode), g in df.groupby(["label", "mode"], sort=False):
-        per_seed.setdefault(label, {})[mode] = dict(all=summarize(g),
+        per_seed.setdefault(label, {})[mode] = dict(all=summarize(g), indata=summarize(g[g.ood_start == 0]),
                                                     **{f: summarize(gf) for f, gf in g.groupby("family", sort=False)})
     seeds_of = {}
     for label, name, seed, _ in specs:
@@ -429,7 +432,7 @@ def main(cfg, args):
         agg[name] = {}
         for mode in ("alone", "hybrid"):
             agg[name][mode] = {}
-            for fam in ["all"] + FAMILIES:
+            for fam in GROUPS:
                 vals = [per_seed[lb][mode].get(fam) for lb in labels if fam in per_seed[lb][mode]]
                 if not vals:
                     continue
@@ -456,7 +459,7 @@ def main(cfg, args):
         common = [n for n in agg if n in cfd.index]
         rows = []
         for mode in ("alone", "hybrid"):
-            for fam in ["all"] + FAMILIES:
+            for fam in GROUPS:
                 for k in HEADLINE + ["score", "ode_share", "failed"]:
                     x = [agg[n][mode].get(fam, {}).get(k, {}).get("mean", np.nan) for n in common]
                     if not np.isfinite(x).any():
@@ -508,6 +511,13 @@ def write_markdown(path, report, agg, cfd, args):
             L.append(f"| {n} | {a['states']['n']} | " + " | ".join(fmt(a[k], k) if k in a else "-" for k in cols + extra)
                      + " |")
         L.append("")
+    L += ["## States in each model's own data (surrogate alone, not flagged at the start)", "",
+          "| model | states | " + " | ".join(HEADLINE) + " |", "|---" * (len(HEADLINE) + 2) + "|"]
+    for n in sorted(agg, key=lambda n: agg[n]["alone"]["indata"]["dT_end"]["mean"]):
+        a = agg[n]["alone"]["indata"]
+        L.append(f"| {n} | {a['states']['mean']:.0f} | " + " | ".join(fmt(a[k], k) if k in a else "-" for k in HEADLINE)
+                 + " |")
+    L.append("")
     L += ["## Per family (surrogate alone, mean over seeds)", "",
           "| model | family | dT 10 ms | dT end | drift | inc T | inc OH | rad OH 1 ms | rad H 1 ms |",
           "|---|---|---|---|---|---|---|---|---|"]
@@ -527,7 +537,7 @@ def write_markdown(path, report, agg, cfd, args):
               f"{', '.join(report['cfd_check']['models'])}) between the benchmark metric and the CFD column. "
               "+1 = same order. With 9 models |rho| > 0.68 is significant at 5 %.", "",
               "| mode | family | metric | " + " | ".join(c[4:] for c in rcols) + " |", "|---" * (3 + len(rcols)) + "|"]
-        show = rows[(rows.family == "all") | (rows.metric == "score")]
+        show = rows[rows.family.isin(["all", "indata"])]
         for _, r in show.iterrows():
             L.append(f"| {r['mode']} | {r['family']} | {r['metric']} | " +
                      " | ".join("-" if not np.isfinite(r[c]) else f"{r[c]:+.2f}" for c in rcols) + " |")
