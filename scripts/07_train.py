@@ -31,8 +31,9 @@ Composite loss (Eq. 44), all terms computed per batch:
 
 Warm start: `training.init_from` (a parent model.pt, with preprocess.scalers_from set to the
 parent's scalers.json so the units match) starts from the parent network instead of from the
-identity map; use fewer epochs and a lower lr_max. `training.patience` stops when the validation
-loss has not improved for that many epochs. `--seed` sets the training seed (weights, batches,
+identity map; use fewer epochs, a lower lr_max (and `pct_start`, the OneCycle warm-up share) and
+a weaker pushforward noise. `training.patience` stops when the validation loss has not improved for
+that many epochs after the noise is off; the parent is the epoch-0 checkpoint to beat. `--seed` sets the training seed (weights, batches,
 noise; the data stay those of the config's seed) and `--tag` names the output 06_models/<arch>_<tag>,
 so several seeds of one configuration live side by side.
 """
@@ -192,7 +193,8 @@ def main(cfg, arch, seed=None, tag=None):
     bs, E = tc["batch_size"], tc["epochs"]
     steps = (n_train + bs - 1) // bs
     opt = torch.optim.AdamW(model.net.parameters(), lr=tc["lr_max"], weight_decay=tc["weight_decay"])
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=tc["lr_max"], total_steps=E * steps)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=tc["lr_max"], total_steps=E * steps,
+                                                pct_start=float(tc.get("pct_start", 0.3)))
     w = tc["loss_weights"]
     rl = cfg.get("rollout_loss")
     seg = None
@@ -206,9 +208,17 @@ def main(cfg, arch, seed=None, tag=None):
               f"from epoch {int(rl.get('start_frac', 0.0) * E) + 1}")
 
     out_dir = stage_dir(cfg, "models", model_dir_name(arch, tag))
-    patience = int(tc.get("patience", 0))
+    patience = int(tc.get("patience", 0))   # counted once the pushforward noise is off: while it is on,
+    noise_off = int(np.ceil(tc["noise_end_frac"] * E))   # the clean validation loss is 2-3x higher
     t_start, started = time.time(), datetime.now(timezone.utc)
     hist, best, best_epoch = [], np.inf, 0
+    if tc.get("init_from"):   # the parent is the checkpoint to beat: if nothing improves on it, keep it
+        model.eval()
+        with torch.no_grad():
+            best = float(batch_losses(model, val, A, sigma_dT, w, tc["equil_threshold"], 0.0, rel)[0])
+        state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
+        torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": 0}, out_dir / "model.pt")
+        print(f"  parent validation loss {best:.5f} (epoch 0)")
     n_params = sum(p.numel() for p in model.net.parameters())
     print(f"  {arch}: {n_params} parameters, latent d={d}, {n_train} train pairs, {E} epochs, "
           f"network on {device}, {torch.get_num_threads()} CPU threads")
@@ -247,7 +257,7 @@ def main(cfg, arch, seed=None, tag=None):
             state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
             torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": e},
                        out_dir / "model.pt")
-        elif rolling and patience and e - best_epoch >= patience:
+        elif rolling and patience and alpha == 0 and e - max(best_epoch, noise_off) >= patience:
             print(f"  early stop at epoch {e}: no validation improvement since epoch {best_epoch}")
             break
         if e == 1 or e % 5 == 0 or e == E:

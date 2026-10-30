@@ -202,13 +202,14 @@ model:
 
 training:
   init_from: ../data/ood7_parent/06_models/resnet_film/model.pt   # warm start from ood7
-  epochs: 60                        # 300 from scratch (~3 h); the parent is already near the optimum
-  patience: 15                      # stop after 15 epochs without validation improvement
+  epochs: 40                        # 300 from scratch (~3 h); the parent is already near the optimum
+  patience: 8                       # stop after 8 epochs without validation improvement (noise off)
   batch_size: 512
-  lr_max: 5.0e-4                    # 2e-3 from scratch; lower so the warm start is not thrown away
+  lr_max: 1.0e-4                    # 2e-3 from scratch; 5e-4 threw the parent away
+  pct_start: 0.05                   # short OneCycle warm-up
   weight_decay: 1.0e-5
   noise_amp: 0.005                  # 0.015 from scratch; full noise again would undo the parent
-  noise_end_frac: 0.7
+  noise_end_frac: 0.5               # noise on for the first 20 epochs, then 20 clean ones
   loss_weights: {inc: 1.0, mass: 1.0, T: 1.0, equil: 0.1, ae: 1.0, rad: 0.02, fp: 0.05}
                                     # rad, fp: the ood7 parent has L_rad ~0.14, L_fp ~0.03 against
                                     # L_inc ~0.0014, and OH increments ~1000x the true ones in regime 8
