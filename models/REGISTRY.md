@@ -23,7 +23,7 @@ To identify the model a Fluent run used, compare the sha256 of its `chemmanifold
 | [`burner_openfoam_ood3-resnet_film-20261029-2a81d9b8`](#burner_openfoam_ood3-resnet_film-20261029-2a81d9b8) | superseded | 2026-10-29 | 171,903 | 12 | 0.30 | 46.6 | 24.2 | 8.8 | 97.9% |
 | [`burner_openfoam_ood4-resnet_film-20261029-aa9de94d`](#burner_openfoam_ood4-resnet_film-20261029-aa9de94d) | candidate | 2026-10-29 | 203,472 | 12 | 0.29 | 10.6 | 40.0 | 12.5 | 98.4% |
 | [`burner_openfoam_ood5-resnet_film-20261030-169ce73c`](#burner_openfoam_ood5-resnet_film-20261030-169ce73c) | discarded | 2026-10-30 | 160,494 | 12 | 0.03 | 15.9 | 8.3 | 86.6 | 98.3% |
-| [`burner_openfoam_ood6-resnet_film-20261030-e591e3d9`](#burner_openfoam_ood6-resnet_film-20261030-e591e3d9) | candidate | 2026-10-30 | 181,799 | 12 | 0.03 | 18.6 | 22.7 | 24.2 | 98.3% |
+| [`burner_openfoam_ood6-resnet_film-20261030-e591e3d9`](#burner_openfoam_ood6-resnet_film-20261030-e591e3d9) | superseded | 2026-10-30 | 181,799 | 12 | 0.03 | 18.6 | 22.7 | 24.2 | 98.3% |
 
 ## h2_air_premixed-resnet_film-20261021-nofile
 
@@ -491,7 +491,9 @@ Fluent file sha256: `b7f04cd6d3990e92c3d326d03063caafa119d3bcbaa2c9b2bd96c1904a3
 
 ## burner_openfoam_ood6-resnet_film-20261030-e591e3d9
 
-Config `burner_openfoam_ood6.yaml`, resnet_film, trained 2026-10-30T04:27:03+00:00, status **candidate**.
+Config `burner_openfoam_ood6.yaml`, resnet_film, trained 2026-10-30T04:27:03+00:00, status **superseded**.
+
+- 2026-10-30: 2026-10-30 OOD loop iter 6 (hybrid hyb6, 47.5 ms; CFD only as diagnostic): GA18 1.1%, flame-zone mean |dT| vs DI 7 K at 25 ms but drifting cold to 23 K at 40-47.5 ms (ood1: 4-6 K); early nozzle ignition +313 K at 2.5 ms (cause: radicals pumped into the hot lean start gas, see ood7). Certification: T1 0.03 K, tau +2.7%, cooled 22.7 K, mixing 24.2 K.
 
 | Exploration | |
 |---|---|

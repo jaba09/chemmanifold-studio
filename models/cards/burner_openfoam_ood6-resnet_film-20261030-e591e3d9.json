@@ -3,8 +3,10 @@
   "config": "burner_openfoam_ood6.yaml",
   "arch": "resnet_film",
   "trained_utc": "2026-10-30T04:27:03+00:00",
-  "status": "candidate",
-  "notes": [],
+  "status": "superseded",
+  "notes": [
+    "2026-10-30: 2026-10-30 OOD loop iter 6 (hybrid hyb6, 47.5 ms; CFD only as diagnostic): GA18 1.1%, flame-zone mean |dT| vs DI 7 K at 25 ms but drifting cold to 23 K at 40-47.5 ms (ood1: 4-6 K); early nozzle ignition +313 K at 2.5 ms (cause: radicals pumped into the hot lean start gas, see ood7). Certification: T1 0.03 K, tau +2.7%, cooled 22.7 K, mixing 24.2 K."
+  ],
   "exploration": {
     "mechanism": "mechanisms/ga18.yaml",
     "fuel": "CH4:1.0",
