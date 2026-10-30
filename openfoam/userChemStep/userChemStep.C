@@ -20,6 +20,8 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     map_(this->nSpecie(), -1),
     oodFallback_(coeffsDict_.getOrDefault<bool>("oodFallback", false)),
     odeAbove_(coeffsDict_.getOrDefault<scalar>("odeAbove", GREAT)),
+    odeInduction_(coeffsDict_.getOrDefault<scalarList>("odeInduction", scalarList())),
+    iFuel_(-1), iO2_(-1), nInduction_(0),
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
     nFallback_(0),
@@ -31,6 +33,16 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     dtHist_(2*80, 0)
 {
     for (label b=0; b<6; b++) nFlag_[b] = 0;
+    forAll(this->specieThermo(), i)
+    {
+        if (this->specieThermo()[i].name() == "CH4") iFuel_ = i;
+        if (this->specieThermo()[i].name() == "O2") iO2_ = i;
+    }
+    if (odeInduction_.size() && (odeInduction_.size() != 4 || iFuel_ < 0 || iO2_ < 0))
+    {
+        FatalErrorInFunction
+            << "odeInduction needs (T_lo T_hi Y_CH4 Y_O2) and species CH4, O2" << exit(FatalError);
+    }
     cm_default_options(&options_);
     fileName modelFile;
     if (!coeffsDict_.readIfPresent("model", modelFile))
@@ -212,13 +224,14 @@ void Foam::userChemStep<ChemistryModel>::report() const
     Pout<< "userChemStep: " << nCalls_ << " calls, " << nAdvanced_
         << " advanced, " << nFrozen_ << " frozen, OOD " << nOOD_
         << " (" << (nAdvanced_ ? 100.0*nOOD_/nAdvanced_ : 0.0)
-        << " % of advanced), ODE fallback " << nFallback_ << ", invalid " << nInvalid_ << ", dt capped " << nCapped_
+        << " % of advanced), ODE fallback " << nFallback_ << " (induction " << nInduction_ << "), invalid " << nInvalid_ << ", dt capped " << nCapped_
         << ", dt " << dtMin_ << "-" << dtMax_ << " s; OOD by check: T "
         << nFlag_[0] << ", T|Z " << nFlag_[1] << ", p " << nFlag_[2]
         << ", species " << nFlag_[3] << ", manifold " << nFlag_[4]
         << ", data " << nFlag_[5] << endl;
     nCalls_ = nAdvanced_ = nFrozen_ = nOOD_ = nInvalid_ = nCapped_ = 0;
     nFallback_ = 0;
+    nInduction_ = 0;
     for (label b=0; b<6; b++) nFlag_[b] = 0;
     dtMin_ = GREAT;
     dtMax_ = 0;
@@ -360,11 +373,14 @@ void Foam::userChemStep<ChemistryModel>::solve
         }
         cm_info info{};     // cm_ood only sets the OOD bits it finds
         cm_ood(model_, &options_, Y, T, p, &info);
-        if ((info.flags & CM_OOD_ANY) || T >= odeAbove_)
+        const bool induction = odeInduction_.size() && T >= odeInduction_[0] && T < odeInduction_[1]
+            && Y_[iFuel_] > odeInduction_[2] && Y_[iO2_] > odeInduction_[3];
+        if ((info.flags & CM_OOD_ANY) || T >= odeAbove_ || induction)
         {
             nCalls_++;
             nAdvanced_++;
-            nOOD_++;
+            if (info.flags & CM_OOD_ANY) nOOD_++;
+            else if (induction) nInduction_++;
             nFallback_++;
             for (label b=0; b<6; b++)
             {

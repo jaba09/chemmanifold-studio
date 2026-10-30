@@ -36,7 +36,7 @@ from chemmanifold.io import base_parser, load_config, stage_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 REG_DIR = ROOT / "models"
-REGIME_NAMES = {0: "reactor_0D", 1: "PaSR", 2: "flamelet_states", 3: "wall_cooled_0D", 4: "recirculation", 5: "unsteady_flamelets", 6: "equilibrium_tail_0D", 7: "vitiated_ignition"}
+REGIME_NAMES = {0: "reactor_0D", 1: "PaSR", 2: "flamelet_states", 3: "wall_cooled_0D", 4: "recirculation", 5: "unsteady_flamelets", 6: "equilibrium_tail_0D", 7: "vitiated_ignition", 8: "burnt_relaxation"}
 STATUSES = ("candidate", "in-fluent", "superseded", "discarded")
 
 

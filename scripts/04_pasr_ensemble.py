@@ -22,6 +22,11 @@ flame mode:    fresh = stream mixture at Z (cold mixing line), burnt = the state
                With `pasr.vitiated_ignition` it writes 03_samples/pairs_vitiated.npz (regime 7): an inlet
                stream mixed with hot products of another mixture fraction, followed through ignition.
 
+               With `pasr.burnt_relaxation` it writes 03_samples/pairs_relax.npz (regime 8): burnt gas
+               near its equilibrium (adiabatic or with a heat-loss fraction), started either at the
+               HP equilibrium with the radical pool scaled by a random factor or at the cooled frozen
+               composition, and followed while the radicals relax, picked uniformly in log time.
+
 Reads  01_envelope/initial_conditions.csv (regime 1 rows).
 Writes 03_samples/pairs_pasr.npz with the same layout as pairs_0d.npz (regime = 1),
        03_samples/pairs_recirc.npz (regime 4, with pasr.recirculation),
@@ -104,6 +109,8 @@ def main(cfg):
             recirculation_pairs(gas, cfg, seeds, rng)
         if p.get("vitiated_ignition"):
             vitiated_pairs(gas, cfg, seeds, rng)
+        if p.get("burnt_relaxation"):
+            relaxation_pairs(gas, cfg, seeds, rng)
         if cfg.get("unsteady_flamelets"):
             unsteady_pairs(cfg, seeds, rng)
 
@@ -234,6 +241,74 @@ def vitiated_pairs(gas, cfg, seeds, rng):
 
 
 PAIR_KEYS = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")
+
+
+RADICALS = ("H", "O", "OH", "HO2", "H2O2", "CH3", "HCO", "CH2", "CH2(S)", "CH3O", "CH2O")
+
+
+def relaxation_pairs(gas, cfg, seeds, rng):
+    """Regime 8: burnt gas relaxing to its equilibrium, the state most of a lit burner sits in.
+
+    Products at Z (log-uniform in Z_range, a training flamelet's burnt state) lose a fraction psi of
+    their largest heat loss (psi uniform in [0, psi_max]). Half of the cases start at the HP
+    equilibrium of that enthalpy with every radical scaled by 10^u (u uniform in +-radical_decades),
+    the other half at the cooled frozen composition; the 0D reactor then runs for t_max at dt_base and
+    n_pick states, log-uniform in time, are paired at the strides of the dt range. Near equilibrium the
+    one-step increments are tiny and the radical levels are orders of magnitude below the flame's, so
+    a surrogate that never saw them can pump radicals into hot lean gas: those radicals then ignite
+    any fuel mixed into it too early."""
+    v = cfg["pasr"]["burnt_relaxation"]
+    dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
+    strides = dt_strides(cfg, "pasr")
+    k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
+    n_max = int(round(v.get("t_max", 0.02) / dt_base))
+    rad = [gas.species_index(r) for r in RADICALS if r in gas.species_names]
+    out = {k: [] for k in PAIR_KEYS}
+    lo, hi = np.log10(v.get("Z_range", [0.005, 0.3]))
+    for e in range(v["n"]):
+        Z = float(10 ** rng.uniform(lo, hi))
+        j = int(rng.choice(seeds.train_ids))
+        psi = rng.uniform(0.0, v.get("psi_max", 0.5))
+        Y, h = seeds.burnt(Z, j)
+        h = h + heat_loss(gas, Y, h, psi, seeds.P, T_wall)
+        from_eq = e % 2 == 0
+        try:
+            gas.HPY = h, seeds.P, Y
+            if from_eq:
+                gas.equilibrate("HP")
+                Y = gas.Y.copy()
+                u = rng.uniform(-1, 1) * v.get("radical_decades", 1.0)
+                Y[rad] *= 10 ** u
+                Y = Y / Y.sum()
+                gas.HPY = h, seeds.P, Y
+            if gas.T < v.get("T_min", 800.0):
+                continue
+            _, net = const_p_reactor(gas)
+            times, Ys = [0.0], [gas.Y.copy()]
+            for n in range(1, n_max + 1):
+                net.advance(n * dt_base)
+                times.append(n * dt_base)
+                Ys.append(gas.Y.copy())
+        except Exception:
+            continue
+        Ys = np.array(Ys)
+        t_pick = 10 ** rng.uniform(np.log10(dt_base), np.log10(n_max * dt_base), size=v.get("n_pick", 60))
+        idx = np.unique(np.concatenate([[0], np.searchsorted(times, t_pick).clip(0, n_max)]))
+        for i in idx:
+            for st in rng.choice(strides, size=k_dt, replace=False):
+                gas.HPY = h, seeds.P, Ys[i]
+                T_in = gas.T
+                advance_const_p(gas, float(st) * dt_base)
+                for k, val in (("Y_in", Ys[i]), ("T_in", T_in), ("P_in", seeds.P), ("h_in", h),
+                               ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
+                               ("regime", 8), ("traj_id", e)):
+                    out[k].append(val)
+        if e % 20 == 0:
+            print(f"  relaxation {e:03d}: Z={Z:.3f} psi={psi:.2f} {'equilibrium x10^u radicals' if from_eq else 'frozen'} "
+                  f"T {T_in:.0f} K")
+    arrays = {k: np.asarray(val) for k, val in out.items()}
+    print(f"  {len(arrays['dt'])} burnt-relaxation pairs")
+    save_npz(stage_dir(cfg, "samples") / "pairs_relax.npz", **arrays)
 
 
 def _transient(job):

@@ -38,7 +38,9 @@ Usage
             oodFallback  false;  // true: integrate OOD cells with the ODE solver
                                  //  (odeCoeffs) instead of the surrogate
             odeAbove     1e30;   // K; with oodFallback, cells at or above this T also go to
-        }                        //  the ODE solver (a test of the coupling: 0 = all cells)
+                                 //  the ODE solver (a test of the coupling: 0 = all cells)
+            odeInduction ();     // (T_lo T_hi Y_CH4 Y_O2): with oodFallback, flammable unburnt
+        }                        //  gas (T in [T_lo, T_hi), CH4 and O2 above) goes to the ODE solver
 
 SourceFiles
     userChemStep.C
@@ -88,6 +90,15 @@ class userChemStep
 
         //- With oodFallback: cells at or above this T go to the ODE solver too
         scalar odeAbove_;
+
+        //- With oodFallback: (T_lo T_hi Y_CH4 Y_O2) of the induction cells sent to the ODE solver
+        scalarList odeInduction_;
+
+        //- OpenFOAM indices of CH4 and O2 (-1 if absent)
+        label iFuel_, iO2_;
+
+        //- Cells sent to the ODE solver by odeInduction since the last report
+        mutable label nInduction_;
 
         //- Print the counters every this many calls (0 = never)
         label reportCalls_;
