@@ -48,7 +48,7 @@ def main(cfg, arch):
         by_regime={name: dict(r2_dy=r2(v_pred[ds["regime"][m] == g], v_true[ds["regime"][m] == g]),
                               T_mae_K=float(np.mean(np.abs(T_err[ds["regime"][m] == g]))))
                    for g, name in ((0, "reactor_0D"), (1, "PaSR_micromixing"), (2, "flamelet_states"),
-                                     (3, "wall_cooled_0D"), (4, "recirculation_mixing"))
+                                     (3, "wall_cooled_0D"), (4, "recirculation_mixing"), (5, "unsteady_flamelets"), (6, "equilibrium_tail_0D"), (7, "vitiated_ignition"), (8, "burnt_relaxation"), (9, "equilibrium_fixed_point"))
                    if np.any(ds["regime"][m] == g)},
     )
     out_dir = stage_dir(cfg, "eval", arch)

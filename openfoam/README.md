@@ -100,8 +100,33 @@ userChemStepCoeffs
     checkOOD     true;
     reportCalls  1000000;    // print counters (advanced, OOD by check, ...) every this many calls
     oodFallback  false;      // true: cells outside the training data are integrated with the
-}                            //  ODE solver of odeCoeffs (hybrid surrogate + direct integration)
+                             //  ODE solver of odeCoeffs (hybrid surrogate + direct integration)
+    odeAbove     1e30;       // K; with oodFallback, cells at or above this T also go to the ODE
+                             //  solver: 0 checks the coupling (must match DI), a T sweep shows
+                             //  which temperature band of surrogate cells causes an error
+    shadowEvery  0;          // > 0: shadow DI check every this many time steps (see below)
+    shadowPerBin 2;
+}
 ```
+
+Shadow DI check (comparison only): with `shadowEvery N` (time steps, 0 = off) and `shadowPerBin n`
+(default 2), every N-th step up to n cells per bin of (100 K band of T from 600 K, Z band around
+Z_st, inside/outside the training data) are advanced both by the surrogate and by GA18 (`odeCoeffs`)
+from the same state; T, p, Z, the OOD flags and ratios, the input Y and both outputs go to
+`shadowDI.csv` (in each processor directory). The cell keeps its normal update. The bins spread the
+checks over the thermochemical space rather than over the (mostly cold) cells.
+`tools/shadow_report.py <run> <out>` summarizes them per Z band, T band and time.
+
+**Chemistry time-step histogram.** Fluent's stiff laminar finite-rate chemistry advances each cell over
+tau_cell = 0.1 min(t_convection, t_diffusion); OpenFOAM calls the chemistry with the flow time step.
+The function object in `tauCellHistogram/` (build with its `Allwmake`, then `#include
+"tauCellHistogram"` in `functions`, see `quemadorUnico/system/tauCellHistogram`) computes the
+equivalent tau_cell per cell (t_conv = dx/|U|, t_diff = dx^2 (alpha + alphat)/rho, dx the in-plane
+cell size of the wedge) and keeps only a histogram of log10(tau_cell) and of the dt the chemistry
+got, for cold and hot cells, in `postProcessing/tauCellHistogram/histogram.csv`. It sets the
+`dt_range` of the next exploration (`chemmanifold.io.dt_strides`), so the surrogate learns
+Y(t + dt) in one jump over the time steps the solver asks for. userChemStep also writes the
+histogram of the dt it was called with (`dtHistogram.csv`, per processor).
 
 The surrogate is trained on dt = 10-40 us, so run it transient (`ddt Euler`, `deltaT 4e-5`), not
 with local time stepping, whose chemistry dt reaches 10 ms.

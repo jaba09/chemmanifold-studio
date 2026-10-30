@@ -1,0 +1,123 @@
+{
+  "id": "burner_openfoam_ood1-resnet_film-20261029-28839ebf",
+  "config": "burner_openfoam_ood1.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-29T13:14:08+00:00",
+  "status": "candidate",
+  "notes": [
+    "2026-10-29: OOD loop iteration 2, OpenFOAM hybrid from the lit start, 25 ms: GA18 0.1-0.4% (2.6% in the first 2.5 ms); flame zone mean |dT| vs DI 39 (5 ms) -> 5 K (25 ms), bias -4 K; early ignition of the CH4 jet in hot lean products (+300 K at 2.5 ms, inside the sampled space); shadow DI median one-step increment error T 14%, OH 14%, CO 7%"
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "24 ensembles x 300",
+    "strain_range": "flamelets 0.004 kg/m2/s x 1.5^k, up to 26",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 139907,
+    "n_val": 19078,
+    "pairs_by_regime": {
+      "reactor_0D": 79311,
+      "PaSR": 22400,
+      "flamelet_states": 10642,
+      "wall_cooled_0D": 19143,
+      "recirculation": 7200,
+      "unsteady_flamelets": 14529,
+      "equilibrium_tail_0D": 5760
+    },
+    "T_range_K": [
+      299.9999999996482,
+      2203.43113157936
+    ],
+    "flamelets": {
+      "n": 40,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1338.0939793199793,
+        2205.563114607663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 296,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 9122.4,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 4,
+    "torch": "2.9.1",
+    "machine": "Linux x86_64",
+    "git_commit": "8e0af70"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9952236826474478,
+      "T_mae_K": 0.030107915711428467,
+      "T_max_err_K": 28.12630841239661,
+      "elemental_residual_max": 5.445054526586293e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 10.810810810810809,
+      "T_final_ml_K": 2196.967988745998,
+      "T_final_cantera_K": 2198.3624332400177
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 9.858761533888435,
+      "max_abs_tau_err_pct": 12.820512820512825,
+      "mean_T_mae_manifold_K": 59.831348818919395,
+      "max_T_mae_manifold_K": 363.27658717873237,
+      "mean_nrmse_Y_pct": 0.3774908738641828,
+      "max_nrmse_Y_pct": 1.5737280850670867,
+      "cooled_mean_T_mae_K": 8.282199187472086,
+      "cooled_max_T_mae_K": 29.981627648220975,
+      "cooled_mean_nrmse_Y_pct": 0.3785669197805032,
+      "mixing_mean_T_mae_K": 6.219918212022321,
+      "mixing_max_T_mae_K": 28.25738063066689,
+      "mixing_mean_nrmse_Y_pct": 0.5239642276168466
+    },
+    "coverage_heldout_flamelets": 0.9835076427996782,
+    "export": {
+      "ood_flagged_validation": 0.0026732361882796938,
+      "T_range_K": [
+        299.99999999976893,
+        2204.0125623963886
+      ],
+      "dt_range_s": [
+        1e-05,
+        4e-05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "28839ebf42a87b8ee8f2fa2963d5968b35b01968fae02e4cf961c469d3be0e53",
+    "data_dir": "../data/openfoam_ood1",
+    "fluent_model_sha256": "15e91a5bdb5b861ca6cedbaf9a7d44c13da3eda5a9d0d6325b84a37bf6301c32"
+  }
+}

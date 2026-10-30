@@ -1,0 +1,12 @@
+// Histogram of Fluent's chemistry time scale per cell, tau_cell = 0.1 min(t_conv, t_diff), and of
+// the dt the chemistry actually gets (counts only). Build ../../tauCellHistogram (./Allwmake) and add
+//     #include "tauCellHistogram"
+// inside functions {} of system/controlDict. Output: postProcessing/tauCellHistogram/histogram.csv
+tauCellHistogram
+{
+    type        tauCellHistogram;
+    libs        (tauCellHistogram);
+    every       50;         // time steps between samples
+    wedgeAngle  5;          // deg (the case is a 5 deg wedge)
+    Tsplit      600;        // K, cold / hot columns
+}

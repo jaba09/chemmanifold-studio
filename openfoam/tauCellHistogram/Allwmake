@@ -1,0 +1,4 @@
+#!/bin/sh
+# Builds libtauCellHistogram (function object tauCellHistogram)
+cd "${0%/*}" || exit 1
+wmake libso

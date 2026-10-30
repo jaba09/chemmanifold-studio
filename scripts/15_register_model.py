@@ -36,7 +36,7 @@ from chemmanifold.io import base_parser, load_config, stage_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 REG_DIR = ROOT / "models"
-REGIME_NAMES = {0: "reactor_0D", 1: "PaSR", 2: "flamelet_states", 3: "wall_cooled_0D", 4: "recirculation"}
+REGIME_NAMES = {0: "reactor_0D", 1: "PaSR", 2: "flamelet_states", 3: "wall_cooled_0D", 4: "recirculation", 5: "unsteady_flamelets", 6: "equilibrium_tail_0D", 7: "vitiated_ignition", 8: "burnt_relaxation", 9: "equilibrium_fixed_point"}
 STATUSES = ("candidate", "in-fluent", "superseded", "discarded")
 
 
@@ -69,6 +69,11 @@ def exploration(cfg):
                             else f"dh in {pasr.get('dh_range')}"),
             recirculation=(f"{pasr['recirculation']['n_ensembles']} ensembles x {pasr['recirculation']['n_particles']}"
                            if pasr.get("recirculation") else "none"),
+            strain_range=(f"flamelets {fl.get('mdot_fuel_min')} kg/m2/s x {fl.get('strain_factor')}^k, "
+                          f"up to {fl.get('max_flamelets')}"),
+            unsteady_flamelets=(", ".join(f"{k} {v['n']}" for k, v in cfg["unsteady_flamelets"].items()
+                                          if isinstance(v, dict) and v.get("n"))
+                                if cfg.get("unsteady_flamelets") else "none"),
         )
     rl = cfg.get("rollout_loss")
     out["rollout_loss"] = (f"{rl['steps']} x {rl['stride']} dt_base, weight {rl['weight']}" if rl and rl.get("weight")

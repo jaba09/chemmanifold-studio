@@ -1,0 +1,124 @@
+{
+  "id": "burner_openfoam_ood4-resnet_film-20261029-aa9de94d",
+  "config": "burner_openfoam_ood4.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-10-29T23:40:16+00:00",
+  "status": "candidate",
+  "notes": [
+    "2026-10-30: 2026-10-30 OOD loop iter 5 (hybrid hyb5, lit start, GA18 in OOD cells, 25 ms; CFD only as diagnostic): GA18 share 9.6% (data/landmark and species checks), flame-zone mean |dT| vs DI 14.5 K at 25 ms (bias -13 K), early nozzle ignition +298 K at 2.5 ms still there. Stage 17 on DI nozzle cells (2.5 ms): drift 42 K (ood1 92 K). Certification: T1 0.29 K, tau +2.7%, envelope 10.6 K, cooled 40 K."
+  ],
+  "exploration": {
+    "mechanism": "mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 160,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "40 ensembles x 400",
+    "strain_range": "flamelets 0.004 kg/m2/s x 1.5^k, up to 26",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 203472,
+    "n_val": 27746,
+    "pairs_by_regime": {
+      "reactor_0D": 105900,
+      "PaSR": 22400,
+      "flamelet_states": 10642,
+      "wall_cooled_0D": 19209,
+      "recirculation": 16000,
+      "unsteady_flamelets": 15433,
+      "equilibrium_tail_0D": 5760,
+      "vitiated_ignition": 35874
+    },
+    "T_range_K": [
+      299.9999999996482,
+      2218.5785037925166
+    ],
+    "flamelets": {
+      "n": 40,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1338.0939793199793,
+        2205.563114607663
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": 12,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 294,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 10482.8,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 2,
+    "torch": "2.9.1",
+    "machine": "Linux x86_64",
+    "git_commit": "e082ec5"
+  },
+  "certification": {
+    "tier1": {
+      "r2_dy": 0.9922236407962154,
+      "T_mae_K": 0.29128521311383015,
+      "T_max_err_K": 722.4225651677825,
+      "elemental_residual_max": 5.554685373085572e-16
+    },
+    "tier2": {
+      "tau_ign_err_pct": 2.702702702702695,
+      "T_final_ml_K": 2197.1915749918167,
+      "T_final_cantera_K": 2198.3624332400177
+    },
+    "tier3": {
+      "arch": "resnet_film",
+      "n_cases": 9,
+      "mean_abs_tau_err_pct": 5.2139419779013645,
+      "max_abs_tau_err_pct": 6.666666666666665,
+      "mean_T_mae_manifold_K": 10.578009877982515,
+      "max_T_mae_manifold_K": 37.85734128176354,
+      "mean_nrmse_Y_pct": 0.3231684444234192,
+      "max_nrmse_Y_pct": 0.8781672800027847,
+      "cooled_mean_T_mae_K": 40.011133595964,
+      "cooled_max_T_mae_K": 335.593588933092,
+      "cooled_mean_nrmse_Y_pct": 2.141588862627932,
+      "mixing_mean_T_mae_K": 12.487198168519683,
+      "mixing_max_T_mae_K": 37.55829756659185,
+      "mixing_mean_nrmse_Y_pct": 0.9023309041773748
+    },
+    "coverage_heldout_flamelets": 0.9839098954143202,
+    "export": {
+      "ood_flagged_validation": 0.002270597563612773,
+      "T_range_K": [
+        299.9999999996482,
+        2244.2096062637147
+      ],
+      "dt_range_s": [
+        1.0000000000000002e-06,
+        0.05
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "aa9de94d0375fbff8e78657c45501747c07b1736926c4d592826454c11c7c30b",
+    "data_dir": "../data/openfoam_ood4",
+    "fluent_model_sha256": "99fcf54ed0c47d1c0a21b0db5021ffd05ec89b42c1ecf57cb94efb9087fe3b1f"
+  }
+}

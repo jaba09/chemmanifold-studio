@@ -19,22 +19,59 @@ flame mode:    fresh = stream mixture at Z (cold mixing line), burnt = the state
                aged adiabatically for a log-uniform time in `age_range` (the reaction that follows the
                mixing), then advanced by one stride for the pair.
 
+               With `pasr.vitiated_ignition` it writes 03_samples/pairs_vitiated.npz (regime 7): an inlet
+               stream mixed with hot products of another mixture fraction, followed through ignition.
+
+               With `pasr.burnt_relaxation` it writes 03_samples/pairs_relax.npz (regime 8): burnt gas
+               near its equilibrium (adiabatic or with a heat-loss fraction), started either at the
+               HP equilibrium with the radical pool scaled by a random factor or at the cooled frozen
+               composition, and followed while the radicals relax, picked uniformly in log time.
+               `pasr.burnt_relaxation_lean` and `pasr.equilibrium_perturbed` are further sets of the same
+               regime (pairs_relax_lean.npz, pairs_eq_perturbed.npz); with `conserve_elements` the
+               perturbed radicals keep the element and enthalpy content of the equilibrium state.
+
+               With `pasr.equilibrium_fixed_point` it writes 03_samples/pairs_equil.npz (regime 9): HP
+               equilibrium states on a (Z, heat loss) grid paired with themselves at every time step,
+               F(Y_eq, dt) = Y_eq, so the surrogate learns that equilibrium is a fixed point.
+
 Reads  01_envelope/initial_conditions.csv (regime 1 rows).
 Writes 03_samples/pairs_pasr.npz with the same layout as pairs_0d.npz (regime = 1),
-       03_samples/pairs_recirc.npz (regime 4, with pasr.recirculation).
+       03_samples/pairs_recirc.npz (regime 4, with pasr.recirculation),
+       03_samples/pairs_unsteady.npz (regime 5, with unsteady_flamelets) and
+       03_samples/unsteady_flamelets.json (one line per transient: kind, strain, tau_q, T_max path).
 """
+
+from multiprocessing import Pool
 
 import numpy as np
 import pandas as pd
 
-from chemmanifold.chemistry import advance_const_p, make_gas, set_unburnt
-from chemmanifold.flame import FlameSeeds, case_label, heat_loss, is_flame, wall_temperature, z_from_unit
-from chemmanifold.io import base_parser, load_config, require, save_npz, stage_dir
+from chemmanifold.chemistry import advance_const_p, const_p_reactor, make_gas, set_unburnt
+from chemmanifold.flame import (FlameSeeds, case_label, flame_pressure, heat_loss, is_flame, wall_temperature,
+                               z_from_unit)
+from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
+from chemmanifold.unsteady_flamelet import ZFlamelet, chi_profile, run_transient, z_grid
 
 
-def main(cfg):
+EXTRA_SETS = {   # flame-mode sets that `--only` can (re)generate alone, e.g. to add them to an existing dataset
+    "burnt_relaxation": lambda g, c, s, r: relaxation_pairs(g, c, s, r),
+    "burnt_relaxation_lean": lambda g, c, s, r: relaxation_pairs(g, c, s, r, "burnt_relaxation_lean",
+                                                                 "pairs_relax_lean.npz"),
+    "equilibrium_perturbed": lambda g, c, s, r: relaxation_pairs(g, c, s, r, "equilibrium_perturbed",
+                                                                 "pairs_eq_perturbed.npz"),
+    "equilibrium_fixed_point": lambda g, c, s, r: equilibrium_pairs(g, c, s, r),
+}
+
+
+def main(cfg, only=None):
     p = cfg["pasr"]
     rng = np.random.default_rng(cfg["seed"] + 1)
+    if only:
+        gas = make_gas(cfg)
+        seeds = FlameSeeds(gas, cfg)
+        for i, name in enumerate(only):
+            EXTRA_SETS[name](gas, cfg, seeds, np.random.default_rng(cfg["seed"] + 101 + i))
+        return
     dt_base = cfg["autoignition"]["dt_base"]
     ics = pd.read_csv(require(stage_dir(cfg, "envelope") / "initial_conditions.csv"))
     ics = ics[ics.regime == 1]
@@ -60,7 +97,7 @@ def main(cfg):
             dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
             if p.get("dh_scale_by_alpha", False):
                 dh = dh * alpha
-        strides = rng.choice(p["strides"], size=p["n_particles"])
+        strides = rng.choice(dt_strides(cfg, "pasr"), size=p["n_particles"])
         for i, (a, d, s) in enumerate(zip(alpha, dh, strides)):
             Y_mix = (1 - a) * Y_fresh + a * Y_burnt                        # Eq. 16
             h_mix = (1 - a) * h_fresh + a * h_burnt
@@ -93,6 +130,18 @@ def main(cfg):
         flamelet_pairs(gas, cfg, seeds, rng)
         if p.get("recirculation"):
             recirculation_pairs(gas, cfg, seeds, rng)
+        if p.get("vitiated_ignition"):
+            vitiated_pairs(gas, cfg, seeds, rng)
+        if p.get("burnt_relaxation"):
+            relaxation_pairs(gas, cfg, seeds, rng)
+        if p.get("burnt_relaxation_lean"):
+            relaxation_pairs(gas, cfg, seeds, rng, "burnt_relaxation_lean", "pairs_relax_lean.npz")
+        if p.get("equilibrium_perturbed"):
+            relaxation_pairs(gas, cfg, seeds, rng, "equilibrium_perturbed", "pairs_eq_perturbed.npz")
+        if p.get("equilibrium_fixed_point"):
+            equilibrium_pairs(gas, cfg, seeds, rng)
+        if cfg.get("unsteady_flamelets"):
+            unsteady_pairs(cfg, seeds, rng)
 
 
 def flamelet_pairs(gas, cfg, seeds, rng):
@@ -100,7 +149,7 @@ def flamelet_pairs(gas, cfg, seeds, rng):
     out = {k: [] for k in ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")}
     for j in seeds.train_ids:
         for Y, h in zip(*seeds.raw[j]):
-            s = rng.choice(p["strides"])
+            s = rng.choice(dt_strides(cfg, "pasr"))
             gas.HPY = h, seeds.P, Y
             Y_in, T_in = gas.Y.copy(), gas.T
             advance_const_p(gas, s * dt_base)
@@ -130,7 +179,7 @@ def recirculation_pairs(gas, cfg, seeds, rng):
         beta = rng.beta(rc.get("beta_a", 0.7), rc.get("beta_b", 0.7), size=rc["n_particles"])
         aged = rng.uniform(size=rc["n_particles"]) < rc.get("f_aged", 0.5)
         ages = 10.0 ** rng.uniform(lo, hi, size=rc["n_particles"])
-        strides = rng.choice(p["strides"], size=rc["n_particles"])
+        strides = rng.choice(dt_strides(cfg, "pasr"), size=rc["n_particles"])
         for b, a, age, s in zip(beta, aged, ages, strides):
             try:
                 gas.HPY = b * h_p + (1 - b) * h_s, seeds.P, b * Y_p + (1 - b) * Y_s
@@ -152,5 +201,332 @@ def recirculation_pairs(gas, cfg, seeds, rng):
     save_npz(stage_dir(cfg, "samples") / "pairs_recirc.npz", **arrays)
 
 
+def vitiated_pairs(gas, cfg, seeds, rng):
+    """Regime 7: ignition of an inlet stream mixed with hot products of ANOTHER mixture fraction.
+
+    Lean products (Z_p below Z_st, still holding O2) mixed into the fuel jet, or rich products mixed
+    into the air, the stream's share log-uniform in stream_share (mostly hot mixtures that can ignite);
+    the 0D reactor is then
+    followed through its induction and ignition (at dt_base, up to t_max) and n_pick states, chosen by
+    arc length in (Box-Cox Y, T) like stage 3, are paired at random time steps of the dt range.
+    The recirculation ensembles (regime 4) only take single aged points of such mixtures, mostly at
+    product shares around 0.5; this follows the whole induction, which is where a CH4 jet entering
+    hot vitiated gas spends its first milliseconds."""
+    from chemmanifold.boxcox import boxcox
+    v = cfg["pasr"]["vitiated_ignition"]
+    dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
+    Z_st = float(load_json(stage_dir(cfg, "flame") / "flame_reference.json")["Z_st"])
+    strides = dt_strides(cfg, "pasr")
+    k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
+    n_max = int(round(v.get("t_max", 0.02) / dt_base))
+    out = {k: [] for k in PAIR_KEYS}
+    for e in range(v["n"]):
+        into_fuel = e % 2 == 0
+        lo, hi = (v.get("Z_p_lean", [0.02, Z_st]) if into_fuel else v.get("Z_p_rich", [Z_st, 0.3]))
+        Z_p = float(10 ** rng.uniform(np.log10(lo), np.log10(hi)))
+        j = int(rng.choice(seeds.train_ids))
+        psi_p = rng.uniform(0.0, v.get("psi_max", 0.3))
+        Y_p, h_p = seeds.burnt(Z_p, j)
+        h_p = h_p + heat_loss(gas, Y_p, h_p, psi_p, seeds.P, T_wall)
+        Y_s, h_s, Z_s = (seeds.Yf, seeds.hf, 1.0) if into_fuel else (seeds.Yo, seeds.ho, 0.0)
+        share = 10 ** rng.uniform(*np.log10(v.get("stream_share", [0.003, 0.5])))
+        b = 1.0 - share                              # mostly hot products with a little cold stream
+        Z = b * Z_p + share * Z_s
+        try:
+            gas.HPY = b * h_p + (1 - b) * h_s, seeds.P, b * Y_p + (1 - b) * Y_s
+            _, net = const_p_reactor(gas)
+            Ys, Ts, hs = [gas.Y.copy()], [gas.T], gas.enthalpy_mass
+            for n in range(1, n_max + 1):
+                net.advance(n * dt_base)
+                Ys.append(gas.Y.copy())
+                Ts.append(gas.T)
+                if n > 50 and abs(Ts[-1] - Ts[-2]) < 0.02 and Ts[-1] - Ts[0] > 200:
+                    break
+        except Exception:
+            continue
+        Ys, Ts = np.array(Ys), np.array(Ts)
+        phi = np.hstack([boxcox(Ys, cfg["arclength"]["boxcox_lambda"]),
+                         10.0 * ((Ts - Ts.min()) / max(np.ptp(Ts), 1e-12))[:, None]])
+        w = np.linalg.norm(np.diff(phi, axis=0), axis=1)
+        w = w + 0.05 * w.mean()
+        # time_share of the picks uniform in time: arc length alone leaves the slow induction, where the
+        # state barely moves but a small source error accumulates into an early ignition, nearly empty
+        p_pick = (1 - v.get("time_share", 0.0)) * w / w.sum() + v.get("time_share", 0.0) / len(w)
+        idx = rng.choice(len(w), size=min(v.get("n_pick", 150), len(w)), replace=False, p=p_pick)
+        for i in idx:
+            for st in rng.choice(strides, size=k_dt, replace=False):
+                gas.HPY = hs, seeds.P, Ys[i]
+                T_in = gas.T
+                advance_const_p(gas, float(st) * dt_base)
+                for k, val in (("Y_in", Ys[i]), ("T_in", T_in), ("P_in", seeds.P), ("h_in", hs),
+                               ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
+                               ("regime", 7), ("traj_id", e)):
+                    out[k].append(val)
+        print(f"  vitiated {e:03d}: products Z_p={Z_p:.3f} psi={psi_p:.2f} into {'fuel' if into_fuel else 'air'} "
+              f"-> Z={Z:.3f}, T {Ts[0]:.0f} -> {Ts[-1]:.0f} K in {len(Ts) - 1} steps")
+    arrays = {k: np.asarray(val) for k, val in out.items()}
+    print(f"  {len(arrays['dt'])} vitiated-ignition pairs")
+    save_npz(stage_dir(cfg, "samples") / "pairs_vitiated.npz", **arrays)
+
+
+PAIR_KEYS = ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")
+
+
+RADICALS = ("H", "O", "OH", "HO2", "H2O2", "CH3", "HCO", "CH2", "CH2(S)", "CH3O", "CH2O")
+
+
+def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pairs_relax.npz"):
+    """Regime 8: burnt gas relaxing to its equilibrium, the state most of a lit burner sits in.
+
+    Products at Z (log-uniform in Z_range, a training flamelet's burnt state) lose a fraction psi of
+    their largest heat loss (psi uniform in [0, psi_max]). Half of the cases start at the HP
+    equilibrium of that enthalpy with every radical scaled by 10^u (u uniform in +-radical_decades),
+    the other half at the cooled frozen composition; the 0D reactor then runs for t_max at dt_base and
+    n_pick states, log-uniform in time, are paired at the strides of the dt range. Near equilibrium the
+    one-step increments are tiny and the radical levels are orders of magnitude below the flame's, so
+    a surrogate that never saw them can pump radicals into hot lean gas: those radicals then ignite
+    any fuel mixed into it too early."""
+    v = cfg["pasr"][key]
+    dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
+    strides = dt_strides(cfg, "pasr")
+    k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
+    n_max = int(round(v.get("t_max", 0.02) / dt_base))
+    rad = [gas.species_index(r) for r in v.get("radicals", RADICALS) if r in gas.species_names]
+    out = {k: [] for k in PAIR_KEYS}
+    lo, hi = np.log10(v.get("Z_range", [0.005, 0.3]))
+    for e in range(v["n"]):
+        Z = float(10 ** rng.uniform(lo, hi))
+        j = int(rng.choice(seeds.train_ids))
+        psi = rng.uniform(0.0, v.get("psi_max", 0.5))
+        Y, h = seeds.burnt(Z, j)
+        h = h + heat_loss(gas, Y, h, psi, seeds.P, T_wall)
+        from_eq = e % 2 == 0 or v.get("all_from_equilibrium", False)
+        try:
+            gas.HPY = h, seeds.P, Y
+            if from_eq:
+                gas.equilibrate("HP")
+                Y = gas.Y.copy()
+                u = rng.uniform(-1, 1, size=len(rad) if v.get("independent_radicals") else 1)
+                Y = perturb_radicals(gas, Y, rad, 10 ** (u * v.get("radical_decades", 1.0)),
+                                     v.get("conserve_elements", False))
+                if Y is None:
+                    continue
+                gas.HPY = h, seeds.P, Y
+            if gas.T < v.get("T_min", 800.0):
+                continue
+            _, net = const_p_reactor(gas)
+            times, Ys = [0.0], [gas.Y.copy()]
+            for n in range(1, n_max + 1):
+                net.advance(n * dt_base)
+                times.append(n * dt_base)
+                Ys.append(gas.Y.copy())
+        except Exception:
+            continue
+        Ys = np.array(Ys)
+        t_pick = 10 ** rng.uniform(np.log10(dt_base), np.log10(n_max * dt_base), size=v.get("n_pick", 60))
+        idx = np.unique(np.concatenate([[0], np.searchsorted(times, t_pick).clip(0, n_max)]))
+        for i in idx:
+            for st in rng.choice(strides, size=k_dt, replace=False):
+                gas.HPY = h, seeds.P, Ys[i]
+                T_in = gas.T
+                advance_const_p(gas, float(st) * dt_base)
+                for k, val in (("Y_in", Ys[i]), ("T_in", T_in), ("P_in", seeds.P), ("h_in", h),
+                               ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
+                               ("regime", 8), ("traj_id", e)):
+                    out[k].append(val)
+        if e % 20 == 0:
+            print(f"  relaxation {e:03d}: Z={Z:.3f} psi={psi:.2f} {'equilibrium x10^u radicals' if from_eq else 'frozen'} "
+                  f"T {T_in:.0f} K")
+    arrays = {k: np.asarray(val) for k, val in out.items()}
+    print(f"  {len(arrays['dt'])} burnt-relaxation pairs")
+    save_npz(stage_dir(cfg, "samples") / out_name, **arrays)
+
+
+MAJORS = ("N2", "O2", "H2O", "CO2", "CO", "H2", "CH4")
+
+
+def perturb_radicals(gas, Y, rad, factor, conserve_elements=False):
+    """Multiply the radicals `rad` of Y by `factor` (one value or one per radical). Without
+    conserve_elements the result is renormalized (the old behaviour, which shifts the element ratios
+    slightly). With it, the majors absorb the change in each element's mass, with the least change
+    relative to their own size, so the state keeps the elements (and, with h unchanged, the enthalpy)
+    of Y and only the split between radicals and majors moves; None if a major would go negative."""
+    Y = Y.copy()
+    Y0 = Y.copy()
+    Y[rad] *= factor
+    if not conserve_elements:
+        return Y / Y.sum()
+    from chemmanifold.chemistry import element_mass_matrix
+    A = element_mass_matrix(gas)
+    maj = [gas.species_index(s) for s in MAJORS if s in gas.species_names]
+    dE = A @ (Y - Y0)                                  # element mass the radicals gained (or lost)
+    Am, w = A[:, maj], np.maximum(Y0[maj], 1e-12)
+    rows = np.abs(Am).sum(1) > 0
+    Am, dE = Am[rows], dE[rows]
+    M = (Am * w) @ Am.T
+    dYm = -w * (Am.T @ np.linalg.lstsq(M, dE, rcond=None)[0])  # weighted least-norm correction
+    Y[maj] += dYm
+    if Y.min() < -1e-14:
+        return None
+    return np.clip(Y, 0.0, None)
+
+
+def equilibrium_pairs(gas, cfg, seeds, rng):
+    """Regime 9: chemical equilibrium as a fixed point of the chemistry step.
+
+    The burnt state of a training flamelet at Z (n_z values log-spaced over Z_range, i.e. lean to rich)
+    loses a fraction psi (n_psi values over [0, psi_max]) of its largest heat loss, and is brought to
+    its HP equilibrium at that enthalpy. States with T in T_range are paired with themselves at every
+    time step of the dt range: Y(t + dt) = Y(t), T(t + dt) = T(t). They are exact Cantera equilibria,
+    so the pair is the true answer of any integrator, and the network sees, at every Z and heat loss,
+    the state where the chemistry must stop. `n_flamelets` training flamelets give the elements and
+    enthalpy (their burnt states differ by strain); `jitter` spreads Z and psi randomly inside each
+    grid cell."""
+    v = cfg["pasr"]["equilibrium_fixed_point"]
+    dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
+    strides = dt_strides(cfg, "pasr")
+    T_lo, T_hi = v.get("T_range", [450.0, 2300.0])
+    zs = np.geomspace(*v.get("Z_range", [0.005, 0.3]), int(v.get("n_z", 40)))
+    psis = np.linspace(0.0, v.get("psi_max", 0.85), int(v.get("n_psi", 12)))
+    fl = rng.choice(seeds.train_ids, size=min(int(v.get("n_flamelets", 3)), len(seeds.train_ids)), replace=False)
+    jit = v.get("jitter", True)
+    dlz = np.log(zs[1] / zs[0]) if len(zs) > 1 else 0.0
+    dpsi = psis[1] - psis[0] if len(psis) > 1 else 0.0
+    out = {k: [] for k in PAIR_KEYS}
+    e = 0
+    for j in fl:
+        for Z0 in zs:
+            for psi0 in psis:
+                Z = float(Z0 * np.exp(rng.uniform(-0.5, 0.5) * dlz)) if jit else float(Z0)
+                psi = float(np.clip(psi0 + (rng.uniform(-0.5, 0.5) * dpsi if jit else 0.0), 0.0, 0.99))
+                Y, h = seeds.burnt(Z, j)
+                h = h + heat_loss(gas, Y, h, psi, seeds.P, T_wall)
+                try:
+                    gas.HPY = h, seeds.P, Y
+                    gas.equilibrate("HP")
+                except Exception:
+                    continue
+                if not T_lo <= gas.T <= T_hi:
+                    continue
+                for st in strides:
+                    for k, val in (("Y_in", gas.Y.copy()), ("T_in", gas.T), ("P_in", seeds.P), ("h_in", h),
+                                   ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
+                                   ("regime", 9), ("traj_id", e)):
+                        out[k].append(val)
+                e += 1
+    arrays = {k: np.asarray(val) for k, val in out.items()}
+    print(f"  {e} equilibrium states, T {arrays['T_in'].min():.0f}-{arrays['T_in'].max():.0f} K, "
+          f"{len(arrays['dt'])} fixed-point pairs")
+    save_npz(stage_dir(cfg, "samples") / "pairs_equil.npz", **arrays)
+
+
+def _transient(job):
+    """Worker: run one unsteady-flamelet transient and pair a subsample of its snapshot states."""
+    cfg, j = job["cfg"], job
+    uf, dt_base, strides = cfg["unsteady_flamelets"], cfg["autoignition"]["dt_base"], dt_strides(cfg, "pasr")
+    gas = make_gas(cfg)
+    rng = np.random.default_rng(j["seed"])
+    P, T_wall = flame_pressure(cfg), wall_temperature(cfg)
+    fl = ZFlamelet(gas, j["Z"], j["Y0"], j["h0"], P, T_wall)
+    snaps, Tmax = run_transient(gas, fl, j["kind"], j["a"], j["t_end"], j["tau_q"],
+                                tuple(uf.get("dt_bounds", [1e-5, 1e-3])), uf.get("n_snapshots", 30),
+                                uf.get("max_steps", 2000))
+    out = {k: [] for k in PAIR_KEYS}
+    n_pts, T_min = uf.get("points_per_snapshot", 25), uf.get("T_min_pair", 350.0)
+    for _, Ys, hs in snaps:
+        cand = []
+        for i in range(1, len(fl.Z) - 1):
+            gas.HPY = hs[i], P, Ys[i]
+            if gas.T > T_min:
+                cand.append(i)
+        for i in rng.permutation(cand)[:n_pts]:
+            s = float(rng.choice(strides))
+            gas.HPY = hs[i], P, Ys[i]
+            Y_in, T_in = gas.Y.copy(), gas.T
+            try:
+                advance_const_p(gas, s * dt_base)
+            except Exception:
+                continue
+            for k, v in (("Y_in", Y_in), ("T_in", T_in), ("P_in", P), ("h_in", hs[i]), ("dt", s * dt_base),
+                         ("Y_out", gas.Y.copy()), ("T_out", gas.T), ("regime", 5), ("traj_id", j["id"])):
+                out[k].append(v)
+    return dict(pairs=out, Tmax=Tmax, t=[t for t, _, _ in snaps], snaps=snaps if j["kind"] == "extinction" else [])
+
+
+def unsteady_pairs(cfg, seeds, rng):
+    uf = cfg["unsteady_flamelets"]
+    ref = load_json(stage_dir(cfg, "flame") / "flame_reference.json")
+    strains = np.asarray(ref["strain_rates"])
+    a_ext = float(strains.max())                       # highest burning strain of the sweep
+    Z = z_grid(uf.get("n_z", 61), ref["Z_st"])
+    t_chi, t_max = uf.get("t_end_chi", 3.0), uf.get("t_max", 0.2)
+    chi_st = lambda a: float(chi_profile(np.array([ref["Z_st"]]), a)[0])
+    train = np.asarray(seeds.train_ids)
+
+    def start(jf):
+        Zg, Yg, hg = seeds.flamelets[int(jf)]
+        Y = np.column_stack([np.interp(Z, Zg, Yg[:, k]) for k in range(Yg.shape[1])])
+        return Y / Y.sum(1, keepdims=True), np.interp(Z, Zg, hg)
+
+    def job(kind, jf, a, tau_q=0.0, Y0=None, h0=None):
+        if Y0 is None:
+            Y0, h0 = start(jf)
+        t_end = 3.0 * tau_q if kind == "cooling" else t_chi / max(chi_st(a), 1e-9)
+        return dict(cfg=cfg, kind=kind, flamelet=int(jf), a=float(a), tau_q=float(tau_q), Z=Z, Y0=Y0, h0=h0,
+                    t_end=min(t_end, t_max), seed=int(rng.integers(2**31)))
+
+    def logu(lo, hi):
+        return float(10 ** rng.uniform(np.log10(lo), np.log10(hi)))
+
+    upper = train[strains[train] >= np.median(strains[train])]
+    jobs = []
+    for _ in range(uf.get("extinction", {}).get("n", 0)):
+        jobs.append(job("extinction", rng.choice(upper), a_ext * rng.uniform(*uf["extinction"].get("factor", [1.3, 4.0]))))
+    for _ in range(uf.get("cooling", {}).get("n", 0)):
+        jf = rng.choice(train)
+        jobs.append(job("cooling", jf, strains[jf], logu(*uf["cooling"].get("tau_q_range", [1e-3, 0.1]))))
+    for _ in range(uf.get("strain_jump", {}).get("n", 0)):
+        jf = rng.choice(train)
+        a = min(strains[jf] * logu(*uf["strain_jump"].get("factor", [0.1, 10.0])), a_ext)
+        jobs.append(job("strain_jump", jf, a))
+    for i, jb in enumerate(jobs):
+        jb["id"] = i
+    workers = int(uf.get("workers", 4))
+    with Pool(workers) as pool:
+        res = pool.map(_transient, jobs, chunksize=1)
+
+    # reignition: partially extinguished snapshots (T_max in reignition.T_range) relaxed at low strain
+    rj = uf.get("reignition", {})
+    pool_snaps = [s for r in res for s, T in zip(r["snaps"], r["Tmax"]) if rj and rj.get("T_range", [1100, 1700])[0]
+                  <= T <= rj.get("T_range", [1100, 1700])[1]]
+    jobs2 = []
+    for _ in range(rj.get("n", 0) if pool_snaps else 0):
+        _, Y0, h0 = pool_snaps[int(rng.integers(len(pool_snaps)))]
+        jobs2.append(job("reignition", -1, a_ext * logu(*rj.get("strain_factor", [0.01, 0.3])), Y0=Y0, h0=h0))
+    for i, jb in enumerate(jobs2):
+        jb["id"] = len(jobs) + i
+    if jobs2:
+        with Pool(workers) as pool:
+            res += pool.map(_transient, jobs2, chunksize=1)
+    jobs += jobs2
+
+    arrays = {k: np.asarray([v for r in res for v in r["pairs"][k]]) for k in PAIR_KEYS}
+    log = []
+    for jb, r in zip(jobs, res):
+        log.append(dict(id=jb["id"], kind=jb["kind"], flamelet=jb["flamelet"], strain=jb["a"], tau_q=jb["tau_q"],
+                        t_end=r["t"][-1] if r["t"] else 0.0, T_max=r["Tmax"], n_pairs=len(r["pairs"]["dt"])))
+        print(f"  unsteady {jb['id']:03d} {jb['kind']:<11s} a={jb['a']:8.1f} 1/s tau_q={jb['tau_q']:.2g}s "
+              f"T_max {r['Tmax'][0] if r['Tmax'] else 0:.0f}->{r['Tmax'][-1] if r['Tmax'] else 0:.0f} K "
+              f"pairs={len(r['pairs']['dt'])}")
+    print(f"  {len(arrays['dt'])} unsteady-flamelet pairs from {len(jobs)} transients "
+          f"(highest burning strain {a_ext:.0f} 1/s, {len(Z)} Z points)")
+    save_npz(stage_dir(cfg, "samples") / "pairs_unsteady.npz", **arrays)
+    save_json(stage_dir(cfg, "samples") / "unsteady_flamelets.json", log)
+
+
 if __name__ == "__main__":
-    main(load_config(base_parser(__doc__).parse_args().config))
+    ap = base_parser(__doc__)
+    ap.add_argument("--only", nargs="+", choices=sorted(EXTRA_SETS),
+                    help="generate only these flame-mode sets (the other 03_samples files are left as they are)")
+    a = ap.parse_args()
+    main(load_config(a.config), a.only)
