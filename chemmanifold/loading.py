@@ -18,9 +18,15 @@ def latent_dim(cfg):
     return int(d)
 
 
-def load_surrogate(cfg, arch):
+def model_dir_name(arch, tag=None):
+    """06_models/<arch> or, for one of several trainings of a config (07_train.py --tag), <arch>_<tag>."""
+    return arch + (f"_{tag}" if tag else "")
+
+
+def load_surrogate(cfg, arch, tag=None):
     scalers, thermo = load_prep(cfg)
-    ckpt = torch.load(require(stage_dir(cfg, "models", arch) / "model.pt"), map_location="cpu", weights_only=False)
+    ckpt = torch.load(require(stage_dir(cfg, "models", model_dir_name(arch, tag)) / "model.pt"), map_location="cpu",
+                      weights_only=False)
     model = build_surrogate(arch, cfg, scalers, thermo, latent_dim=ckpt["latent_dim"])
     model.load_state_dict(ckpt["state_dict"])
     model.eval()

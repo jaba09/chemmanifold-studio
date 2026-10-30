@@ -14,7 +14,7 @@ import numpy as np
 from chemmanifold.chemistry import make_gas
 from chemmanifold.fluent import advance, build_ood_tables, ood, write_model_file, write_test_vectors
 from chemmanifold.io import base_parser, load_config, load_npz, save_json, stage_dir
-from chemmanifold.loading import latent_dim, load_surrogate
+from chemmanifold.loading import latent_dim, load_surrogate, model_dir_name
 
 
 def test_cases(ds, rng, n=60):
@@ -32,15 +32,15 @@ def test_cases(ds, rng, n=60):
     return dict(Y=Y, T=T, P=P, dt=dt)
 
 
-def main(cfg, arch, n_landmarks, quantile):
-    model, scalers, thermo = load_surrogate(cfg, arch)
+def main(cfg, arch, n_landmarks, quantile, tag=None):
+    model, scalers, thermo = load_surrogate(cfg, arch, tag)
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
     gas = make_gas(cfg)
     dt_range = (float(ds["dt"].min()), float(ds["dt"].max()))
     tables = build_ood_tables(gas, cfg, scalers, ds, vq_K=int(cfg["manifold"]["n_clusters"]),
                               vq_d=latent_dim(cfg), n_landmarks=n_landmarks, quantile=quantile,
                               seed=cfg["seed"])
-    out = stage_dir(cfg, "fluent", arch)
+    out = stage_dir(cfg, "fluent", model_dir_name(arch, tag))
     write_model_file(out / "chemmanifold_model.txt", arch, model, scalers, thermo, cfg, dt_range, tables)
     print(f"  wrote {out / 'chemmanifold_model.txt'}")
 
@@ -86,5 +86,6 @@ if __name__ == "__main__":
     p.add_argument("--landmarks", type=int, default=1024, help="training-state landmarks for the distance check")
     p.add_argument("--quantile", type=float, default=0.999,
                    help="training quantile of the manifold/data distances used as the OOD threshold")
+    p.add_argument("--tag", default=None, help="export 06_models/<arch>_<tag> (07_train.py --tag)")
     a = p.parse_args()
-    main(load_config(a.config), a.arch, a.landmarks, a.quantile)
+    main(load_config(a.config), a.arch, a.landmarks, a.quantile, a.tag)
