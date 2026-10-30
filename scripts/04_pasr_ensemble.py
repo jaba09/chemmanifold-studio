@@ -213,7 +213,10 @@ def vitiated_pairs(gas, cfg, seeds, rng):
                          10.0 * ((Ts - Ts.min()) / max(np.ptp(Ts), 1e-12))[:, None]])
         w = np.linalg.norm(np.diff(phi, axis=0), axis=1)
         w = w + 0.05 * w.mean()
-        idx = rng.choice(len(w), size=min(v.get("n_pick", 150), len(w)), replace=False, p=w / w.sum())
+        # time_share of the picks uniform in time: arc length alone leaves the slow induction, where the
+        # state barely moves but a small source error accumulates into an early ignition, nearly empty
+        p_pick = (1 - v.get("time_share", 0.0)) * w / w.sum() + v.get("time_share", 0.0) / len(w)
+        idx = rng.choice(len(w), size=min(v.get("n_pick", 150), len(w)), replace=False, p=p_pick)
         for i in idx:
             for st in rng.choice(strides, size=k_dt, replace=False):
                 gas.HPY = hs, seeds.P, Ys[i]

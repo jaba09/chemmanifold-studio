@@ -21,6 +21,8 @@ To identify the model a Fluent run used, compare the sha256 of its `chemmanifold
 | [`burner_openfoam_ood1-resnet_film-20261029-28839ebf`](#burner_openfoam_ood1-resnet_film-20261029-28839ebf) | candidate | 2026-10-29 | 139,907 | 12 | 0.03 | 59.8 | 8.3 | 6.2 | 98.4% |
 | [`burner_openfoam_ood2-resnet_film-20261029-167b59ca`](#burner_openfoam_ood2-resnet_film-20261029-167b59ca) | superseded | 2026-10-29 | 171,903 | 12 | 0.43 | 83.2 | 14.0 | 21.2 | 97.9% |
 | [`burner_openfoam_ood3-resnet_film-20261029-2a81d9b8`](#burner_openfoam_ood3-resnet_film-20261029-2a81d9b8) | superseded | 2026-10-29 | 171,903 | 12 | 0.30 | 46.6 | 24.2 | 8.8 | 97.9% |
+| [`burner_openfoam_ood4-resnet_film-20261029-aa9de94d`](#burner_openfoam_ood4-resnet_film-20261029-aa9de94d) | candidate | 2026-10-29 | 203,472 | 12 | 0.29 | 10.6 | 40.0 | 12.5 | 98.4% |
+| [`burner_openfoam_ood5-resnet_film-20261030-169ce73c`](#burner_openfoam_ood5-resnet_film-20261030-169ce73c) | candidate | 2026-10-30 | 160,494 | 12 | 0.03 | 15.9 | 8.3 | 86.6 | 98.3% |
 
 ## h2_air_premixed-resnet_film-20261021-nofile
 
@@ -425,3 +427,61 @@ Flamelets: 40 (18 radiating), Z_st 0.0552, peak T 1338–2206 K.
 Training: latent d 12, hidden 192 x 3 blocks, best epoch 290 of 300, 182 min on 4 threads (Linux x86_64), git 48b7f62-dirty.
 Certification: Tier 1 R2 0.9880, T MAE 0.30 K; held-out flamelet coverage 97.9%; Tier 2 tau error +8%, final T 2193 K (Cantera 2198 K); Tier 3 mean |tau error| 7%, T MAE 46.6 K; cooled gas T MAE 24.2 K (max 182 K); mixing T MAE 8.8 K (max 36 K).
 Fluent file sha256: `0c0f036c0970c6363376d63e60a417a323a183957d114226918e851b1d0eed7b`.
+
+## burner_openfoam_ood4-resnet_film-20261029-aa9de94d
+
+Config `burner_openfoam_ood4.yaml`, resnet_film, trained 2026-10-29T23:40:16+00:00, status **candidate**.
+
+- 2026-10-30: 2026-10-30 OOD loop iter 5 (hybrid hyb5, lit start, GA18 in OOD cells, 25 ms; CFD only as diagnostic): GA18 share 9.6% (data/landmark and species checks), flame-zone mean |dT| vs DI 14.5 K at 25 ms (bias -13 K), early nozzle ignition +298 K at 2.5 ms still there. Stage 17 on DI nozzle cells (2.5 ms): drift 42 K (ood1 92 K). Certification: T1 0.29 K, tau +2.7%, envelope 10.6 K, cooled 40 K.
+
+| Exploration | |
+|---|---|
+| mechanism | mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 160 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 40 ensembles x 400 |
+| strain_range | flamelets 0.004 kg/m2/s x 1.5^k, up to 26 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 203,472 train / 27,746 validation pairs (reactor_0D 105,900, PaSR 22,400, flamelet_states 10,642, wall_cooled_0D 19,209, recirculation 16,000, unsteady_flamelets 15,433, equilibrium_tail_0D 5,760, vitiated_ignition 35,874).
+Flamelets: 40 (18 radiating), Z_st 0.0552, peak T 1338–2206 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 294 of 300, 175 min on 2 threads (Linux x86_64), git e082ec5.
+Certification: Tier 1 R2 0.9922, T MAE 0.29 K; held-out flamelet coverage 98.4%; Tier 2 tau error +3%, final T 2197 K (Cantera 2198 K); Tier 3 mean |tau error| 5%, T MAE 10.6 K; cooled gas T MAE 40.0 K (max 336 K); mixing T MAE 12.5 K (max 38 K).
+Fluent file sha256: `99fcf54ed0c47d1c0a21b0db5021ffd05ec89b42c1ecf57cb94efb9087fe3b1f`.
+
+## burner_openfoam_ood5-resnet_film-20261030-169ce73c
+
+Config `burner_openfoam_ood5.yaml`, resnet_film, trained 2026-10-30T01:03:57+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 160 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.004 kg/m2/s x 1.5^k, up to 26 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 160,494 train / 21,886 validation pairs (reactor_0D 79,311, PaSR 22,400, flamelet_states 10,642, wall_cooled_0D 19,143, recirculation 7,200, unsteady_flamelets 14,529, equilibrium_tail_0D 5,760, vitiated_ignition 23,395).
+Flamelets: 40 (18 radiating), Z_st 0.0552, peak T 1338–2206 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 294 of 300, 138 min on 2 threads (Linux x86_64), git e082ec5-dirty.
+Certification: Tier 1 R2 0.9951, T MAE 0.03 K; held-out flamelet coverage 98.3%; Tier 2 tau error +16%, final T 2195 K (Cantera 2198 K); Tier 3 mean |tau error| 11%, T MAE 15.9 K; cooled gas T MAE 8.3 K (max 28 K); mixing T MAE 86.6 K (max 503 K).
+Fluent file sha256: `b7f04cd6d3990e92c3d326d03063caafa119d3bcbaa2c9b2bd96c1904a34eb48`.
