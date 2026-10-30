@@ -587,6 +587,7 @@ Fluent file sha256: `f367e93d4b3f433de62e55ca967234076ef8159a2e77c16e446aeefd90d
 Config `burner_openfoam_ood8.yaml`, resnet_film, trained 2026-10-30T12:20:01+00:00, status **candidate**.
 
 - 2026-10-30: 2026-10-30 OOD loop iter 8 (CFD only as diagnostic): start-gas radicals now right (OH, H ~0.85x DI at 2.5 ms) but plain hybrid still ignites the nozzle early (+307 K at 2.5 ms, 115 cells); with userChemStep odeInduction (900 1700 1e-4 0.01) the 2.5 ms flame error is 10 K (max 38 K), GA18 0.3%. Certification: T1 0.02 K, tau +2.7%, cooled 8.5 K, mixing 99.5 K (max 580 K), envelope 7.6 K.
+- 2026-10-30: 2026-10-30 hybrid hyb8i = ood8 + odeInduction (900 1700 1e-4 0.01), lit start, 50 ms (CFD only as diagnostic): GA18 1.6% overall (0.3% at start rising to 2.8% at 50 ms), flame-zone mean |dT| vs DI 11 K at 2.5 ms, 6-11 K to 25 ms, 3.4 K at 47.5-50 ms; all hot cells 0.1-1.0 K, max <= 59 K; shadow DI one-step increment error T 8%, OH 4%, CO 4%. Best hybrid of the OOD loop so far.
 
 | Exploration | |
 |---|---|
