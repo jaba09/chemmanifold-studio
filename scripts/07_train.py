@@ -105,7 +105,7 @@ def rollout_loss(model, seg, idx, sigma_dT, sigma_dy=None):
 
 def main(cfg, arch):
     tc = cfg["training"]
-    torch.manual_seed(cfg["seed"])
+    torch.manual_seed(int(tc.get("seed", cfg["seed"])))   # training.seed: weights and batches only (train_seeds.py)
     if tc.get("threads", "auto") != "auto":
         torch.set_num_threads(int(tc["threads"]))
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
@@ -201,6 +201,7 @@ def main(cfg, arch):
     save_json(out_dir / "train_info.json", dict(
         started_utc=started.isoformat(timespec="seconds"), wall_time_s=round(time.time() - t_start, 1),
         config=str(Path(cfg["_config_path"]).name), git_commit=git_commit(), epochs=E, best_epoch=best_epoch,
+        training_seed=int(tc.get("seed", cfg["seed"])),
         best_val_loss=best, n_parameters=n_params, n_train_pairs=n_train, latent_dim=d, device=str(device),
         threads=torch.get_num_threads(), torch=torch.__version__, python=platform.python_version(),
         machine=f"{platform.system()} {platform.machine()}"))
