@@ -3,8 +3,10 @@
   "config": "iterml_iter2.yaml",
   "arch": "resnet_film",
   "trained_utc": "2026-11-01T15:04:42+00:00",
-  "status": "candidate",
-  "notes": [],
+  "status": "discarded",
+  "notes": [
+    "2026-11-01: trained with 0 new seeded pairs (cumulative cap bug), never evaluated"
+  ],
   "exploration": {
     "mechanism": "/home/user/chemmanifold-studio/mechanisms/ga18.yaml",
     "fuel": "CH4:1.0",

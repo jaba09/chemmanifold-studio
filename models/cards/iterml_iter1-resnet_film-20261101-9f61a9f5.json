@@ -4,7 +4,9 @@
   "arch": "resnet_film",
   "trained_utc": "2026-11-01T09:33:05+00:00",
   "status": "candidate",
-  "notes": [],
+  "notes": [
+    "2026-11-01: ITERML iteration 1: pure protocol 50 ms flame 3.3 K (25-50 ms), ignition 3.2 ms (0.6 ms late), CO x1.66; best ITERML model so far"
+  ],
   "exploration": {
     "mechanism": "/home/user/chemmanifold-studio/mechanisms/ga18.yaml",
     "fuel": "CH4:1.0",
