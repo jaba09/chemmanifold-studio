@@ -157,14 +157,18 @@ def flame_features(cfg, gas, Y, T, P):
     return Z, psi, c, r_oh, h
 
 
-def assign_regime(T, c, psi, r_oh, flags):
+def assign_regime(T, c, psi, r_oh, flags, Y_fuel=None, Y_o2=None):
     """10 PaSR (mixing between flame and streams, psi < 0, everything else),
-    11 relaxation (burnt, c >= 0.8, T >= 1200 K), 12 ignition (drift flag, or c < 0.3 at
-    900-1700 K), 13 cooling (psi > 0.5)."""
+    11 relaxation (burnt, c >= 0.8, T >= 1200 K), 12 ignition (drift flag, c < 0.3 at 900-1700 K,
+    or, since iteration 2, unburnt fuel AND oxygen (Y_CH4 > 1e-3, Y_O2 > 0.01) at 800-1700 K:
+    iteration 1 got 1 ignition seed in 7891 and ignited 0.6 ms late), 13 cooling (psi > 0.5)."""
     reg = np.full(len(T), 10, int)
     reg[(c >= 0.8) & (T >= 1200)] = 11
     reg[psi > 0.5] = 13
-    reg[((c < 0.3) & (T >= 900) & (T < 1700)) | np.array(["drift" in f for f in flags])] = 12
+    ign = ((c < 0.3) & (T >= 900) & (T < 1700)) | np.array(["drift" in f for f in flags])
+    if Y_fuel is not None:
+        ign |= (Y_fuel > 1e-3) & (Y_o2 > 0.01) & (T >= 800) & (T < 1700)
+    reg[ign] = 12
     return reg
 
 
@@ -239,7 +243,7 @@ def main(cfg, args):
 
     Z, psi, c, r_oh, h = flame_features(cfg, gas, Y, T, P)
     fl = flags[ids]
-    regime = assign_regime(T, c, psi, r_oh, fl)
+    regime = assign_regime(T, c, psi, r_oh, fl, Y[:, species.index("CH4")], Y[:, species.index("O2")])
     np.savez(out / "seeds.npz", Y=Y, T=T, P=P, h=h, dt=dt, Z=Z, psi=psi, c=c, r_OH=r_oh, regime=regime,
              reason=reason[ids], flags=fl.astype("U16"), weight=weight, step=df["step"].to_numpy()[ids],
              species=np.array(species))

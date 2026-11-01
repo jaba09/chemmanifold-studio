@@ -18,8 +18,8 @@ collect:                       # [A] collection run: hybrid (OOD and untrusted-b
   shadow_per_bin: 3            # ...cells per (T, Z, inside/OOD) bin (stratified, standing DI-check rule)
   cap_per_box: 1               # seeds kept per dedup grid box per rank (2 flooded the store in the test)
   sentinel: [900, 1700, 1.0e-4, 0.01]   # T_lo T_hi Y_CH4 Y_O2 of the induction cells watched
-  sentinel_every: 100
-  sentinel_per_step: 10        # per rank
+  sentinel_every: 25           # 100 in iteration 1 (31 sentinels, 1 drift; ignition 0.6 ms late)
+  sentinel_per_step: 20        # per rank
   stop:                        # inner stop, first that fires (checked every `check_s` seconds)
     check_s: 120
     min_seeds: 1500            # stored states (all ranks) before saturation may stop the run
