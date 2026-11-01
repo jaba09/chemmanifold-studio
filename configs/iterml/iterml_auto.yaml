@@ -1,0 +1,94 @@
+# ITERML AUTOMATIC settings (docs/ITERML-ROADMAP.md, section 11): the frozen rules of the fully
+# automatic loop, fixed BEFORE the run (2026-11-01). Nothing in here may change during the run:
+#   openfoam/iterml/iterml.py --settings configs/iterml/iterml_auto.yaml --root /opt/ofb/iterml_auto auto
+# Differences from iterml.yaml (the hand-steered development runs, iterations 1-3): no `parents` map
+# (the parent is always the best model so far, rules.accept), the generic error detector (every
+# species, floors relative to each species' own levels, stratified multi-step rollouts in every
+# T x Z bin) instead of the hand-set CO/OH floors, and the `rules` block.
+# openfoam/iterml/iterml.py reads it and writes each iteration's pipeline config from `base_config`
+# plus the overrides below. Iteration 0 is the a priori ood8 exploration and model.
+
+base_config: ../burner_openfoam_ood8.yaml       # relative to this file
+iter0:
+  data: /opt/ofb/iterml/data/iter0               # ood8 data (handoff-ood8: 00_flame, 03_samples, 04_prep, 06_models)
+  model_dir: /mnt/project-files/chemmanifold/benchmark/modelos/ood8   # its chemmanifold_model.txt
+base_case: /opt/ofb/iterml/base/base             # lit start, mesh, GA18 (protocolo-cfd/de-bucle-ood/caso_base.tgz)
+di_snapshots:                                    # DI reference CSVs (comparison only)
+  - /mnt/project-files/chemmanifold/protocolo-cfd/de-bucle-ood/snap_di
+  - /mnt/project-files/chemmanifold/protocolo-cfd/snap_di_ext
+n_procs: 4
+
+collect:                       # [A] collection run: hybrid (OOD and untrusted-bin cells on GA18)
+  t_end: 0.025                 # s; the flame phase is scored in [F]
+  shadow_every: 25             # steps between shadow DI checks...
+  shadow_per_bin: 3            # ...cells per (T, Z, inside/OOD) bin (stratified, standing DI-check rule)
+  cap_per_box: 1               # seeds kept per dedup grid box per rank (2 flooded the store in the test)
+  sentinel: [900, 1700, 1.0e-4, 0.01,    # T_lo T_hi Y_CH4 Y_O2 per range: induction cells, and (iteration 3)
+             600, 1100, -1.0, 0.05]     #  cooled lean gas, where iteration 2 made CO x100 DI
+  sentinel_every: 25           # 100 in iteration 1 (31 sentinels, 1 drift; ignition 0.6 ms late)
+  sentinel_per_step: 20        # per rank
+  stop:                        # inner stop, first that fires (checked every `check_s` seconds)
+    check_s: 120
+    min_seeds: 1500            # stored states (all ranks) before saturation may stop the run
+    saturation_window: 100     # steps
+    saturation: 0.02           # new grid boxes over the window < 2 % of all boxes
+    max_seeds: 15000            # raw stored states; the test run hit 6000 at 3 ms (one rank, untrusted bins)
+    ood_share: 0.10            # OOD cells / hot cells above this...
+    ood_steps: 50              # ...for this many consecutive steps: the model is lost
+
+seeds:                         # [B] scripts/19_iterml_seeds.py
+  T_abs: 1.0                   # shadow check fails if |T_ann - T_DI| > max(T_abs, rel |dT_DI|)
+  rel: 0.3
+  Y_abs: 5.0e-5                # same for OH, H, O, CO with max(Y_abs, rel |dY_DI|)
+  sentinel_steps: 100          # 25 in iterations 1-2: slow CO / ignition drift needs longer rollouts
+  generic: true                # automatic floors and multi-step rollouts (no hand-picked species floors)
+  generic_floor_frac: 1.0e-4   # species floor = this x its 99th percentile over the caught states...
+  generic_floor_abs: 1.0e-8    # ...but at least this
+  rollouts_per_bin: 4          # shadow-checked states rolled out per (T, Z) bin (plus every sentinel)
+  drift_species: [CO, OH, H, CH4]   # watched species = the scored ones (+ fuel, H); all species drift
+                               #  on CH3/H2O2 at 1000 steps (76-94 %), which says nothing
+  drift_ratio: 2.0             # drift if a watched species leaves x0.5-x2 of Cantera above its floor...
+  drift_T_generic: 10.0        # ...or T by more than max(10 K, 10 % of Cantera's own change)
+  drift_T: 50.0
+  drift_OH: 2.0
+  dedup_radius: 0.05           # x the model's landmark threshold
+
+seeded:                        # [C] stage 4 pasr.seeded (chemmanifold/seeded.py)
+  starts_per_seed: 3
+  radical_decades: 0.5
+  dpsi: 0.05
+  p_mix: 0.5
+  mix_share: [1.0e-3, 0.1]
+  n_pick: 25
+  t_max: {"10": 0.01, "11": 0.02, "12": 0.02, "13": 0.2}
+  ignition_share: [0.01, 0.5]
+  tau_q_range: [1.0e-3, 1.0]
+  pasr: {cluster: 12, particles: 48, stream_share: 0.15, tau_mix: [1.0e-4, 1.0e-2], steps: 60}
+  max_share: 0.35              # all seeded pairs (every iteration) <= 35 % of the training set
+  workers: 4
+
+train:                         # [D] warm start from the previous iteration (keeps iteration 0's scalers)
+  model: {latent_dim: 12}
+  training: {epochs: 40, patience: 8, lr_max: 1.0e-4, pct_start: 0.05, noise_amp: 0.005,
+             noise_end_frac: 0.5, threads: 4}
+  scratch_every: 0             # 0 = always warm start (iteration 3 is a warm start from iteration 1)
+  tags: ["", "s1"]             # two training seeds per iteration (seed noise vs real change)
+
+gate:                          # [E] offline benchmark (stage 18)
+  n_states: 40
+  seed_spread_K: 15            # alone dT_10ms may be worse than the parent's by at most this
+
+eval:                          # [F] CFD protocol v1, pure mode
+  t_end: 0.05
+  targets: {flame_dT: 5.0, drift: 2.0, ignition_ms: 0.3, ood_share: 0.01}
+  max_iterations: 6
+  min_gain: 0.10               # stop after two iterations improving flame |dT| by less than this
+
+rules:                         # openfoam/iterml/rules.py
+  window_ms: [25, 50]          # scoring window of the pure run
+  flame_dT: 5.0                # targets: each term of S = max(F, I, C) is 1 at its target
+  ignition_ms: 0.3
+  T_ign: 1600.0
+  species_ratio: 1.4           # CO and OH total model/DI within x1/1.4 - x1.4
+  patience: 2                  # stop after 2 iterations in a row without an accepted model
+  max_iterations: 6

@@ -29,6 +29,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO / "openfoam" / "isann"))
 from isann_lib import read_status  # noqa: E402
+sys.path.insert(0, str(HERE))
+import rules  # noqa: E402
 
 PY = sys.executable
 OFENV = os.environ.get("OFENV", "/opt/ofb/ofenv.sh")
@@ -82,9 +84,16 @@ class Loop:
         st[step] = dict(done=spain_now(), **info)
         json.dump(st, open(self.it(k) / "state.json", "w"), indent=1)
 
+    def parent_ref(self, k):
+        """(parent iteration, training tag). The automatic loop records it in iterK/state.json when the
+        iteration starts (the best model so far); by hand it is settings `parents` {k: p} or k - 1."""
+        st = self.state(k).get("parent")
+        if st:
+            return int(st["iter"]), st.get("tag", "")
+        return int({int(a): b for a, b in (self.s.get("parents") or {}).items()}.get(k, k - 1)), ""
+
     def parent_of(self, k):
-        """Parent iteration: settings `parents` {iteration: parent} (iteration 3 restarts from 1), else k - 1."""
-        return int({int(a): b for a, b in (self.s.get("parents") or {}).items()}.get(k, k - 1))
+        return self.parent_ref(k)[0]
 
     def lineage(self, k):
         """Ancestor iterations of k (>= 1), nearest first: the ones whose seeded pairs k trains on."""
@@ -100,10 +109,14 @@ class Loop:
 
     def parent_model_dir(self, k):
         """Directory with the parent's chemmanifold_model.txt (+ tests)."""
-        p = self.parent_of(k)
+        p, tag = self.parent_ref(k)
         if p == 0:
             return Path(self.s["iter0"]["model_dir"])
-        return self.it(p) / "data" / "08_fluent" / "resnet_film"
+        return self.it(p) / "data" / "08_fluent" / self.mdir(tag)
+
+    def parent_model_pt(self, k):
+        p, tag = self.parent_ref(k)
+        return self.parent_data(k) / "06_models" / (self.mdir(tag) if p else "resnet_film") / "model.pt"
 
     def tags(self):
         """Training seeds per iteration: "" (the config's seed) and e.g. "s1" (seed + 100)."""
@@ -190,7 +203,7 @@ class Loop:
         scratch = tr.get("scratch_every") and k % int(tr["scratch_every"]) == 0
         if not scratch:
             cfg["training"].update(tr["training"])
-            cfg["training"]["init_from"] = str(self.parent_data(k) / "06_models" / "resnet_film" / "model.pt")
+            cfg["training"]["init_from"] = str(self.parent_model_pt(k))
         if self.dry:
             cfg["training"]["epochs"] = 10
         hdr = (f"# ITERML iteration {k} ({spain_now()}): {base.name} + configs/iterml/iterml.yaml overrides.\n"
@@ -344,6 +357,80 @@ class Loop:
                 getattr(self, step)(k)
 
 
+    # --- the automatic loop (frozen rules, openfoam/iterml/rules.py) ---------------------------------
+    def decide(self, msg):
+        line = f"- {spain_now()}: {msg}"
+        print(line, flush=True)
+        with open(self.root / "DECISIONS.md", "a") as f:
+            f.write(line + "\n")
+
+    def best(self):
+        p = self.root / "best.json"
+        return json.load(open(p)) if p.exists() else None
+
+    def scores(self, k):
+        r = self.s["rules"]
+        out = {}
+        for tag in (self.tags() if k else [""]):
+            sfx = f"_{tag}" if tag else ""
+            rep = self.it(k) / f"eval_report{sfx}" / f"{self.name(k, tag)}_pure" / "protocol_report.json"
+            out[tag] = rules.score(rep, r) if rep.exists() else dict(S=float("inf"), valid=False)
+        return out
+
+    def baseline(self):
+        """Iteration 0's pure score (the first 'best')."""
+        if self.best():
+            return
+        k0 = self.it(0)
+        if "eval" not in self.state(0):
+            t_end = 0.005 if self.dry else self.s["eval"]["t_end"]
+            run, label = k0 / "eval", "iter0_pure"
+            sh(f"LABEL={label} T_END={t_end} {REPO}/openfoam/protocol/run_protocol.sh {self.s['base_case']} {run} "
+               f"pure {self.s['iter0']['model_dir']} {self.s['n_procs']}", env_of=True, logfile=k0 / "eval.log")
+            sh(f"{PY} {REPO}/openfoam/protocol/score_protocol.py --di {' '.join(self.s['di_snapshots'])} "
+               f"--run {run / 'snap'} --label {label} --run-dir {run} --out {k0 / 'eval_report'}", logfile=k0 / "eval.log")
+            self.done(0, "eval")
+        sc = self.scores(0)[""]
+        json.dump(dict(iter=0, tag="", S=sc["S"], score=sc), open(self.root / "best.json", "w"), indent=1)
+        self.decide(f"baseline: iteration 0 (a priori model) S = {sc['S']:.2f} "
+                    f"(F {sc.get('F', float('nan')):.2f}, I {sc.get('I', float('nan')):.2f}, C {sc.get('C', float('nan')):.2f})")
+
+    def auto(self, k_max):
+        r = self.s["rules"]
+        self.baseline()
+        rej = 0
+        for k in range(1, int(k_max) + 1):
+            st = self.state(k)
+            if "decision" in st:                       # already decided (restart)
+                rej = 0 if st["decision"]["accepted"] else rej + 1
+                continue
+            best = self.best()
+            why = rules.stop(best["S"], rej, k - 1, r)
+            if why:
+                self.decide(f"STOP before iteration {k}: {why}; best = iteration {best['iter']} "
+                            f"{best['tag'] or 'seed0'} (S {best['S']:.2f})")
+                return
+            if "parent" not in st:
+                st["parent"] = dict(iter=best["iter"], tag=best["tag"])
+                json.dump(st, open(self.it(k) / "state.json", "w"), indent=1)
+                self.decide(f"iteration {k} starts from iteration {best['iter']} {best['tag'] or 'seed0'} (the best, S {best['S']:.2f})")
+            self.run(k)
+            sc = self.scores(k)
+            ok, tag, spread, reason = rules.accept(best["S"], {t: v["S"] for t, v in sc.items()})
+            st = self.state(k)
+            st["decision"] = dict(accepted=ok, tag=tag, spread=spread, reason=reason,
+                                  scores={t or "seed0": v for t, v in sc.items()})
+            json.dump(st, open(self.it(k) / "state.json", "w"), indent=1, default=float)
+            if ok:
+                json.dump(dict(iter=k, tag=tag, S=sc[tag]["S"], score=sc[tag]), open(self.root / "best.json", "w"), indent=1)
+                rej = 0
+            else:
+                rej += 1
+            self.decide(f"iteration {k}: {'ACCEPTED ' + (tag or 'seed0') if ok else 'rejected'}: {reason}")
+        best = self.best()
+        self.decide(f"STOP after iteration {k_max} (maximum); best = iteration {best['iter']} (S {best['S']:.2f})")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--settings", default=str(REPO / "configs" / "iterml" / "iterml.yaml"))
@@ -355,9 +442,14 @@ def main():
     s = sub.add_parser("step")
     s.add_argument("name", help="one of " + ", ".join(STEPS) + ", or eval_<tag>")
     s.add_argument("--iter", type=int, required=True)
+    au = sub.add_parser("auto", help="the automatic loop with the frozen rules (settings `rules`)")
+    au.add_argument("--max", type=int, default=None, help="default: rules.max_iterations")
     a = ap.parse_args()
     loop = Loop(a.settings, a.root if not a.dry else str(Path(a.root) / "dry"), a.dry)
-    loop.run(a.iter, a.name if a.cmd == "step" else None)
+    if a.cmd == "auto":
+        loop.auto(a.max or loop.s["rules"]["max_iterations"])
+    else:
+        loop.run(a.iter, a.name if a.cmd == "step" else None)
 
 
 if __name__ == "__main__":

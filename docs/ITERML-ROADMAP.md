@@ -282,3 +282,36 @@ iteration, which would also tell real improvement from seed noise.
 | Seeded exploration | `chemmanifold/seeded.py`, stage 4 `--only seeded` (`pasr.seeded`) | regimes 10-13, jitter, cumulative 35 % cap; stage 5 reads `pairs_seeded*.npz` |
 | Settings | `configs/iterml/iterml.yaml` | every threshold of sections 4-5 |
 | Driver | `openfoam/iterml/iterml.py run --iter K [--dry]` | collect -> seeds -> explore -> train (5, 7, 12, 15) -> bench (18) -> eval (protocol v1 pure) -> report; resumable via `iterK/state.json` |
+
+## 11. Automatic loop with frozen rules (2026-11-01, after Javier's remark)
+
+Iterations 1-3 were steered by hand: discarding iteration 2, restarting iteration 3 from iteration 1,
+and the CO check designed after diagnosing iteration 2 were judgment calls, not code. For a reproducible
+method the decisions are now rules fixed before the run (`configs/iterml/iterml_auto.yaml`,
+`openfoam/iterml/rules.py`, `iterml.py auto`):
+
+| Decision | Rule |
+|---|---|
+| Score of a model | pure protocol run, S = max(F, I, C): F = flame abs(dT) 25-50 ms / 5 K, I = ignition delay vs DI / 0.3 ms, C = mean max(abs ln CO ratio, abs ln OH ratio) / ln 1.4. S <= 1: every target met |
+| Baseline | iteration 0 (the a priori model) is run pure first; its S is the first "best" |
+| Keep or reject (elitism) | each iteration trains 2 seeds; accepted only if EVERY seed beats the best S by more than the seeds' spread; the better seed becomes the parent. Else the next iteration starts again from the unchanged best |
+| Where the model is wrong | generic detector: 100-step 0D rollouts (network vs Cantera) of every sentinel and of 4 shadow-checked states per T x Z bin; drift = T off by max(10 K, 10 % of Cantera's change), or CO, OH, H or CH4 out of x0.5-x2 above a floor of 1e-4 x that species' 99th percentile (at least 1e-8). Every drifted state is a seed (after deduplication) |
+| Stop | S <= 1, or 2 iterations in a row rejected, or 6 iterations |
+
+Every decision is appended to `<root>/DECISIONS.md` with its numbers. On iterations 1-2 the rules give
+the same verdict as the hand-made one (S 2.22 for iteration 1, 5.14 for iteration 2: rejected). What
+the rules cannot do is invent a new kind of check when a new failure appears; the generic detector is
+meant to make that unnecessary, and the paper reports iterations 1-3 as the development history.
+
+How selective the generic detector is (tested on iteration 2's collection states, 1163 rollouts):
+
+| Setting | Drifted | Note |
+|---|---|---|
+| all species, floor 1e-3 x p99, 1000 steps, iteration 1 model | 94 % | CH3 and H2O2 drift everywhere |
+| CO, OH, H, CH4, 100 steps, iteration 1 model | 27 % | mostly T, spread over all bins |
+| CO, OH, H, CH4, floor 1e-4 x p99, 100 steps, iteration 2 model | 21 % | cooled lean gas (600-1000 K, Z < 0.04) about 31 % |
+
+So the detector is broad rather than sharp: it does flag iteration 2's cooled lean gas, but only a
+little above the background rate, because 0D rollouts do not reproduce the mixing that feeds that gas
+in the burner. It spends seeds everywhere the network drifts and leaves the choice of what helped to
+the elitism rule. The automatic loop may therefore need more iterations than the hand-steered one.

@@ -29,6 +29,7 @@ Writes <out>/seeds.npz, seeds.csv (no species), comparison.csv, seeds_report.md,
 """
 
 import ctypes
+import math
 import importlib.util
 import json
 import sys
@@ -101,9 +102,22 @@ def one_step(core, df, species):
     return Y0, Y1, Ya, Ta
 
 
+def species_floors(Y0, o):
+    """Generic mode: one floor per species, a fixed fraction of its 99th percentile over the caught
+    states (so CO in cooled lean gas is judged against CO levels, not against a hand-set number)."""
+    return np.maximum(float(o.get("generic_floor_frac", 1e-3)) * np.percentile(Y0, 99, axis=0),
+                      float(o.get("generic_floor_abs", 1e-12)))
+
+
 def failed(df, Y0, Y1, Ya, Ta, species, o):
     dT_di = np.abs(df["T1"].to_numpy() - df["T0"].to_numpy())
     bad = ~np.isfinite(Ta) | (np.abs(Ta - df["T1"].to_numpy()) > np.maximum(o["T_abs"], o["rel"] * dT_di))
+    if o.get("generic_one_step"):              # every species, relative error above its own floor
+        # (off by default: on iteration 2's run it failed 61 % of the checks, mostly tiny increments
+        #  of minor species near equilibrium; the multi-step rollouts are the generic detector)
+        fl = species_floors(Y0, o)
+        err = np.abs(Ya - Y1) > np.maximum(fl, o["rel"] * np.abs(Y1 - Y0))
+        return bad | err.any(1)
     floors = o.get("Y_abs_species", {})       # per-species floors (iteration 3: CO, OH 1e-7)
     for s in CHECK_SPECIES:
         if s in species:
@@ -144,6 +158,51 @@ def sentinel_drift(core, gas, Y0, T0, P0, dt, species, o):
     return drift, dTmax
 
 
+def generic_drift(core, gas, Y0, T0, P0, dt, species, o, floors):
+    """Generic multi-step check: 0D rollouts network vs Cantera; drift if T departs by more than
+    max(drift_T_generic, 10 % of Cantera's own change) or ANY species leaves x(1/r)..x r above its floor."""
+    n = int(o["sentinel_steps"])
+    idx = [species.index(s) for s in core.names]
+    lr = math.log(float(o.get("drift_ratio", 2.0)))
+    fl = floors[idx].copy()
+    watch = o.get("drift_species")             # None = every species; else only these (e.g. the scored ones)
+    if watch:
+        fl[[i for i, nm in enumerate(core.names) if nm not in watch]] = np.inf
+    drift, worst = np.zeros(len(T0), bool), np.array([""] * len(T0), dtype=object)
+    for i in range(len(T0)):
+        gas.TPY = T0[i], P0[i], Y0[i]
+        r = ct.IdealGasConstPressureReactor(gas, clone=False)
+        net = ct.ReactorNet([r])
+        y, T = Y0[i][idx].copy(), T0[i]
+        for k in range(1, n + 1):
+            net.advance(k * dt[i])
+            y, T = core.step(y, T, P0[i], dt[i])
+            if y is None or not np.isfinite(T):
+                drift[i], worst[i] = True, "failed"
+                break
+            if abs(T - r.T) > max(float(o.get("drift_T_generic", 10.0)), 0.1 * abs(r.T - T0[i])):
+                drift[i], worst[i] = True, "T"
+                break
+            yc = r.phase.Y[idx]
+            with np.errstate(invalid="ignore"):
+                e = np.nan_to_num(np.abs(np.log(np.maximum(y, fl) / np.maximum(yc, fl))))   # unwatched: inf/inf -> 0
+            if (e > lr).any():
+                drift[i], worst[i] = True, core.names[int(np.argmax(e))]
+                break
+    return drift, worst
+
+
+def stratified(T, Z, n_per_bin, rng):
+    """Up to n_per_bin indices per (T, Z) bin: 100 K bands from 600 K x the shadow-check Z bands."""
+    zb = np.array([0, 0.01, 0.02, 0.03, 0.045, 0.055, 0.07, 0.1, 0.15, 0.22, 0.4, 1.01])
+    b = np.clip(((T - 600) // 100).astype(int), 0, 17) * 20 + np.clip(np.searchsorted(zb, Z, side="right") - 1, 0, 10)
+    out = []
+    for v in np.unique(b):
+        m = np.flatnonzero(b == v)
+        out.extend(rng.choice(m, size=min(n_per_bin, len(m)), replace=False))
+    return np.sort(np.array(out, dtype=int))
+
+
 def flame_features(cfg, gas, Y, T, P):
     (Yf, _), (Yo, _) = stream_states(gas, cfg)
     Z = BilgerZ(gas, Yf, Yo)(Y).clip(0, 1)
@@ -163,7 +222,7 @@ def flame_features(cfg, gas, Y, T, P):
     return Z, psi, c, r_oh, h
 
 
-def assign_regime(T, c, psi, r_oh, flags, Y_fuel=None, Y_o2=None):
+def assign_regime(T, c, psi, r_oh, flags, Y_fuel=None, Y_o2=None, generic=False):
     """10 PaSR (mixing between flame and streams, psi < 0, everything else),
     11 relaxation (burnt, c >= 0.8, T >= 1200 K), 12 ignition (drift flag, c < 0.3 at 900-1700 K,
     or, since iteration 2, unburnt fuel AND oxygen (Y_CH4 > 1e-3, Y_O2 > 0.01) at 800-1700 K:
@@ -171,7 +230,9 @@ def assign_regime(T, c, psi, r_oh, flags, Y_fuel=None, Y_o2=None):
     reg = np.full(len(T), 10, int)
     reg[(c >= 0.8) & (T >= 1200)] = 11
     reg[psi > 0.5] = 13
-    ign = ((c < 0.3) & (T >= 900) & (T < 1700)) | np.array(["drift" in f for f in flags])
+    ign = (c < 0.3) & (T >= 900) & (T < 1700)
+    if not generic:                            # generic drift can be anywhere (e.g. cooled gas): no rule
+        ign |= np.array(["drift" in f for f in flags])
     if Y_fuel is not None:
         ign |= (Y_fuel > 1e-3) & (Y_o2 > 0.01) & (T >= 800) & (T < 1700)
     reg[ign] = 12
@@ -216,9 +277,23 @@ def main(cfg, args):
                                  df["dt"].to_numpy()[sen], species, o)
         drift[sen] = dr
         print(f"  sentinels: {len(sen)}, drifted {dr.sum()} (max |dT| median {np.median(dTm):.1f} K)")
-    keep = np.isin(reason, [1, 2]) | ((reason == 3) & bad) | ((reason == 4) & drift)
+    if o.get("generic"):
+        # every sentinel plus a stratified sample of the shadow-checked states of every (T, Z) bin
+        rng = np.random.default_rng(int(cfg.get("seed", 0)))
+        sh_ = np.flatnonzero(reason == 3)
+        pick = np.union1d(sen, sh_[stratified(df["T0"].to_numpy()[sh_], df["Z"].to_numpy()[sh_],
+                                              int(o.get("rollouts_per_bin", 4)), rng)])
+        dr, why = generic_drift(core, gas, Y0[pick], df["T0"].to_numpy()[pick], df["p"].to_numpy()[pick],
+                                df["dt"].to_numpy()[pick], species, o, species_floors(Y0, o))
+        drift[:] = False
+        drift[pick] = dr
+        vals, cnt = np.unique(why[dr].astype(str), return_counts=True)
+        print(f"  generic rollouts ({o['sentinel_steps']} steps): {len(pick)} states, drifted {dr.sum()} "
+              f"(first criterion: {dict(zip(vals, cnt.tolist()))})")
+    keep = np.isin(reason, [1, 2]) | ((reason == 3) & (bad | drift)) | ((reason == 4) & drift)
     flags = np.array(["ood" if r == 1 else "bin" if r == 2 else "err" if r == 3 else "drift" for r in reason])
     flags = np.where((reason != 3) & bad & (reason != 4), np.char.add(flags, "+err"), flags)
+    flags = np.where((reason == 3) & drift & ~bad, "drift", flags)
     print(f"  caught {len(df)}: OOD {np.sum(reason == 1)}, bin {np.sum(reason == 2)}, shadow {np.sum(reason == 3)} "
           f"(failed {np.sum((reason == 3) & bad)}), sentinel {len(sen)} (drifted {drift.sum()}) -> {keep.sum()} seed candidates")
 
@@ -249,7 +324,8 @@ def main(cfg, args):
 
     Z, psi, c, r_oh, h = flame_features(cfg, gas, Y, T, P)
     fl = flags[ids]
-    regime = assign_regime(T, c, psi, r_oh, fl, Y[:, species.index("CH4")], Y[:, species.index("O2")])
+    regime = assign_regime(T, c, psi, r_oh, fl, Y[:, species.index("CH4")], Y[:, species.index("O2")],
+                           bool(o.get("generic")))
     np.savez(out / "seeds.npz", Y=Y, T=T, P=P, h=h, dt=dt, Z=Z, psi=psi, c=c, r_OH=r_oh, regime=regime,
              reason=reason[ids], flags=fl.astype("U16"), weight=weight, step=df["step"].to_numpy()[ids],
              species=np.array(species))
@@ -273,7 +349,8 @@ def report(out, tab, df, bad, drift, keep, r, cfg, gas):
         lines.append(f"| {f} | {n} |")
     sh = df["reason"].to_numpy() == 3
     lines += ["", f"Shadow checks: {sh.sum()}, failed {np.sum(sh & bad)} ({100 * np.mean(bad[sh]) if sh.any() else 0:.1f} %). "
-              f"Sentinels drifted: {drift.sum()} of {np.sum(df['reason'].to_numpy() == 4)}.",
+              f"Rollouts drifted: {drift.sum()} (sentinels {np.sum(drift & (df['reason'].to_numpy() == 4))} of "
+              f"{np.sum(df['reason'].to_numpy() == 4)}).",
               f"Lean (Z < Z_st = {Z_st:.3f}) share of seeds: {100 * np.mean(tab.Z < Z_st):.0f} %.", "",
               "Seeds are starting points for Cantera reactors (stage 4 `pasr.seeded`); no state here is a training pair."]
     (out / "seeds_report.md").write_text("\n".join(lines) + "\n")
