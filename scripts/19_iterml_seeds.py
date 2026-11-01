@@ -104,10 +104,12 @@ def one_step(core, df, species):
 def failed(df, Y0, Y1, Ya, Ta, species, o):
     dT_di = np.abs(df["T1"].to_numpy() - df["T0"].to_numpy())
     bad = ~np.isfinite(Ta) | (np.abs(Ta - df["T1"].to_numpy()) > np.maximum(o["T_abs"], o["rel"] * dT_di))
+    floors = o.get("Y_abs_species", {})       # per-species floors (iteration 3: CO, OH 1e-7)
     for s in CHECK_SPECIES:
         if s in species:
             k = species.index(s)
-            bad |= np.abs(Ya[:, k] - Y1[:, k]) > np.maximum(o["Y_abs"], o["rel"] * np.abs(Y1[:, k] - Y0[:, k]))
+            bad |= np.abs(Ya[:, k] - Y1[:, k]) > np.maximum(floors.get(s, o["Y_abs"]),
+                                                          o["rel"] * np.abs(Y1[:, k] - Y0[:, k]))
     return bad
 
 
@@ -115,7 +117,7 @@ def sentinel_drift(core, gas, Y0, T0, P0, dt, species, o):
     """0D rollouts network vs Cantera (adiabatic, constant p); drift flag and the largest |dT|."""
     n = int(o["sentinel_steps"])
     idx = [species.index(s) for s in core.names]
-    iOH = species.index("OH")
+    iOH, iCO = species.index("OH"), species.index("CO")
     drift, dTmax = np.zeros(len(T0), bool), np.zeros(len(T0))
     for i in range(len(T0)):
         gas.TPY = T0[i], P0[i], Y0[i]
@@ -132,7 +134,11 @@ def sentinel_drift(core, gas, Y0, T0, P0, dt, species, o):
             dTmax[i] = max(dTmax[i], d)
             oh_n, oh_c = y[core.names.index("OH")], r.phase.Y[iOH]
             ratio = max(oh_n, 1e-6) / max(oh_c, 1e-6)
-            if d > o["drift_T"] or ratio > o["drift_OH"] or ratio < 1 / o["drift_OH"]:
+            co_n, co_c = y[core.names.index("CO")], r.phase.Y[iCO]
+            fco = float(o.get("drift_CO_floor", 1e-6))
+            rco = max(co_n, fco) / max(co_c, fco)     # iteration 3: CO creeping up in cooled lean gas
+            if (d > o["drift_T"] or ratio > o["drift_OH"] or ratio < 1 / o["drift_OH"]
+                    or rco > o.get("drift_CO", 1e9) or rco < 1 / o.get("drift_CO", 1e9)):
                 drift[i] = True
                 break
     return drift, dTmax

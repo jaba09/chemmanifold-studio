@@ -82,14 +82,32 @@ class Loop:
         st[step] = dict(done=spain_now(), **info)
         json.dump(st, open(self.it(k) / "state.json", "w"), indent=1)
 
+    def parent_of(self, k):
+        """Parent iteration: settings `parents` {iteration: parent} (iteration 3 restarts from 1), else k - 1."""
+        return int({int(a): b for a, b in (self.s.get("parents") or {}).items()}.get(k, k - 1))
+
+    def lineage(self, k):
+        """Ancestor iterations of k (>= 1), nearest first: the ones whose seeded pairs k trains on."""
+        out, j = [], self.parent_of(k)
+        while j >= 1:
+            out.append(j)
+            j = self.parent_of(j)
+        return out
+
     def parent_data(self, k):
-        return Path(self.s["iter0"]["data"]) if k == 1 else self.it(k - 1) / "data"
+        p = self.parent_of(k)
+        return Path(self.s["iter0"]["data"]) if p == 0 else self.it(p) / "data"
 
     def parent_model_dir(self, k):
         """Directory with the parent's chemmanifold_model.txt (+ tests)."""
-        if k == 1:
+        p = self.parent_of(k)
+        if p == 0:
             return Path(self.s["iter0"]["model_dir"])
-        return self.it(k - 1) / "data" / "08_fluent" / "resnet_film"
+        return self.it(p) / "data" / "08_fluent" / "resnet_film"
+
+    def tags(self):
+        """Training seeds per iteration: "" (the config's seed) and e.g. "s1" (seed + 100)."""
+        return list(self.s["train"].get("tags", [""]))
 
     def config_path(self, k):
         return self.it(k) / f"iterml_iter{k}.yaml"
@@ -203,7 +221,7 @@ class Loop:
 
     def previous_seeds(self, k):
         """--previous: the seeds of every earlier iteration, so no state is seeded twice."""
-        prev = [self.it(j) / "seeds" / "seeds.npz" for j in range(1, k) if (self.it(j) / "seeds" / "seeds.npz").exists()]
+        prev = [self.it(j) / "seeds" / "seeds.npz" for j in self.lineage(k) if (self.it(j) / "seeds" / "seeds.npz").exists()]
         return (" --previous " + " ".join(map(str, prev))) if prev else ""
 
     def link_data(self, k):
@@ -229,57 +247,80 @@ class Loop:
     # --- [D] training -------------------------------------------------------------------------------
     def train(self, k):
         c, lg = self.config_path(k), self.it(k) / "train.log"
-        for script in ("05_preprocess.py", "07_train.py", "12_export_fluent.py"):
-            log(self.it(k), f"stage {script}")
-            sh(f"{PY} {REPO}/scripts/{script} --config {c}", logfile=lg)
+        log(self.it(k), "stage 05_preprocess.py")
+        sh(f"{PY} {REPO}/scripts/05_preprocess.py --config {c}", logfile=lg)
+        info_all = {}
+        seed0 = int(yaml.safe_load(open(c)).get("seed", 0))
+        for i, tag in enumerate(self.tags()):
+            extra = f" --seed {seed0 + 100 * i} --tag {tag}" if tag else ""
+            for script in ("07_train.py", "12_export_fluent.py"):
+                log(self.it(k), f"stage {script}{extra}")
+                sh(f"{PY} {REPO}/scripts/{script} --config {c}" + (f" --tag {tag}" if tag and script.startswith("12") else
+                                                                      extra), logfile=lg)
+            info = json.load(open(self.it(k) / "data" / "06_models" / self.mdir(tag) / "train_info.json"))
+            info_all[tag or "seed0"] = dict(best_val_loss=info.get("best_val_loss"), best_epoch=info.get("best_epoch"),
+                                            wall_time_s=info.get("wall_time_s"))
         try:
             if self.dry:
                 raise RuntimeError("dry run: not registered")
-            sh(f"{PY} {REPO}/scripts/15_register_model.py --config {c}", logfile=lg)
+            sh(f"{PY} {REPO}/scripts/15_register_model.py --config {c}", logfile=lg)   # stage 15 has no --tag:
+            if len(self.tags()) > 1:                                                     # extra seeds are
+                log(self.it(k), "registry: only the seed-0 model is registered automatically")  # noted by hand
         except RuntimeError as e:   # the registry is documentation; it must not stop the loop
             log(self.it(k), f"registry: {e}")
-        info = json.load(open(self.it(k) / "data" / "06_models" / "resnet_film" / "train_info.json"))
-        self.done(k, "train", best_val_loss=info.get("best_val_loss"), best_epoch=info.get("best_epoch"),
-                  wall_time_s=info.get("wall_time_s"))
+        self.done(k, "train", **info_all)
+
+    @staticmethod
+    def mdir(tag):
+        return "resnet_film" + (f"_{tag}" if tag else "")
+
+    def name(self, k, tag):
+        return f"iter{k}" + (f"_{tag}" if tag else "")
 
     # --- [E] gate: offline benchmark ---------------------------------------------------------------
     def bench(self, k):
         out = self.it(k) / "bench"
         n = 10 if self.dry else self.s["gate"]["n_states"]
         steps = 500 if self.dry else 2500
+        models = " ".join(f"{self.name(k, t)}={self.it(k) / 'data' / '08_fluent' / self.mdir(t) / 'chemmanifold_model.txt'}"
+                          for t in self.tags())
         sh(f"{PY} {REPO}/scripts/18_offline_benchmark.py --config {self.config_path(k)} "
-           f"--models parent={self.parent_model_dir(k) / 'chemmanifold_model.txt'} "
-           f"iter{k}={self.it(k) / 'data' / '08_fluent' / 'resnet_film' / 'chemmanifold_model.txt'} "
+           f"--models parent={self.parent_model_dir(k) / 'chemmanifold_model.txt'} {models} "
            f"--label iter{k} --out {out} --n-states {n} --steps {steps} --workers {self.s['n_procs']}",
            logfile=self.it(k) / "bench.log")
         m = json.load(open(out / "benchmark.json"))["models"]
-        dt10 = {name: m[name]["alone"]["all"]["dT_10ms"]["mean"] for name in ("parent", f"iter{k}")}
-        ok = dt10[f"iter{k}"] <= dt10["parent"] + float(self.s["gate"]["seed_spread_K"])
-        log(self.it(k), f"gate: alone dT_10ms parent {dt10['parent']:.1f} K, iter{k} {dt10[f'iter{k}']:.1f} K -> "
-                        f"{'pass' if ok else 'FAIL (evaluated anyway, flagged in the report)'}")
-        self.done(k, "bench", report=str(out / "benchmark.md"), dT10_parent=round(dt10["parent"], 2),
-                  dT10_new=round(dt10[f"iter{k}"], 2), gate="pass" if ok else "fail")
+        dt10 = {name: m[name]["alone"]["all"]["dT_10ms"]["mean"] for name in m}
+        info = {f"dT10_{a}": round(b, 2) for a, b in dt10.items()}
+        for t in self.tags():
+            nm = self.name(k, t)
+            ok = dt10[nm] <= dt10["parent"] + float(self.s["gate"]["seed_spread_K"])
+            info[f"gate_{nm}"] = "pass" if ok else "fail"
+            log(self.it(k), f"gate: alone dT_10ms parent {dt10['parent']:.1f} K, {nm} {dt10[nm]:.1f} K -> "
+                            f"{'pass' if ok else 'FAIL (evaluated anyway, flagged in the report)'}")
+        self.done(k, "bench", report=str(out / "benchmark.md"), **info)
 
     # --- [F] evaluation: protocol v1, pure ---------------------------------------------------------
-    def eval(self, k):
+    def eval(self, k, tag=""):
         t_end = 0.005 if self.dry else self.s["eval"]["t_end"]
-        run = self.it(k) / "eval"
-        md = self.it(k) / "data" / "08_fluent" / "resnet_film"
-        sh(f"LABEL=iter{k}_pure T_END={t_end} {REPO}/openfoam/protocol/run_protocol.sh {self.s['base_case']} {run} "
+        sfx = f"_{tag}" if tag else ""
+        run = self.it(k) / f"eval{sfx}"
+        md = self.it(k) / "data" / "08_fluent" / self.mdir(tag)
+        label = f"{self.name(k, tag)}_pure"
+        sh(f"LABEL={label} T_END={t_end} {REPO}/openfoam/protocol/run_protocol.sh {self.s['base_case']} {run} "
            f"pure {md} {self.s['n_procs']}", env_of=True, logfile=self.it(k) / "eval.log")
-        rep = self.it(k) / "eval_report"
+        rep = self.it(k) / f"eval_report{sfx}"
         di = " ".join(self.s["di_snapshots"])
         try:
-            sh(f"{PY} {REPO}/openfoam/protocol/score_protocol.py --di {di} --run {run / 'snap'} --label iter{k}_pure "
+            sh(f"{PY} {REPO}/openfoam/protocol/score_protocol.py --di {di} --run {run / 'snap'} --label {label} "
                f"--run-dir {run} --out {rep}", logfile=self.it(k) / "eval.log")
         except RuntimeError as e:
             log(self.it(k), f"protocol scoring: {e}")
-        self.done(k, "eval", report=str(rep))
+        self.done(k, f"eval{sfx}", report=str(rep))
 
     def report(self, k):
         st = self.state(k)
         lines = [f"# ITERML iteration {k}", "", f"Updated {spain_now()}." + (" DRY RUN (short test)." if self.dry else ""), ""]
-        for step in STEPS[:-1]:
+        for step in self.steps()[:-1]:
             if step in st:
                 lines.append(f"- **{step}**: " + ", ".join(f"{a}={b}" for a, b in st[step].items()))
         for extra in ("seeds/seeds_report.md",):
@@ -289,12 +330,18 @@ class Loop:
         (self.it(k) / "ITER-REPORT.md").write_text("\n".join(lines) + "\n")
         self.done(k, "report")
 
+    def steps(self):
+        return STEPS[:-2] + ["eval" + (f"_{t}" if t else "") for t in self.tags()] + ["report"]
+
     def run(self, k, only=None):
-        for step in ([only] if only else STEPS):
+        for step in ([only] if only else self.steps()):
             if not only and step in self.state(k):
                 continue
             log(self.it(k), f"--- {step} (iteration {k}) ---")
-            getattr(self, step)(k)
+            if step.startswith("eval_"):
+                self.eval(k, step[5:])
+            else:
+                getattr(self, step)(k)
 
 
 def main():
@@ -306,7 +353,7 @@ def main():
     r = sub.add_parser("run")
     r.add_argument("--iter", type=int, required=True)
     s = sub.add_parser("step")
-    s.add_argument("name", choices=STEPS)
+    s.add_argument("name", help="one of " + ", ".join(STEPS) + ", or eval_<tag>")
     s.add_argument("--iter", type=int, required=True)
     a = ap.parse_args()
     loop = Loop(a.settings, a.root if not a.dry else str(Path(a.root) / "dry"), a.dry)

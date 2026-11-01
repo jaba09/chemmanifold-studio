@@ -52,7 +52,7 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     sentinel_(isannDict_.getOrDefault<scalarList>("sentinel", scalarList())),
     sentinelEvery_(isannDict_.getOrDefault<label>("sentinelEvery", 100)),
     sentinelPerStep_(isannDict_.getOrDefault<label>("sentinelPerStep", 10)),
-    iSentinel_(0),
+    iSentinel_(0), sentinelStep_(-1), sentinelCount_(),
     trustTAbs_(isannDict_.getOrDefault<scalar>("trustTAbs", 1.0)),
     trustRel_(isannDict_.getOrDefault<scalar>("trustRel", 0.3)),
     trustOHAbs_(isannDict_.getOrDefault<scalar>("trustOHAbs", 5e-5)),
@@ -65,10 +65,10 @@ Foam::userChemStep<ChemistryModel>::userChemStep
         if (this->specieThermo()[i].name() == "CH4") iFuel_ = i;
         if (this->specieThermo()[i].name() == "O2") iO2_ = i;
     }
-    if (sentinel_.size() && (sentinel_.size() != 4 || iFuel_ < 0 || iO2_ < 0))
+    if (sentinel_.size() && (sentinel_.size() % 4 != 0 || iFuel_ < 0 || iO2_ < 0))
     {
         FatalErrorInFunction
-            << "isann.sentinel needs (T_lo T_hi Y_CH4 Y_O2) and species CH4, O2" << exit(FatalError);
+            << "isann.sentinel needs (T_lo T_hi Y_CH4 Y_O2) per range and species CH4, O2" << exit(FatalError);
     }
     if (odeInduction_.size() && (odeInduction_.size() != 4 || iFuel_ < 0 || iO2_ < 0))
     {
@@ -609,14 +609,33 @@ void Foam::userChemStep<ChemistryModel>::solve
         }
         if
         (
-            reason < 0 && isannActive_ && sentinel_.size() && iSentinel_ < sentinelPerStep_
+            reason < 0 && isannActive_ && sentinel_.size()
          && sentinelEvery_ > 0 && this->mesh().time().timeIndex() % sentinelEvery_ == 0
-         && T >= sentinel_[0] && T < sentinel_[1]
-         && Y_[iFuel_] > sentinel_[2] && Y_[iO2_] > sentinel_[3]
         )
         {
-            reason = 4;
-            iSentinel_++;
+            // ranges of 4 values (T_lo T_hi Y_CH4 Y_O2), each with its own quota per step
+            const label nR = sentinel_.size()/4;
+            if (sentinelCount_.size() != nR) sentinelCount_.setSize(nR, 0);
+            if (sentinelStep_ != this->mesh().time().timeIndex())
+            {
+                sentinelStep_ = this->mesh().time().timeIndex();
+                sentinelCount_ = 0;
+            }
+            for (label r=0; r<nR; r++)
+            {
+                const scalar* s = &sentinel_[4*r];
+                if
+                (
+                    sentinelCount_[r] < sentinelPerStep_ && T >= s[0] && T < s[1]
+                 && Y_[iFuel_] > s[2] && Y_[iO2_] > s[3]
+                )
+                {
+                    reason = 4;
+                    sentinelCount_[r]++;
+                    iSentinel_++;
+                    break;
+                }
+            }
         }
         if (reason < 0 && isannActive_ && shadowEvery_ > 0 && T >= options_.T_freeze)
         {

@@ -11,13 +11,15 @@ di_snapshots:                                    # DI reference CSVs (comparison
   - /mnt/project-files/chemmanifold/protocolo-cfd/de-bucle-ood/snap_di
   - /mnt/project-files/chemmanifold/protocolo-cfd/snap_di_ext
 n_procs: 4
+parents: {3: 1}                # iteration 3 restarts from iteration 1 (iteration 2 was worse); default k-1
 
 collect:                       # [A] collection run: hybrid (OOD and untrusted-bin cells on GA18)
   t_end: 0.025                 # s; the flame phase is scored in [F]
   shadow_every: 25             # steps between shadow DI checks...
   shadow_per_bin: 3            # ...cells per (T, Z, inside/OOD) bin (stratified, standing DI-check rule)
   cap_per_box: 1               # seeds kept per dedup grid box per rank (2 flooded the store in the test)
-  sentinel: [900, 1700, 1.0e-4, 0.01]   # T_lo T_hi Y_CH4 Y_O2 of the induction cells watched
+  sentinel: [900, 1700, 1.0e-4, 0.01,    # T_lo T_hi Y_CH4 Y_O2 per range: induction cells, and (iteration 3)
+             600, 1100, -1.0, 0.05]     #  cooled lean gas, where iteration 2 made CO x100 DI
   sentinel_every: 25           # 100 in iteration 1 (31 sentinels, 1 drift; ignition 0.6 ms late)
   sentinel_per_step: 20        # per rank
   stop:                        # inner stop, first that fires (checked every `check_s` seconds)
@@ -33,7 +35,10 @@ seeds:                         # [B] scripts/19_iterml_seeds.py
   T_abs: 1.0                   # shadow check fails if |T_ann - T_DI| > max(T_abs, rel |dT_DI|)
   rel: 0.3
   Y_abs: 5.0e-5                # same for OH, H, O, CO with max(Y_abs, rel |dY_DI|)
-  sentinel_steps: 25
+  Y_abs_species: {CO: 1.0e-7, OH: 1.0e-7}   # iteration 3: 5e-5 was above the CO of cooled lean gas
+  sentinel_steps: 100          # 25 in iterations 1-2: slow CO / ignition drift needs longer rollouts
+  drift_CO: 2.0                # sentinel drifted if CO network/Cantera leaves x0.5-x2...
+  drift_CO_floor: 1.0e-7       # ...above this floor
   drift_T: 50.0
   drift_OH: 2.0
   dedup_radius: 0.05           # x the model's landmark threshold
@@ -56,7 +61,8 @@ train:                         # [D] warm start from the previous iteration (kee
   model: {latent_dim: 12}
   training: {epochs: 40, patience: 8, lr_max: 1.0e-4, pct_start: 0.05, noise_amp: 0.005,
              noise_end_frac: 0.5, threads: 4}
-  scratch_every: 3             # every 3rd iteration from scratch (300 epochs of the base config)
+  scratch_every: 0             # 0 = always warm start (iteration 3 is a warm start from iteration 1)
+  tags: ["", "s1"]             # two training seeds per iteration (seed noise vs real change)
 
 gate:                          # [E] offline benchmark (stage 18)
   n_states: 40

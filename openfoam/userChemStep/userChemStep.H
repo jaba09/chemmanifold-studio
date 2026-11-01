@@ -65,7 +65,7 @@ Usage
             trustRel     0.3;    //  trustRel |T_DI - T0|), or the same for OH with trustOHAbs
             trustOHAbs   5e-5;
             trustMin     2;      // failed checks before a bin is untrusted (and > half of them)
-            sentinel     ();     // (T_lo T_hi Y_CH4 Y_O2), ITERML: flammable induction cells in
+            sentinel     ();     // (T_lo T_hi Y_CH4 Y_O2 ...), one or more ranges, ITERML: cells in
             sentinelEvery 100;   //  this range, sentinelPerStep per rank every sentinelEvery steps,
             sentinelPerStep 10;  //  go to GA18 and are kept with reason 4; scripts/19_iterml_seeds.py
                                  //  rolls them out 0D (network vs Cantera) to catch slow drift
@@ -180,7 +180,8 @@ class userChemStep
             //- ITERML sentinel: (T_lo T_hi Y_CH4 Y_O2), period, cells per rank, count this step
             scalarList sentinel_;
             label sentinelEvery_, sentinelPerStep_;
-            mutable label iSentinel_;
+            mutable label iSentinel_, sentinelStep_;
+            mutable labelList sentinelCount_;
             mutable autoPtr<OFstream> isannStatus_;
             scalar trustTAbs_, trustRel_, trustOHAbs_;
             label trustMin_, iOHmodel_;
