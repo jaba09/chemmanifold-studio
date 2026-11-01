@@ -1,0 +1,456 @@
+#!/usr/bin/env python3
+"""ITERML loop driver (docs/ITERML-ROADMAP.md): collection run -> seeds -> seeded physics exploration
+-> warm-start training -> gate -> pure CFD evaluation, one iteration at a time, resumable.
+
+    iterml.py --settings configs/iterml/iterml.yaml --root /opt/ofb/iterml run --iter 1 [--dry]
+    iterml.py ... step <collect|seeds|explore|train|bench|eval|report> --iter K [--dry]
+
+Each step writes <root>/iterK/state.json when it finishes, so `run` skips what is done and a
+restarted container continues where it stopped (the CFD legs resume from their latest write).
+--dry is the short test of step S6: 5 ms collection, few seeds and picks, 10 epochs, 5 ms evaluation.
+
+Rules kept by construction: the CFD states of the run are only SEEDS (stage 19 -> stage 4 seeded
+reactors, the seeds themselves never paired); the shadow DI comparisons are saved and never trained on.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+import numpy as np
+import yaml
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO / "openfoam" / "isann"))
+from isann_lib import read_status  # noqa: E402
+sys.path.insert(0, str(HERE))
+import rules  # noqa: E402
+
+PY = sys.executable
+OFENV = os.environ.get("OFENV", "/opt/ofb/ofenv.sh")
+STEPS = ["collect", "seeds", "explore", "train", "bench", "eval", "report"]
+
+
+def spain_now():
+    t = datetime.now(timezone.utc)
+    # Europe/Madrid: CET (UTC+1) from the last Sunday of October to the last Sunday of March
+    return (t + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M CET")
+
+
+def log(it_dir, msg):
+    line = f"[{spain_now()}] {msg}"
+    print(line, flush=True)
+    with open(it_dir / "iterml.log", "a") as f:
+        f.write(line + "\n")
+
+
+def sh(cmd, cwd=None, logfile=None, env_of=False):
+    """Run a command (in the OpenFOAM environment with env_of); raise on failure."""
+    if env_of:
+        cmd = f". {OFENV} && {cmd}"
+    out = open(logfile, "a") if logfile else None
+    r = subprocess.run(["bash", "-c", cmd], cwd=cwd, stdout=out or None, stderr=subprocess.STDOUT if out else None)
+    if out:
+        out.close()
+    if r.returncode != 0:
+        raise RuntimeError(f"failed ({r.returncode}): {cmd}")
+
+
+class Loop:
+    def __init__(self, settings, root, dry):
+        self.sp = Path(settings).resolve()
+        self.s = yaml.safe_load(open(self.sp))
+        self.root = Path(root)
+        self.dry = dry
+
+    # --- paths ------------------------------------------------------------------------------------
+    def it(self, k):
+        d = self.root / f"iter{k}"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def state(self, k):
+        p = self.it(k) / "state.json"
+        return json.load(open(p)) if p.exists() else {}
+
+    def done(self, k, step, **info):
+        st = self.state(k)
+        st[step] = dict(done=spain_now(), **info)
+        json.dump(st, open(self.it(k) / "state.json", "w"), indent=1)
+
+    def parent_ref(self, k):
+        """(parent iteration, training tag). The automatic loop records it in iterK/state.json when the
+        iteration starts (the best model so far); by hand it is settings `parents` {k: p} or k - 1."""
+        st = self.state(k).get("parent")
+        if st:
+            return int(st["iter"]), st.get("tag", "")
+        return int({int(a): b for a, b in (self.s.get("parents") or {}).items()}.get(k, k - 1)), ""
+
+    def parent_of(self, k):
+        return self.parent_ref(k)[0]
+
+    def lineage(self, k):
+        """Ancestor iterations of k (>= 1), nearest first: the ones whose seeded pairs k trains on."""
+        out, j = [], self.parent_of(k)
+        while j >= 1:
+            out.append(j)
+            j = self.parent_of(j)
+        return out
+
+    def parent_data(self, k):
+        p = self.parent_of(k)
+        return Path(self.s["iter0"]["data"]) if p == 0 else self.it(p) / "data"
+
+    def parent_model_dir(self, k):
+        """Directory with the parent's chemmanifold_model.txt (+ tests)."""
+        p, tag = self.parent_ref(k)
+        if p == 0:
+            return Path(self.s["iter0"]["model_dir"])
+        return self.it(p) / "data" / "08_fluent" / self.mdir(tag)
+
+    def parent_model_pt(self, k):
+        p, tag = self.parent_ref(k)
+        return self.parent_data(k) / "06_models" / (self.mdir(tag) if p else "resnet_film") / "model.pt"
+
+    def tags(self):
+        """Training seeds per iteration: "" (the config's seed) and e.g. "s1" (seed + 100)."""
+        return list(self.s["train"].get("tags", [""]))
+
+    def config_path(self, k):
+        return self.it(k) / f"iterml_iter{k}.yaml"
+
+    # --- [A] collection run -------------------------------------------------------------------------
+    def collect(self, k):
+        c = self.s["collect"]
+        st = c["stop"]
+        t_end = 0.005 if self.dry else c["t_end"]
+        run = self.it(k) / "collect"
+        if not run.exists():
+            sen = " ".join(str(v) for v in c["sentinel"])
+            sh(f"{HERE}/setup_collect.sh {self.s['base_case']} {run} {self.parent_model_dir(k)} {self.s['n_procs']} "
+               f"{c['shadow_every']} {c['shadow_per_bin']} {c['cap_per_box']} '{sen}' {c['sentinel_every']} "
+               f"{c['sentinel_per_step']}", env_of=True, logfile=self.it(k) / "setup.log")
+        sh(f"foamDictionary -entry endTime -set {t_end} system/controlDict > /dev/null && "
+           f"foamDictionary -entry startFrom -set latestTime system/controlDict > /dev/null && "
+           f"foamDictionary -entry stopAt -set endTime system/controlDict > /dev/null", cwd=run, env_of=True)
+        log(self.it(k), f"collection run to {t_end * 1e3:.1f} ms ({self.s['n_procs']} ranks)")
+        proc = subprocess.Popen(["bash", "-c", f". {OFENV} && mpirun -np {self.s['n_procs']} "
+                                 "rhoReactingBuoyantFoam -parallel >> log.run 2>&1"], cwd=run)
+        reason, ood_run = None, 0
+        while proc.poll() is None:
+            time.sleep(10 if self.dry else st["check_s"])
+            reason, ood_run = self.stop_reason(run, st, ood_run)
+            if reason:
+                log(self.it(k), f"inner stop: {reason}; writing and stopping")
+                sh("foamDictionary -entry stopAt -set writeNow system/controlDict > /dev/null", cwd=run, env_of=True)
+                proc.wait()
+        if proc.returncode != 0 and not reason:
+            reason = f"solver exited with {proc.returncode} (divergence?)"
+            log(self.it(k), reason)
+        stt = read_status(run)
+        info = dict(reason=reason or "t_end", steps=int(stt["step"].max()) if len(stt) else 0,
+                    stored=int(stt["stored"].iloc[-1]) if len(stt) else 0)
+        self.done(k, "collect", **info)
+        log(self.it(k), f"collection done: {info}")
+
+    @staticmethod
+    def stop_reason(run, st, ood_run):
+        d = read_status(run)
+        if len(d) < 2:
+            return None, ood_run
+        stored, boxes = d["stored"].to_numpy(), d["boxes"].to_numpy()
+        if stored[-1] >= st["max_seeds"]:
+            return f"{stored[-1]} states stored (max {st['max_seeds']})", ood_run
+        w = int(st["saturation_window"])
+        if len(d) > w and stored[-1] >= st["min_seeds"]:
+            new = boxes[-1] - boxes[-1 - w]
+            if new < st["saturation"] * boxes[-1]:
+                return f"saturated: {new} new boxes in {w} steps of {boxes[-1]}", ood_run
+        share = d["ood"].to_numpy() / np.maximum(d["hot"].to_numpy(), 1)
+        tail = 0
+        for x in share[::-1]:
+            if x <= st["ood_share"]:
+                break
+            tail += 1
+        if tail >= st["ood_steps"]:
+            return f"model lost: OOD share > {st['ood_share']:.0%} for {tail} steps", tail
+        return None, tail
+
+    # --- [B] seeds ------------------------------------------------------------------------------------
+    def write_config(self, k):
+        base = (self.sp.parent / self.s["base_config"]).resolve()
+        cfg = yaml.safe_load(open(base))
+        cfg["data_dir"] = "data"
+        cfg["chemistry"]["mechanism"] = str((base.parent.parent / cfg["chemistry"]["mechanism"]).resolve()) \
+            if not Path(cfg["chemistry"]["mechanism"]).is_absolute() else cfg["chemistry"]["mechanism"]
+        cfg["seed"] = int(cfg.get("seed", 0)) + k
+        seeded = dict(self.s["seeded"])
+        if self.dry:
+            seeded.update(starts_per_seed=2, n_pick=6)
+        seeded.update(files=[str(self.it(k) / "seeds" / "seeds.npz")], out=f"pairs_seeded_iter{k}.npz")
+        cfg["pasr"]["seeded"] = seeded
+        cfg["iterml"] = dict(iteration=k, seeds=self.s["seeds"], parent=str(self.parent_model_dir(k)))
+        tr = self.s["train"]
+        cfg["model"].update(tr["model"])
+        iter0_scalers = Path(self.s["iter0"]["data"]) / "04_prep" / "scalers.json"
+        cfg.setdefault("preprocess", {})["scalers_from"] = str(iter0_scalers)
+        scratch = tr.get("scratch_every") and k % int(tr["scratch_every"]) == 0
+        if not scratch:
+            cfg["training"].update(tr["training"])
+            cfg["training"]["init_from"] = str(self.parent_model_pt(k))
+        if self.dry:
+            cfg["training"]["epochs"] = 10
+        hdr = (f"# ITERML iteration {k} ({spain_now()}): {base.name} + configs/iterml/iterml.yaml overrides.\n"
+               f"# Training pairs: the a priori data of iteration 0, the seeded pairs of earlier iterations and\n"
+               f"# pairs_seeded_iter{k}.npz (Cantera reactors started from the seeds of the iteration-{k} run).\n"
+               f"# No CFD state is a training pair.\n")
+        with open(self.config_path(k), "w") as f:
+            f.write(hdr)
+            yaml.safe_dump(cfg, f, sort_keys=False)
+        return cfg
+
+    def seeds(self, k):
+        cfg_p = self.config_path(k)
+        self.write_config(k)
+        self.link_data(k)
+        md = self.parent_model_dir(k)
+        sh(f"{PY} {REPO}/scripts/19_iterml_seeds.py --config {cfg_p} --runs {self.it(k) / 'collect'} "
+           f"--model {md / 'chemmanifold_model.txt'} --scalers {self.parent_data(k) / '04_prep' / 'scalers.json'} "
+           f"--out {self.it(k) / 'seeds'}" + self.previous_seeds(k), logfile=self.it(k) / "seeds.log")
+        n = len(np.load(self.it(k) / "seeds" / "seeds.npz")["T"])
+        if self.dry and n > 500:
+            d = dict(np.load(self.it(k) / "seeds" / "seeds.npz"))
+            pick = np.random.default_rng(0).choice(n, 500, replace=False)
+            np.savez(self.it(k) / "seeds" / "seeds.npz", **{key: (v[pick] if v.shape[:1] == (n,) else v) for key, v in d.items()})
+            n = 500
+        self.done(k, "seeds", n_seeds=n)
+        log(self.it(k), f"{n} seeds")
+
+    def previous_seeds(self, k):
+        """--previous: the seeds of every earlier iteration, so no state is seeded twice."""
+        prev = [self.it(j) / "seeds" / "seeds.npz" for j in self.lineage(k) if (self.it(j) / "seeds" / "seeds.npz").exists()]
+        return (" --previous " + " ".join(map(str, prev))) if prev else ""
+
+    def link_data(self, k):
+        """iterK/data: links to the parent's flame reference and every pairs file (a priori + seeded)."""
+        d, p = self.it(k) / "data", self.parent_data(k)
+        (d / "03_samples").mkdir(parents=True, exist_ok=True)
+        for sub in ("00_flame",):
+            if not (d / sub).exists():
+                os.symlink((p / sub).resolve(), d / sub)
+        for f in sorted((p / "03_samples").iterdir()):
+            t = d / "03_samples" / f.name
+            if not t.exists() and f.name != f"pairs_seeded_iter{k}.npz":
+                os.symlink(f.resolve(), t)
+
+    # --- [C] seeded exploration ---------------------------------------------------------------------
+    def explore(self, k):
+        sh(f"{PY} {REPO}/scripts/04_pasr_ensemble.py --config {self.config_path(k)} --only seeded",
+           logfile=self.it(k) / "explore.log")
+        n = len(np.load(self.it(k) / "data" / "03_samples" / f"pairs_seeded_iter{k}.npz")["dt"])
+        self.done(k, "explore", seeded_pairs=n)
+        log(self.it(k), f"{n} seeded pairs")
+
+    # --- [D] training -------------------------------------------------------------------------------
+    def train(self, k):
+        c, lg = self.config_path(k), self.it(k) / "train.log"
+        log(self.it(k), "stage 05_preprocess.py")
+        sh(f"{PY} {REPO}/scripts/05_preprocess.py --config {c}", logfile=lg)
+        info_all = {}
+        seed0 = int(yaml.safe_load(open(c)).get("seed", 0))
+        for i, tag in enumerate(self.tags()):
+            extra = f" --seed {seed0 + 100 * i} --tag {tag}" if tag else ""
+            for script in ("07_train.py", "12_export_fluent.py"):
+                log(self.it(k), f"stage {script}{extra}")
+                sh(f"{PY} {REPO}/scripts/{script} --config {c}" + (f" --tag {tag}" if tag and script.startswith("12") else
+                                                                      extra), logfile=lg)
+            info = json.load(open(self.it(k) / "data" / "06_models" / self.mdir(tag) / "train_info.json"))
+            info_all[tag or "seed0"] = dict(best_val_loss=info.get("best_val_loss"), best_epoch=info.get("best_epoch"),
+                                            wall_time_s=info.get("wall_time_s"))
+        try:
+            if self.dry:
+                raise RuntimeError("dry run: not registered")
+            sh(f"{PY} {REPO}/scripts/15_register_model.py --config {c}", logfile=lg)   # stage 15 has no --tag:
+            if len(self.tags()) > 1:                                                     # extra seeds are
+                log(self.it(k), "registry: only the seed-0 model is registered automatically")  # noted by hand
+        except RuntimeError as e:   # the registry is documentation; it must not stop the loop
+            log(self.it(k), f"registry: {e}")
+        self.done(k, "train", **info_all)
+
+    @staticmethod
+    def mdir(tag):
+        return "resnet_film" + (f"_{tag}" if tag else "")
+
+    def name(self, k, tag):
+        return f"iter{k}" + (f"_{tag}" if tag else "")
+
+    # --- [E] gate: offline benchmark ---------------------------------------------------------------
+    def bench(self, k):
+        out = self.it(k) / "bench"
+        n = 10 if self.dry else self.s["gate"]["n_states"]
+        steps = 500 if self.dry else 2500
+        models = " ".join(f"{self.name(k, t)}={self.it(k) / 'data' / '08_fluent' / self.mdir(t) / 'chemmanifold_model.txt'}"
+                          for t in self.tags())
+        sh(f"{PY} {REPO}/scripts/18_offline_benchmark.py --config {self.config_path(k)} "
+           f"--models parent={self.parent_model_dir(k) / 'chemmanifold_model.txt'} {models} "
+           f"--label iter{k} --out {out} --n-states {n} --steps {steps} --workers {self.s['n_procs']}",
+           logfile=self.it(k) / "bench.log")
+        m = json.load(open(out / "benchmark.json"))["models"]
+        dt10 = {name: m[name]["alone"]["all"]["dT_10ms"]["mean"] for name in m}
+        info = {f"dT10_{a}": round(b, 2) for a, b in dt10.items()}
+        for t in self.tags():
+            nm = self.name(k, t)
+            ok = dt10[nm] <= dt10["parent"] + float(self.s["gate"]["seed_spread_K"])
+            info[f"gate_{nm}"] = "pass" if ok else "fail"
+            log(self.it(k), f"gate: alone dT_10ms parent {dt10['parent']:.1f} K, {nm} {dt10[nm]:.1f} K -> "
+                            f"{'pass' if ok else 'FAIL (evaluated anyway, flagged in the report)'}")
+        self.done(k, "bench", report=str(out / "benchmark.md"), **info)
+
+    # --- [F] evaluation: protocol v1, pure ---------------------------------------------------------
+    def eval(self, k, tag=""):
+        t_end = 0.005 if self.dry else self.s["eval"]["t_end"]
+        sfx = f"_{tag}" if tag else ""
+        run = self.it(k) / f"eval{sfx}"
+        md = self.it(k) / "data" / "08_fluent" / self.mdir(tag)
+        label = f"{self.name(k, tag)}_pure"
+        sh(f"LABEL={label} T_END={t_end} {REPO}/openfoam/protocol/run_protocol.sh {self.s['base_case']} {run} "
+           f"pure {md} {self.s['n_procs']}", env_of=True, logfile=self.it(k) / "eval.log")
+        rep = self.it(k) / f"eval_report{sfx}"
+        di = " ".join(self.s["di_snapshots"])
+        try:
+            sh(f"{PY} {REPO}/openfoam/protocol/score_protocol.py --di {di} --run {run / 'snap'} --label {label} "
+               f"--run-dir {run} --out {rep}", logfile=self.it(k) / "eval.log")
+        except RuntimeError as e:
+            log(self.it(k), f"protocol scoring: {e}")
+        self.done(k, f"eval{sfx}", report=str(rep))
+
+    def report(self, k):
+        st = self.state(k)
+        lines = [f"# ITERML iteration {k}", "", f"Updated {spain_now()}." + (" DRY RUN (short test)." if self.dry else ""), ""]
+        for step in self.steps()[:-1]:
+            if step in st:
+                lines.append(f"- **{step}**: " + ", ".join(f"{a}={b}" for a, b in st[step].items()))
+        for extra in ("seeds/seeds_report.md",):
+            p = self.it(k) / extra
+            if p.exists():
+                lines += ["", p.read_text()]
+        (self.it(k) / "ITER-REPORT.md").write_text("\n".join(lines) + "\n")
+        self.done(k, "report")
+
+    def steps(self):
+        return STEPS[:-2] + ["eval" + (f"_{t}" if t else "") for t in self.tags()] + ["report"]
+
+    def run(self, k, only=None):
+        for step in ([only] if only else self.steps()):
+            if not only and step in self.state(k):
+                continue
+            log(self.it(k), f"--- {step} (iteration {k}) ---")
+            if step.startswith("eval_"):
+                self.eval(k, step[5:])
+            else:
+                getattr(self, step)(k)
+
+
+    # --- the automatic loop (frozen rules, openfoam/iterml/rules.py) ---------------------------------
+    def decide(self, msg):
+        line = f"- {spain_now()}: {msg}"
+        print(line, flush=True)
+        with open(self.root / "DECISIONS.md", "a") as f:
+            f.write(line + "\n")
+
+    def best(self):
+        p = self.root / "best.json"
+        return json.load(open(p)) if p.exists() else None
+
+    def scores(self, k):
+        r = self.s["rules"]
+        out = {}
+        for tag in (self.tags() if k else [""]):
+            sfx = f"_{tag}" if tag else ""
+            rep = self.it(k) / f"eval_report{sfx}" / f"{self.name(k, tag)}_pure" / "protocol_report.json"
+            out[tag] = rules.score(rep, r) if rep.exists() else dict(S=float("inf"), valid=False)
+        return out
+
+    def baseline(self):
+        """Iteration 0's pure score (the first 'best')."""
+        if self.best():
+            return
+        k0 = self.it(0)
+        if "eval" not in self.state(0):
+            t_end = 0.005 if self.dry else self.s["eval"]["t_end"]
+            run, label = k0 / "eval", "iter0_pure"
+            sh(f"LABEL={label} T_END={t_end} {REPO}/openfoam/protocol/run_protocol.sh {self.s['base_case']} {run} "
+               f"pure {self.s['iter0']['model_dir']} {self.s['n_procs']}", env_of=True, logfile=k0 / "eval.log")
+            sh(f"{PY} {REPO}/openfoam/protocol/score_protocol.py --di {' '.join(self.s['di_snapshots'])} "
+               f"--run {run / 'snap'} --label {label} --run-dir {run} --out {k0 / 'eval_report'}", logfile=k0 / "eval.log")
+            self.done(0, "eval")
+        sc = self.scores(0)[""]
+        json.dump(dict(iter=0, tag="", S=sc["S"], score=sc), open(self.root / "best.json", "w"), indent=1)
+        self.decide(f"baseline: iteration 0 (a priori model) S = {sc['S']:.2f} "
+                    f"(F {sc.get('F', float('nan')):.2f}, I {sc.get('I', float('nan')):.2f}, C {sc.get('C', float('nan')):.2f})")
+
+    def auto(self, k_max):
+        r = self.s["rules"]
+        self.baseline()
+        rej = 0
+        for k in range(1, int(k_max) + 1):
+            st = self.state(k)
+            if "decision" in st:                       # already decided (restart)
+                rej = 0 if st["decision"]["accepted"] else rej + 1
+                continue
+            best = self.best()
+            why = rules.stop(best["S"], rej, k - 1, r)
+            if why:
+                self.decide(f"STOP before iteration {k}: {why}; best = iteration {best['iter']} "
+                            f"{best['tag'] or 'seed0'} (S {best['S']:.2f})")
+                return
+            if "parent" not in st:
+                st["parent"] = dict(iter=best["iter"], tag=best["tag"])
+                json.dump(st, open(self.it(k) / "state.json", "w"), indent=1)
+                self.decide(f"iteration {k} starts from iteration {best['iter']} {best['tag'] or 'seed0'} (the best, S {best['S']:.2f})")
+            self.run(k)
+            sc = self.scores(k)
+            ok, tag, spread, reason = rules.accept(best["S"], {t: v["S"] for t, v in sc.items()})
+            st = self.state(k)
+            st["decision"] = dict(accepted=ok, tag=tag, spread=spread, reason=reason,
+                                  scores={t or "seed0": v for t, v in sc.items()})
+            json.dump(st, open(self.it(k) / "state.json", "w"), indent=1, default=float)
+            if ok:
+                json.dump(dict(iter=k, tag=tag, S=sc[tag]["S"], score=sc[tag]), open(self.root / "best.json", "w"), indent=1)
+                rej = 0
+            else:
+                rej += 1
+            self.decide(f"iteration {k}: {'ACCEPTED ' + (tag or 'seed0') if ok else 'rejected'}: {reason}")
+        best = self.best()
+        self.decide(f"STOP after iteration {k_max} (maximum); best = iteration {best['iter']} (S {best['S']:.2f})")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--settings", default=str(REPO / "configs" / "iterml" / "iterml.yaml"))
+    ap.add_argument("--root", default="/opt/ofb/iterml")
+    ap.add_argument("--dry", action="store_true")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    r = sub.add_parser("run")
+    r.add_argument("--iter", type=int, required=True)
+    s = sub.add_parser("step")
+    s.add_argument("name", help="one of " + ", ".join(STEPS) + ", or eval_<tag>")
+    s.add_argument("--iter", type=int, required=True)
+    au = sub.add_parser("auto", help="the automatic loop with the frozen rules (settings `rules`)")
+    au.add_argument("--max", type=int, default=None, help="default: rules.max_iterations")
+    a = ap.parse_args()
+    loop = Loop(a.settings, a.root if not a.dry else str(Path(a.root) / "dry"), a.dry)
+    if a.cmd == "auto":
+        loop.auto(a.max or loop.s["rules"]["max_iterations"])
+    else:
+        loop.run(a.iter, a.name if a.cmd == "step" else None)
+
+
+if __name__ == "__main__":
+    main()
