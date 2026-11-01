@@ -16,7 +16,7 @@ collect:                       # [A] collection run: hybrid (OOD and untrusted-b
   t_end: 0.025                 # s; the flame phase is scored in [F]
   shadow_every: 25             # steps between shadow DI checks...
   shadow_per_bin: 3            # ...cells per (T, Z, inside/OOD) bin (stratified, standing DI-check rule)
-  cap_per_box: 2               # seeds kept per dedup grid box per rank
+  cap_per_box: 1               # seeds kept per dedup grid box per rank (2 flooded the store in the test)
   sentinel: [900, 1700, 1.0e-4, 0.01]   # T_lo T_hi Y_CH4 Y_O2 of the induction cells watched
   sentinel_every: 100
   sentinel_per_step: 10        # per rank
@@ -25,7 +25,7 @@ collect:                       # [A] collection run: hybrid (OOD and untrusted-b
     min_seeds: 1500            # stored states (all ranks) before saturation may stop the run
     saturation_window: 100     # steps
     saturation: 0.02           # new grid boxes over the window < 2 % of all boxes
-    max_seeds: 6000
+    max_seeds: 15000            # raw stored states; the test run hit 6000 at 3 ms (one rank, untrusted bins)
     ood_share: 0.10            # OOD cells / hot cells above this...
     ood_steps: 50              # ...for this many consecutive steps: the model is lost
 

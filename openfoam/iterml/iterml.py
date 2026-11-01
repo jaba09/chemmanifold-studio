@@ -228,6 +228,8 @@ class Loop:
             log(self.it(k), f"stage {script}")
             sh(f"{PY} {REPO}/scripts/{script} --config {c}", logfile=lg)
         try:
+            if self.dry:
+                raise RuntimeError("dry run: not registered")
             sh(f"{PY} {REPO}/scripts/15_register_model.py --config {c}", logfile=lg)
         except RuntimeError as e:   # the registry is documentation; it must not stop the loop
             log(self.it(k), f"registry: {e}")
@@ -245,7 +247,13 @@ class Loop:
            f"iter{k}={self.it(k) / 'data' / '08_fluent' / 'resnet_film' / 'chemmanifold_model.txt'} "
            f"--label iter{k} --out {out} --n-states {n} --steps {steps} --workers {self.s['n_procs']}",
            logfile=self.it(k) / "bench.log")
-        self.done(k, "bench", report=str(out / "benchmark.md"))
+        m = json.load(open(out / "benchmark.json"))["models"]
+        dt10 = {name: m[name]["alone"]["all"]["dT_10ms"]["mean"] for name in ("parent", f"iter{k}")}
+        ok = dt10[f"iter{k}"] <= dt10["parent"] + float(self.s["gate"]["seed_spread_K"])
+        log(self.it(k), f"gate: alone dT_10ms parent {dt10['parent']:.1f} K, iter{k} {dt10[f'iter{k}']:.1f} K -> "
+                        f"{'pass' if ok else 'FAIL (evaluated anyway, flagged in the report)'}")
+        self.done(k, "bench", report=str(out / "benchmark.md"), dT10_parent=round(dt10["parent"], 2),
+                  dT10_new=round(dt10[f"iter{k}"], 2), gate="pass" if ok else "fail")
 
     # --- [F] evaluation: protocol v1, pure ---------------------------------------------------------
     def eval(self, k):

@@ -249,7 +249,7 @@ def report(out, tab, df, bad, drift, keep, r, cfg, gas):
         lines.append(f"| {names.get(g, g)} | {len(d)} | {d.weight.sum()} | {d['T'].median():.0f} | {d.Z.median():.3f} | "
                      f"{d.psi.median():.2f} |")
     lines += ["", "| flag | seeds |", "|---|---|"]
-    for f, n in tab.flags.value_counts().items():
+    for f, n in tab["flags"].value_counts().items():
         lines.append(f"| {f} | {n} |")
     sh = df["reason"].to_numpy() == 3
     lines += ["", f"Shadow checks: {sh.sum()}, failed {np.sum(sh & bad)} ({100 * np.mean(bad[sh]) if sh.any() else 0:.1f} %). "

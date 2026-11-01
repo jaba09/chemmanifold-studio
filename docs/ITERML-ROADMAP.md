@@ -1,7 +1,7 @@
 # ITERML roadmap: iterative physics-seeded surrogate loop
 
 Requested by Javier on 2026-11-01 (09:23 Spain time). Status: go-ahead given 09:28; code S0-S5 written
-(section 10), short test run S6 under way.
+(section 10); short test run S6 done 10:01 (results in project files iterml/prueba-corta/).
 Written in English; all times in Spain time (CET).
 
 ## 1. The idea in one paragraph
