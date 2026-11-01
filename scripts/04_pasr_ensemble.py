@@ -541,9 +541,32 @@ def seeded_set(cfg, rng):
     out = v.get("out", "pairs_seeded.npz")
     n_existing = sum(len(load_npz(f)["dt"]) for f in sorted(samples.glob("pairs_*.npz"))
                      if not f.name.startswith("pairs_seeded"))
-    n_seeded = sum(len(load_npz(f)["dt"]) for f in sorted(samples.glob("pairs_seeded*.npz")) if f.name != out)
-    arrays = seeded_pairs(cfg, files, rng, n_existing, n_seeded)
-    print(f"  {len(arrays['dt'])} seeded pairs (a priori pairs: {n_existing})")
+    olds = [f for f in sorted(samples.glob("pairs_seeded*.npz")) if f.name != out]
+    n_old = sum(len(load_npz(f)["dt"]) for f in olds)
+    arrays = seeded_pairs(cfg, files, rng, n_existing)       # capped at the whole seeded budget
+    # Share of the budget (max_share of the training set) between iterations: the new seeds get at
+    # least half of it, earlier iterations' seeded pairs are thinned (uniformly) to fit the rest.
+    # Without this, iteration 1 filled the budget and iteration 2's seeds produced no pair at all.
+    from chemmanifold.seeded import settings
+    share = float(settings(cfg)["max_share"])
+    budget = int(share / (1 - share) * n_existing)
+    n_new = len(arrays["dt"])
+    keep_new = min(n_new, max(budget - n_old, budget // 2))
+    if keep_new < n_new:
+        idx = np.sort(rng.choice(n_new, size=keep_new, replace=False))
+        arrays = {k: v[idx] for k, v in arrays.items()}
+    allow_old = budget - keep_new
+    if n_old > allow_old:
+        frac = allow_old / n_old
+        for f in olds:
+            d = load_npz(f)
+            n = len(d["dt"])
+            idx = np.sort(rng.choice(n, size=int(round(frac * n)), replace=False))
+            f.unlink()                     # usually a link into the parent iteration's data: keep that intact
+            save_npz(f, **{k: v[idx] for k, v in d.items()})
+            print(f"  {f.name}: thinned {n} -> {len(idx)} to share the seeded budget")
+    print(f"  {len(arrays['dt'])} seeded pairs of this iteration (budget {budget}, earlier seeded "
+          f"{min(n_old, allow_old)}, a priori pairs: {n_existing})")
     save_npz(samples / out, **arrays)
 
 

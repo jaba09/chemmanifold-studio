@@ -32,6 +32,7 @@ To identify the model a Fluent run used, compare the sha256 of its `chemmanifold
 | [`burner_openfoam_ood6_s1-resnet_film-20261030-f708cd95`](#burner_openfoam_ood6_s1-resnet_film-20261030-f708cd95) | candidate | 2026-10-30 | 181,799 | 12 | 0.03 | 14.8 | 4.3 | 5.0 | – |
 | [`burner_openfoam_ood6_s2-resnet_film-20261030-23218d70`](#burner_openfoam_ood6_s2-resnet_film-20261030-23218d70) | candidate | 2026-10-30 | 181,799 | 12 | 0.03 | 10.3 | 2.4 | 21.6 | – |
 | [`iterml_iter1-resnet_film-20261101-9f61a9f5`](#iterml_iter1-resnet_film-20261101-9f61a9f5) | candidate | 2026-11-01 | 303,523 | 12 | – | – | – | – | – |
+| [`iterml_iter2-resnet_film-20261101-0a5a9c04`](#iterml_iter2-resnet_film-20261101-0a5a9c04) | candidate | 2026-11-01 | 303,523 | 12 | – | – | – | – | – |
 
 ## h2_air_premixed-resnet_film-20261021-nofile
 
@@ -757,3 +758,31 @@ Flamelets: 40 (18 radiating), Z_st 0.0552, peak T 1338–2206 K.
 Training: latent d 12, hidden 192 x 3 blocks, best epoch 31 of 40, 31 min on 4 threads (Linux x86_64), git e233c83.
 Certification: .
 Fluent file sha256: `cf9821d20f0ebce1a4ff56414f8d376180315862a79f182bc9277556f037bf8c`.
+
+## iterml_iter2-resnet_film-20261101-0a5a9c04
+
+Config `iterml_iter2.yaml`, resnet_film, trained 2026-11-01T15:04:42+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | /home/user/chemmanifold-studio/mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 160 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.004 kg/m2/s x 1.5^k, up to 26 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 303,523 train / 41,390 validation pairs (reactor_0D 79,311, PaSR 22,400, flamelet_states 10,642, wall_cooled_0D 19,143, recirculation 7,200, unsteady_flamelets 14,529, equilibrium_tail_0D 5,760, vitiated_ignition 47,605, burnt_relaxation 17,604, 10 7,783, 11 105,319, 12 14, 13 7,603).
+Flamelets: 40 (18 radiating), Z_st 0.0552, peak T 1338–2206 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 33 of 40, 34 min on 4 threads (Linux x86_64), git 644d076.
+Certification: .
+Fluent file sha256: `19ca3a36cf2ab4a993197d8d0c5b0cea743ba745420e6204f61b9706b55e1db9`.
