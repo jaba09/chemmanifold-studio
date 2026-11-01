@@ -1,6 +1,7 @@
 # ITERML roadmap: iterative physics-seeded surrogate loop
 
-Requested by Javier on 2026-11-01 (09:23 Spain time). Status: **plan only, no runs started**.
+Requested by Javier on 2026-11-01 (09:23 Spain time). Status: go-ahead given 09:28; code S0-S5 written
+(section 10), short test run S6 under way.
 Written in English; all times in Spain time (CET).
 
 ## 1. The idea in one paragraph
@@ -152,11 +153,12 @@ Z moved by mixing with a small share of either inlet stream.
 | 11 seeded relaxation | burnt gas with radical excess (r far from 1), near-equilibrium errors | regime 8 started at the seed composition, radical perturbations, t up to 20 ms |
 | 12 seeded ignition | induction cells (c < 0.3, T 900-1700 K), drift seeds | 0D autoignition + regime 7 vitiated mixing with a share of the opposite stream |
 | 13 seeded cooling | psi > 0.5, cells near walls / hood | regime 3 cooling reactor at tau_q 1 ms-1 s |
-| 14 seeded flamelet | high strain or chi seeds | unsteady flamelet at the seed's strain, strain jump x 0.3-3 |
+| 14 seeded flamelet | high strain or chi seeds | unsteady flamelet at the seed's strain, strain jump x 0.3-3 (deferred: the store does not record strain yet) |
 
 Pairs use the dt range of the run's tau_cell histogram (as `dt_range`), so the
-network learns the steps it is really asked for. The seed state and its first
-reactor step (dt < 1 us) are stored with `excluded = true` and never enter training.
+network learns the steps it is really asked for. The seed state itself is never
+paired, and any pair that starts within 1e-8 (max |dY|) of a seed is dropped before saving, so not
+even a numerical copy of a CFD state reaches training.
 A cap keeps seeded pairs at <= 35 % of the training set, so the a priori exploration
 still dominates and old regions are not forgotten.
 
@@ -270,3 +272,13 @@ iteration, which would also tell real improvement from seed noise.
   (spread 22-62 K on the benchmark). Use 3 seeds for the last two iterations at least.
 - **Container limits**: runs die when no harness task is running; the supervisor must
   run as a background task and resume from the last write.
+
+## 10. Implementation (2026-11-01)
+
+| Piece | File | Notes |
+|---|---|---|
+| Collection mode | `openfoam/userChemStep` (`isann` dictionary, `startActive true`, new `sentinel`), `openfoam/iterml/setup_collect.sh` | reuses the ISANN store: reasons 1 OOD, 2 untrusted bin, 3 shadow check, 4 sentinel; status gains `sentinel,new_boxes` |
+| Seeds | `scripts/19_iterml_seeds.py` | network one-step via the UDF C core vs the stored GA18 step, 0D sentinel rollouts, radius dedup, flame features, regime rules; `comparison.csv` keeps every check |
+| Seeded exploration | `chemmanifold/seeded.py`, stage 4 `--only seeded` (`pasr.seeded`) | regimes 10-13, jitter, cumulative 35 % cap; stage 5 reads `pairs_seeded*.npz` |
+| Settings | `configs/iterml/iterml.yaml` | every threshold of sections 4-5 |
+| Driver | `openfoam/iterml/iterml.py run --iter K [--dry]` | collect -> seeds -> explore -> train (5, 7, 12, 15) -> bench (18) -> eval (protocol v1 pure) -> report; resumable via `iterK/state.json` |

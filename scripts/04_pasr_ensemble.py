@@ -60,6 +60,7 @@ EXTRA_SETS = {   # flame-mode sets that `--only` can (re)generate alone, e.g. to
     "equilibrium_perturbed": lambda g, c, s, r: relaxation_pairs(g, c, s, r, "equilibrium_perturbed",
                                                                  "pairs_eq_perturbed.npz"),
     "equilibrium_fixed_point": lambda g, c, s, r: equilibrium_pairs(g, c, s, r),
+    "seeded": lambda g, c, s, r: seeded_set(c, r),
 }
 
 
@@ -142,6 +143,8 @@ def main(cfg, only=None):
             equilibrium_pairs(gas, cfg, seeds, rng)
         if cfg.get("unsteady_flamelets"):
             unsteady_pairs(cfg, seeds, rng)
+        if p.get("seeded"):
+            seeded_set(cfg, rng)
 
 
 def flamelet_pairs(gas, cfg, seeds, rng):
@@ -522,6 +525,26 @@ def unsteady_pairs(cfg, seeds, rng):
           f"(highest burning strain {a_ext:.0f} 1/s, {len(Z)} Z points)")
     save_npz(stage_dir(cfg, "samples") / "pairs_unsteady.npz", **arrays)
     save_json(stage_dir(cfg, "samples") / "unsteady_flamelets.json", log)
+
+
+def seeded_set(cfg, rng):
+    """ITERML regimes 10-13 (chemmanifold/seeded.py): physics reactors started from the seeds that a
+    CFD run flagged (scripts/19_iterml_seeds.py). Writes 03_samples/pairs_seeded.npz; the seeds
+    themselves are never paired. `pasr.seeded.files` are seeds.npz paths relative to the config."""
+    from pathlib import Path
+    from chemmanifold.seeded import seeded_pairs
+    from chemmanifold.io import load_npz
+    v = cfg["pasr"]["seeded"]
+    base = Path(cfg["_config_path"]).parent
+    files = [str((base / f).resolve()) if not Path(f).is_absolute() else f for f in v["files"]]
+    samples = stage_dir(cfg, "samples")
+    out = v.get("out", "pairs_seeded.npz")
+    n_existing = sum(len(load_npz(f)["dt"]) for f in sorted(samples.glob("pairs_*.npz"))
+                     if not f.name.startswith("pairs_seeded"))
+    n_seeded = sum(len(load_npz(f)["dt"]) for f in sorted(samples.glob("pairs_seeded*.npz")) if f.name != out)
+    arrays = seeded_pairs(cfg, files, rng, n_existing, n_seeded)
+    print(f"  {len(arrays['dt'])} seeded pairs (a priori pairs: {n_existing})")
+    save_npz(samples / out, **arrays)
 
 
 if __name__ == "__main__":
