@@ -247,7 +247,7 @@ iteration, which would also tell real improvement from seed noise.
 
 ## 8. Open choices for Javier
 
-1. **How seeds feed the exploration** (asked separately):
+1. **How seeds feed the exploration**: DECIDED 2026-11-01 09:27 by Javier, option (a).
    (a) full seed state as reactor start, seed itself excluded from training
    (recommended, it is what "seeds for PaSR" means and it reaches states like psi < 0
    that the a priori bounds cannot);
