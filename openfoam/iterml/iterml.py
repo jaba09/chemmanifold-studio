@@ -191,7 +191,7 @@ class Loop:
         md = self.parent_model_dir(k)
         sh(f"{PY} {REPO}/scripts/19_iterml_seeds.py --config {cfg_p} --runs {self.it(k) / 'collect'} "
            f"--model {md / 'chemmanifold_model.txt'} --scalers {self.parent_data(k) / '04_prep' / 'scalers.json'} "
-           f"--out {self.it(k) / 'seeds'}", logfile=self.it(k) / "seeds.log")
+           f"--out {self.it(k) / 'seeds'}" + self.previous_seeds(k), logfile=self.it(k) / "seeds.log")
         n = len(np.load(self.it(k) / "seeds" / "seeds.npz")["T"])
         if self.dry and n > 500:
             d = dict(np.load(self.it(k) / "seeds" / "seeds.npz"))
@@ -200,6 +200,11 @@ class Loop:
             n = 500
         self.done(k, "seeds", n_seeds=n)
         log(self.it(k), f"{n} seeds")
+
+    def previous_seeds(self, k):
+        """--previous: the seeds of every earlier iteration, so no state is seeded twice."""
+        prev = [self.it(j) / "seeds" / "seeds.npz" for j in range(1, k) if (self.it(j) / "seeds" / "seeds.npz").exists()]
+        return (" --previous " + " ".join(map(str, prev))) if prev else ""
 
     def link_data(self, k):
         """iterK/data: links to the parent's flame reference and every pairs file (a priori + seeded)."""

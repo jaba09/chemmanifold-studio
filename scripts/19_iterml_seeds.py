@@ -219,8 +219,18 @@ def main(cfg, args):
         raise SystemExit("the scalers order the species differently from the mechanism")
     r = float(o["dedup_radius"]) * landmark_threshold(args.model)
     X = features(Y, T, dt, scalers)
-    kept = radius_dedup(X, r)
+    # Not again what an earlier iteration already seeded: a candidate within r of an earlier seed
+    # is dropped (the earlier seed's reactors already explored there)
+    X_old = None
+    if args.previous:
+        old = [np.load(f) for f in args.previous]
+        X_old = np.vstack([features(o["Y"], o["T"], o["dt"], scalers) for o in old])
+        print(f"  {len(X_old)} seeds of earlier iterations used as already explored")
+    kept = radius_dedup(X, r, X_old=X_old)
+    if X_old is not None and len(kept) == 0:
+        raise SystemExit("every candidate is within r of an earlier seed: nothing new to explore")
     from sklearn.neighbors import BallTree
+    # weight: caught states nearer to this seed than to any other kept seed (earlier ones excluded)
     _, nearest = BallTree(X[kept]).query(X, k=1)
     weight = np.bincount(nearest[:, 0], minlength=len(kept))
     ids, Y, T, dt = ids[kept], Y[kept], T[kept], dt[kept]
@@ -281,6 +291,7 @@ if __name__ == "__main__":
     ap.add_argument("--runs", nargs="+", required=True, help="OpenFOAM case directories of the collection run(s)")
     ap.add_argument("--model", required=True, help="chemmanifold_model.txt the run used")
     ap.add_argument("--scalers", required=True, help="04_prep/scalers.json of that model (OOD coordinates)")
+    ap.add_argument("--previous", nargs="*", default=[], help="seeds.npz of earlier iterations: no new seed within r of them")
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
     main(load_config(a.config), a)

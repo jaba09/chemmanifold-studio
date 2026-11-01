@@ -278,7 +278,7 @@ iteration, which would also tell real improvement from seed noise.
 | Piece | File | Notes |
 |---|---|---|
 | Collection mode | `openfoam/userChemStep` (`isann` dictionary, `startActive true`, new `sentinel`), `openfoam/iterml/setup_collect.sh` | reuses the ISANN store: reasons 1 OOD, 2 untrusted bin, 3 shadow check, 4 sentinel; status gains `sentinel,new_boxes` |
-| Seeds | `scripts/19_iterml_seeds.py` | network one-step via the UDF C core vs the stored GA18 step, 0D sentinel rollouts, radius dedup, flame features, regime rules; `comparison.csv` keeps every check |
+| Seeds | `scripts/19_iterml_seeds.py` | network one-step via the UDF C core vs the stored GA18 step, 0D sentinel rollouts, three dedup levels (grid cap 1 per box in the run, radius of novelty within the iteration, and the same radius against the seeds of ALL earlier iterations via `--previous`), flame features, regime rules; `comparison.csv` keeps every check |
 | Seeded exploration | `chemmanifold/seeded.py`, stage 4 `--only seeded` (`pasr.seeded`) | regimes 10-13, jitter, cumulative 35 % cap; stage 5 reads `pairs_seeded*.npz` |
 | Settings | `configs/iterml/iterml.yaml` | every threshold of sections 4-5 |
 | Driver | `openfoam/iterml/iterml.py run --iter K [--dry]` | collect -> seeds -> explore -> train (5, 7, 12, 15) -> bench (18) -> eval (protocol v1 pure) -> report; resumable via `iterK/state.json` |
