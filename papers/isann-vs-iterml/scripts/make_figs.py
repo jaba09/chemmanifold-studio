@@ -90,7 +90,7 @@ for name, (r, st) in RUNS.items():
         ax[1].semilogy(*zip(*pts), marker=".", **st)
 ax[0].axvspan(25, 50, color="0.93", zorder=0)
 ax[0].axhline(5, c="0.4", lw=0.7, ls="--")
-ax[0].text(49.5, 5.4, "ITERML target 5 K", ha="right", fontsize=8, color="0.3")
+ax[0].text(0.8, 3.6, "ITERML target 5 K", ha="left", fontsize=8, color="0.3")
 ax[0].set_ylabel(r"flame-zone mean $|T-T_\mathrm{DI}|$ [K]  ($T>1600$ K)")
 ax[1].set_ylabel(r"CO L1 error, hot cells ($T>600$ K) [%]")
 for a in ax:

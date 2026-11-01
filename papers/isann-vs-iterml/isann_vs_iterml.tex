@@ -1,7 +1,7 @@
-%% ISANN vs ITERML comparison paper, draft v0, 2026-11-01 (Spain time).
+%% ISANN vs ITERML comparison paper, draft v1, 2026-11-01 (Spain time): ITERML iterations 1 and 2.
 %% Target: Combustion and Flame (Elsevier, elsarticle); alternative Energy and AI.
 %% Base: ISANN article draft v1 (chemmanifold/isann/articulo/), ITERML roadmap and iteration reports.
-%% \pending{} = ITERML iteration 2 result, due about 19:45 CET on 2026-11-01; fill from
+%% ITERML iteration 2 filled in 2026-11-01 (negative result); sources:
 %%   chemmanifold/iterml/iter2/eval_protocol_report.md, seeds_report.md, benchmark.md.
 %% \todo{} = must be resolved before submission. Check every reference in refs.bib against the paper.
 \documentclass[preprint,review,12pt]{elsarticle}
@@ -51,7 +51,10 @@ the a priori network. Their start-up errors are mirror images: the ISANN network
 0.4~ms early, the ITERML network 0.6~ms late. ISANN gives better radicals and CO; ITERML keeps the training
 data independent of the simulation, so the model remains a physics-based model of the mechanism, at the
 cost of a slower growth of CO and heat release in the hot gas and a small loss on an offline benchmark of
-canonical states. \pending{one sentence with the iteration-2 ignition time and flame error.}
+canonical states. A second ITERML iteration, aimed at the late ignition, made the network worse (6.6~K,
+ignition 1.1~ms late, total CO 6.4 times DI): its errors build up over many steps in cooled lean gas whose
+CO level lies below the absolute floor of the one-step check, so the check never saw them. Physics-only
+seeding works, but only as well as the error detector that chooses the seeds.
 \end{abstract}
 
 \begin{keyword}
@@ -301,7 +304,32 @@ run failed in 4.3\% of the cases, and one of 31 sentinels drifted. The seeded ex
 \num{120719} pairs (the 35\% cap) in 7~min, and none of them is a CFD state. The second collection run,
 with the iteration-1 network, a sentinel four times as dense and a wider ignition rule (fuel and O$_2$ at
 800--1700~K), stored about \num{15200} states, which gave \num{2912} seeds after deduplication against
-iteration 1, 173 of them ignition seeds. \pending{seeded pairs per regime, training time, gate result.}
+iteration 1, 173 of them ignition seeds (Table~\ref{tab:seeds2}). Only 1.5\% of its 8211 shadow checks
+failed and none of its 720 sentinels drifted. The iteration-2 seeds produced \num{60359} seeded pairs, and
+the iteration-1 seeded pairs were thinned to the same number so that together they stayed within the 35\%
+cap. Warm-start training from iteration 1 took 33~min, and the network passed the offline gate with a clear
+margin (Section~\ref{sec:offline}).
+
+\begin{table}[t]
+\centering
+\caption{ITERML seeds of iteration 2 (iteration-1 network, denser sentinel, wider ignition rule),
+deduplicated against the seeds of iteration 1.}
+\label{tab:seeds2}
+\small
+\begin{tabular}{lrrrrr}
+\toprule
+Regime & Seeds & Weight & $T$ median [K] & $Z$ median & $\psi$ median \\
+\midrule
+10 PaSR        & 576  & 804  & 642  & 0.007 & $-0.09$ \\
+11 relaxation  & 1901 & 4824 & 1789 & 0.051 & 0.15 \\
+12 ignition    & 173  & 305  & 875  & 0.093 & 0.64 \\
+13 cooling     & 262  & 475  & 696  & 0.108 & 0.74 \\
+\midrule
+\multicolumn{6}{l}{Caught as: untrusted bin 1424; OOD 1040; untrusted bin + shadow error 354;}\\
+\multicolumn{6}{l}{shadow error 93; OOD + shadow error 1; sentinel drift 0.}\\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{table}[t]
 \centering
@@ -346,8 +374,13 @@ better than the 0.5~mm resolution of the analysis. The ITERML evaluation run had
 during the flame phase (none of them sent to DI), and its 4571 shadow checks had a median one-step
 error of 0.027~K and a 5\% error of the temperature increment.
 
-\pending{flame error, bias, drift, zone errors and OOD share of iteration 2; whether the 5~K target and the
-2~K/10~ms drift target are met.}
+ITERML iteration 2 was worse than iteration 1 in the flame: 6.6~K over 25--50~ms with a bias of $-4.1$~K,
+falling from 8.4~K at 25~ms to 5.0~K at 50~ms (drift $-1.3$~K per 10~ms), so it misses the 5~K target
+that iteration 1 met. Its zone errors are similar to those of iteration 1 (reactive 5.4~K, rich 5.8~K,
+hot-cell 95th percentile 6~K), so the larger flame error is a systematic cold bias rather than a few bad
+cells; its OOD share was 0.7\%. The one-step shadow checks of the evaluation run were as good as those of
+iteration 1 (median 0.04~K, 6\% error of the temperature increment): one-step accuracy did not predict
+the outcome.
 
 \begin{figure}[t]
 \centering
@@ -373,20 +406,20 @@ DI ignites at about 2.6~ms.}
  & (hybrid) & (pure) & (pure) & (pure) & (pure) \\
 \midrule
 Training data from the CFD             & DI pairs & DI pairs & none & none & none \\
-Ignition time, model $-$ DI [ms]        & 0 (DI phase) & $-0.4$ & $+0.6$ & \pending{} & $-1.6$ \\
-Worst flame bias at start-up [K]        & -- & $+251$ & $-345$ & \pending{} & $+351$ \\
-Flame $|dT|$, 25--50 ms [K]             & 2.6 & 2.1 & 3.3 & \pending{} & 68.8$^a$ \\
-Flame bias [K]                          & $-0.6$ & $+0.8$ & $-1.5$ & \pending{} & $-51^b$ \\
-Drift [K per 10 ms]                     & -- & $-0.5$ & $-1.6$ & \pending{} & $+20^a$ \\
-Flame $|dT|$ at 50 ms [K]               & 2.3 & 1.9 & 1.7 & \pending{} & -- \\
-OH total, model/DI                      & -- & 0.55 & 1.05 & \pending{} & -- \\
-CO total, model/DI                      & -- & 0.97 & 1.66 & \pending{} & -- \\
-CH$_4$ total, model/DI                  & -- & 1.00 & 1.27 & \pending{} & -- \\
-H total, model/DI                       & -- & 0.89 & 1.19 & \pending{} & -- \\
-CO L1, hot cells                        & -- & 5\% & 75\% & \pending{} & 300--400\% \\
-Heat release, model/DI                  & -- & 0.92$^c$ & 1.21 & \pending{} & -- \\
-GA18 / OOD share, flame phase           & 0.14--0.5\% / $<$0.2\% & 0 / 0 & 0 / 0.9\% & \pending{} & 0 / -- \\
-Cost [s per step]                       & 4.2 (2 ranks) & 2.85 (2 ranks) & 1.99 (4 ranks) & \pending{} & -- \\
+Ignition time, model $-$ DI [ms]        & 0 (DI phase) & $-0.4$ & $+0.6$ & $+1.1$ & $-1.6$ \\
+Worst flame bias at start-up [K]        & -- & $+251$ & $-345$ & $-360$ & $+351$ \\
+Flame $|dT|$, 25--50 ms [K]             & 2.6 & 2.1 & 3.3 & 6.6 & 68.8$^a$ \\
+Flame bias [K]                          & $-0.6$ & $+0.8$ & $-1.5$ & $-4.1$ & $-51^b$ \\
+Drift [K per 10 ms]                     & -- & $-0.5$ & $-1.6$ & $-1.3$ & $+20^a$ \\
+Flame $|dT|$ at 50 ms [K]               & 2.3 & 1.9 & 1.7 & 5.0 & -- \\
+OH total, model/DI                      & -- & 0.55 & 1.05 & 2.15 & -- \\
+CO total, model/DI                      & -- & 0.97 & 1.66 & 6.38 & -- \\
+CH$_4$ total, model/DI                  & -- & 1.00 & 1.27 & 0.99 & -- \\
+H total, model/DI                       & -- & 0.89 & 1.19 & 1.19 & -- \\
+CO L1, hot cells                        & -- & 5\% & 75\% & 551\% & 300--400\% \\
+Heat release, model/DI                  & -- & 0.92$^c$ & 1.21 & 1.10 & -- \\
+GA18 / OOD share, flame phase           & 0.14--0.5\% / $<$0.2\% & 0 / 0 & 0 / 0.9\% & 0 / 0.7\% & 0 / -- \\
+Cost [s per step]                       & 4.2 (2 ranks) & 2.85 (2 ranks) & 1.99 (4 ranks) & 1.91 (4 ranks) & -- \\
 \bottomrule
 \multicolumn{6}{l}{\footnotesize $^a$ 25--32.5~ms, run stopped at 32.5~ms. $^b$ at 25~ms.
 $^c$ flame zone only.}
@@ -407,8 +440,13 @@ radical build-up in the induction zone, and the single ignition seed could not b
 was designed for exactly this: a four-times denser sentinel and an ignition rule that sends every seed
 with fuel and oxygen at 800--1700~K to the ignition reactors, giving 173 ignition seeds.
 
-\pending{ignition time of iteration 2, worst start-up bias, and whether the 0.3~ms target is met; add
-the iteration-2 curve to Fig.~\ref{fig:ignition} (the script draws it automatically).}
+It did not work. The iteration-2 network ignites the jet at 3.6~ms, 1.1~ms after DI, and the flame is
+still 360~K too cold at 3.5~ms (Fig.~\ref{fig:ignition}). The 173 ignition seeds were caught mostly by the
+wider rule (median 875~K, rich, strongly cooled, $\psi=0.64$), not by the sentinel, which flagged none of its
+720 tracks: they describe cold, heat-losing mixtures near the walls rather than the induction zone at the
+base of the jet, and their ignition reactors added slow chemistry where the jet needed fast chemistry. A
+seed rule based on temperature and composition alone does not identify the cells that set the ignition
+delay; the sentinel does, but only if it is placed in the induction zone and run long enough to drift.
 
 \begin{figure}[t]
 \centering
@@ -424,13 +462,20 @@ Away from temperature the ISANN network is clearly better. With v6, total CO is 
 hot-cell L1 error is 5\%; total OH is 0.55 of DI. With ITERML iteration 1, total OH is right
 (1.05), but CO, CH$_4$ and H are 27--66\% too high and the CO error grows steadily in the flame window, from
 38\% at 25~ms to 119\% at 50~ms (Fig.~\ref{fig:flame}, right), together with the heat release evaluated on
-the states (from 1.04 to 1.43 times DI, Fig.~\ref{fig:hrr}). The error is not in the flame itself, where
-the CO L1 error is 2\%, but in the hot gas between 600 and 1600~K, i.e.\ in the slow CO oxidation of the
-burnt gas recirculating under the pot. That region is covered by the cooling and relaxation seeds, but
-their reactors run for at most 20~ms, while the gas stays under the pot for longer. ISANN does not have
-this problem because its DI pairs are taken in that very gas.
+the states (from 1.04 to 1.43 times DI, Fig.~\ref{fig:hrr}). The error is not in the flame, where
+the CO L1 error is 2\%, but in cooled lean burnt gas (400--1000~K, $Z\approx0.027$) near the walls and the
+hood, where at 50~ms CO is about ten times that of DI and the gas is 15--32~K too cold. In that gas the
+remaining CO oxidises slowly over residence times far longer than the 20~ms of the seeded relaxation and
+cooling reactors. ISANN does not have this problem because its DI pairs are taken in that very gas.
 
-\pending{CO, OH, H and heat-release ratios of iteration 2; whether the CO growth persists.}
+In iteration 2 this error grew: total CO is 6.4 times DI, its hot-cell L1 error rises from 95\% at
+25~ms to 931\% at 50~ms, and CO in the cooled lean gas reaches about 100 times DI at 50~ms; total OH is 2.15
+times DI. The flame-zone CO is still right (L1 3\%, total in the flame 0.97 of DI). The shadow check could
+not see this error: its CO test has an absolute floor of \num{5e-5}, above the CO mass fractions of that
+gas, so every one-step error there passes, while the many small steps pile up exactly as in the ignition
+delay. The seeds that would have targeted it were therefore never caught, and the iteration-2 data, with
+more relaxation and fewer cooling seeds, moved that gas further from DI. A relative CO and OH test (floor
+\num{1e-7}) and sentinels in cooled lean gas are the obvious corrections.
 
 \begin{figure}[t]
 \centering
@@ -450,9 +495,13 @@ network lost some accuracy on the 218-state set against its parent ood8 (mean $|
 tolerance of the gate. The loss is concentrated in vitiated states (85 against 53~K at 10~ms), while
 partially burnt and cooled states improved (69 against 103~K at 10~ms, and 11 against 34~K at 50~ms). A
 35\% share of seeded data drawn from one burner's burnt gas thus displaces part of the a priori
-coverage, even though no CFD state is in it. \todo{Run both final networks on the same 440-state set with
+coverage, even though no CFD state is in it. Iteration 2 shows that the benchmark does not predict the
+CFD either: it ranked the iteration-2 network clearly better than iteration 1 (mean $|dT|$ 22.9 against
+31.8~K at 10~ms and 40 against 59~K at 50~ms, mostly through the vitiated family, 34 against 85~K), yet it
+was the worse network in the burner. A gate made only of canonical states cannot see errors that build up
+in the burner's slow, cold, long-residence gas. \todo{Run both final networks on the same 440-state set with
 three training seeds each; the two sets above are not the same.}
-\pending{offline benchmark of iteration 2 against iteration 1 and ood8.}
+
 
 \subsection{Cost}
 \label{sec:cost}
@@ -494,14 +543,26 @@ separately, as protocol v1 does, and should be part of the acceptance gate of bo
 production solver, ISANN gives the best accuracy at the lowest effort. When the surrogate must run in a
 solver without DI fallback, must be reported as a physics-based model, or will be transferred to other
 conditions, ITERML keeps the training data clean and still uses the simulation to direct the effort.
-\pending{revise this paragraph if iteration 2 closes the ignition and CO gaps.}
+After two iterations ITERML has not reached ISANN's accuracy, and the second iteration shows why:
+the loop only improves the network where its detectors look.
+
+\paragraph{The detector sets the ceiling} In ITERML the CFD contributes nothing but the choice of seeds, so
+the error detector is the whole link between the simulation and the training data. Both failures of
+iteration 2 were errors that are small per step and large over many steps, in regions where the one-step
+check is blind (ignition delay at the jet base, CO below an absolute floor in cooled gas). ISANN is much
+less sensitive to this, because its DI phase records every visited state whether or not a check flags
+it. Making ITERML robust therefore means relative species thresholds, sentinels (multi-step rollouts
+against DI) placed in every slow region and not only in the induction zone, and a gate that includes
+rollouts from the seeds; it also means that iterations must be allowed to fail, which is why the loop
+keeps the best network (iteration 1) as the parent of the next one.
 
 \paragraph{Limitations}
 \begin{itemize}
 \item One laminar 2D configuration, one mechanism and one fuel. \todo{second, turbulent case}
 \item Different parent networks (ood7 vs ood8) and one training seed per network (Section~\ref{sec:fair}).
-\item Only one complete ITERML iteration at the time of writing \pending{update}; the loop's stop
-  criteria have not been reached yet.
+\item Two ITERML iterations; the second was worse than the first and the loop's stop criteria have not
+  been reached. A third iteration from iteration 1 with relative CO/OH checks, cooled-gas sentinels and two
+  training seeds is planned. \todo{iteration 3}
 \item The evaluation covers 0--50~ms of a transient; the steady state was tested with local time stepping
   for ISANN only (flame error 40--48~K against a DI solution that itself drifts by 100~K, with CO frozen in
   cold long-residence gas).
@@ -521,13 +582,16 @@ methane/air burner with an 18-species mechanism, under one evaluation protocol i
   total CO within 3\%, and first place on an offline benchmark of canonical states;
 \item seeding physics-based exploration with the states where the network fails (ITERML) gave 3.3~K
   (1.7~K at 50~ms) after one iteration, with no CFD state in the training data, but too much CO and heat
-  release in the recirculating hot gas and a small loss on the offline benchmark;
+  release in cooled lean gas and a small loss on the offline benchmark;
 \item both schemes miss multi-step ignition errors with one-step checks; ISANN's network ignites the jet
-  0.4~ms early and ITERML's first network 0.6~ms late \pending{iteration 2};
+  0.4~ms early and ITERML's first and second networks 0.6 and 1.1~ms late;
 \item the information the simulation gives about \emph{where} the network fails is enough to reach a
   few-kelvin flame error without using the simulation's results as labels.
 \end{enumerate}
-\pending{final conclusion after iteration 2.}
+A second ITERML iteration made the network worse (6.6~K, CO 6.4 times DI) because the one-step check
+that chooses the seeds is blind to slow, multi-step errors in cooled gas; in ITERML, the quality of the
+error detector, not the amount of seeded data, limits what the loop can learn, and an offline benchmark
+of canonical states does not replace a run in the target simulation.
 
 \section*{Data and code availability}
 \todo{Repository (chemmanifold-studio: openfoam/isann, openfoam/iterml, openfoam/protocol,
