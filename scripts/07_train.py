@@ -36,6 +36,11 @@ a weaker pushforward noise. `training.patience` stops when the validation loss h
 that many epochs after the noise is off; the parent is the epoch-0 checkpoint to beat. `--seed` sets the training seed (weights, batches,
 noise; the data stay those of the config's seed) and `--tag` names the output 06_models/<arch>_<tag>,
 so several seeds of one configuration live side by side.
+
+Experts of a gated ensemble (docs/ENSEMBLE-ROADMAP.md): `training.subset` = {T: [lo, hi, width],
+c: [lo, hi, width]} keeps only the pairs (and rollout segments) whose INPUT state has a weight > 0 in that
+box of temperature and normalised progress variable c (chemmanifold/ensemble.py), so the expert also sees
+the blending band around its edges. The data are still the a priori exploration, only subset.
 """
 
 import platform
@@ -165,6 +170,13 @@ def main(cfg, arch, seed=None, tag=None):
         torch.set_num_threads(int(tc["threads"]))
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
     scalers, thermo = load_prep(cfg)
+    gate_tab = None
+    if tc.get("subset"):
+        from chemmanifold.ensemble import box_weight, gate_vars, subset_dataset
+        ds, keep, gate_tab = subset_dataset(cfg, ds, scalers["species"], tc["subset"])
+        n_all = len(keep)
+        print(f"  expert subset {tc['subset']}: {int(keep.sum())} of {n_all} pairs "
+              f"({int(ds['is_val'].sum())} validation)")
     d = latent_dim(cfg)
     model = build_surrogate(arch, cfg, scalers, thermo, latent_dim=d)
     device = resolve_device(tc.get("device", "auto"))
@@ -200,8 +212,12 @@ def main(cfg, arch, seed=None, tag=None):
     rl = cfg.get("rollout_loss")
     seg = None
     if rl and rl.get("weight", 0) > 0:
-        seg = {k: torch.as_tensor(v, dtype=torch.float64)
-               for k, v in load_npz(stage_dir(cfg, "samples") / "segments.npz").items()}
+        seg_np = load_npz(stage_dir(cfg, "samples") / "segments.npz")
+        if gate_tab is not None:
+            _, c0 = gate_vars(gate_tab, seg_np["Y"][:, 0])
+            ks = box_weight(seg_np["T"][:, 0], c0, tc["subset"]) > 0
+            seg_np = {k: v[ks] for k, v in seg_np.items()}
+        seg = {k: torch.as_tensor(v, dtype=torch.float64) for k, v in seg_np.items()}
         if tc.get("dt_scaled_loss"):    # the rollout steps are scaled like the pairs at their dt
             j = int(torch.argmin((bins - torch.round(torch.log10(seg["dt"][0]) * 10).long()).abs()))
             roll_sdy, roll_sdT = sy[j], float(sT[j])

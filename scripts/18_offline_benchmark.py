@@ -37,6 +37,13 @@ Metrics, per model, mode and family:
 Seeds: models are given as label=path, a label "name/s1" (or a directory .../name/seed1/...) is seed 1
 of model "name". The report gives, per model, the mean over seeds and the [min, max] range.
 
+Deep ensembles (`--ensembles NAME=path1,path2,...`): the members advance the same state, the step is the
+mean of their mass fractions and T follows from the constant (h, P). A state is flagged (hybrid, OOD at
+start) when any member flags it. per_state.csv then also has the members' first-step spread (spread_T in K,
+spread_logOH in decades), to test whether disagreement predicts error. A model path may also be an ensemble
+file (chemmanifold_ensemble.txt from scripts/make_ensemble.py): it then runs through the C ensemble code
+(fluent/udf/chemmanifold_ensemble.c), mean or gated, exactly as the CFD would.
+
 Check against CFD (`--cfd-reference`, a CSV with column `model` and columns such as `flame_dT_25ms`):
 Spearman rank correlation of every benchmark metric with each CFD column, over the models present in
 both. The CFD numbers are only compared with, never used to build states or to train.
@@ -216,17 +223,36 @@ _LIB = {}
 
 
 def _model_worker(job):
-    """Roll one model over a chunk of states, alone and hybrid. Returns T (n, steps) and Y at checkpoints
-    for both modes, the OOD flag of the start state and the share of hybrid steps sent to Cantera."""
+    """Roll one model (or a deep ensemble of models) over a chunk of states, alone and hybrid. Returns T
+    (n, steps) and Y at checkpoints for both modes, the OOD flag of the start state, the share of hybrid
+    steps sent to Cantera and, for an ensemble, the members' disagreement on the first step.
+
+    Ensemble (model_path is a list): every member advances the same state; the step is the arithmetic mean
+    of the members' mass fractions (each member conserves elements, so the mean does too) and T is solved
+    from the reactor's constant (h, P) with Cantera. A state is flagged when any member flags it."""
     cfg_path, model_path, build_dir, Y0, T0, P0, dt, steps, species = job
+    paths = model_path if isinstance(model_path, (list, tuple)) else [model_path]
     if "lib" not in _LIB:
         _LIB["lib"] = stage17.core_library(build_dir)
     lib = _LIB["lib"]
     err = ctypes.create_string_buffer(512)
-    model = lib.cm_load(str(model_path).encode(), err, 512)
-    if not model:
-        raise RuntimeError(f"{model_path}: {err.value.decode()}")
-    names = [lib.cm_species_name(model, k).decode() for k in range(lib.cm_n_species(model))]
+    models, ens = [], None
+    if len(paths) == 1 and stage17.is_ensemble_file(paths[0]):     # C ensemble file (make_ensemble.py)
+        ens = lib.cme_load(str(paths[0]).encode(), err, 512)
+        if not ens:
+            raise RuntimeError(f"{paths[0]}: {err.value.decode()}")
+        names = [lib.cme_species_name(ens, k).decode() for k in range(lib.cme_n_species(ens))]
+    else:
+        for mp in paths:
+            m = lib.cm_load(str(mp).encode(), err, 512)
+            if not m:
+                raise RuntimeError(f"{mp}: {err.value.decode()}")
+            models.append(m)
+        model = models[0]
+        names = [lib.cm_species_name(model, k).decode() for k in range(lib.cm_n_species(model))]
+        for m in models[1:]:
+            if [lib.cm_species_name(m, k).decode() for k in range(lib.cm_n_species(m))] != names:
+                raise RuntimeError("ensemble members have different species lists")
     idx = [list(species).index(s) for s in names]
     opt = stage17.CmOptions()
     lib.cm_default_options(ctypes.byref(opt))
@@ -235,17 +261,69 @@ def _model_worker(job):
     n = len(T0)
     res = {m: (np.full((n, steps), np.nan), np.full((n, len(cps), len(species)), np.nan)) for m in ("alone", "hybrid")}
     ood0, ode_share = np.zeros(n, int), np.zeros(n)
+    k_oh = names.index("OH") if "OH" in names else None
+    spread = np.full((n, 2), np.nan)                     # first-step member spread: std dT [K], std log10 OH
     info = stage17.CmInfo()
     dp = ctypes.POINTER(ctypes.c_double)
+    y_full = np.zeros(len(species))
+
+    sp_c = ctypes.c_double(0.0)
+
+    def flagged_any(y, T, P):
+        ptr = y.ctypes.data_as(dp)
+        if ens:
+            lib.cme_ood(ens, ctypes.byref(opt), ptr, T, P, ctypes.byref(info))
+            return bool(info.flags & 0x3F)
+        for m in models:
+            ctypes.memset(ctypes.byref(info), 0, ctypes.sizeof(info))   # cm_ood only sets bits: clear first
+            lib.cm_ood(m, ctypes.byref(opt), ptr, T, P, ctypes.byref(info))
+            if info.flags & 0x3F:
+                return True
+        return False
+
+    def advance(y, T, P, i, first):
+        """One surrogate step in place; returns the new T or None on failure."""
+        if ens:
+            if lib.cme_advance(ens, ctypes.byref(opt), y.ctypes.data_as(dp), T, P, dt, ctypes.byref(info),
+                               ctypes.byref(sp_c)) != 0:
+                return None
+            if first:
+                spread[i, 0] = sp_c.value
+            return info.T_out
+        if len(models) == 1:
+            if lib.cm_advance(model, ctypes.byref(opt), y.ctypes.data_as(dp), T, P, dt, ctypes.byref(info)) != 0:
+                return None
+            return info.T_out
+        outs, Ts = [], []
+        for m in models:
+            ym = y.copy()
+            if lib.cm_advance(m, ctypes.byref(opt), ym.ctypes.data_as(dp), T, P, dt, ctypes.byref(info)) != 0:
+                continue
+            if np.all(np.isfinite(ym)) and np.isfinite(info.T_out):
+                outs.append(ym)
+                Ts.append(info.T_out)
+        if not outs:
+            return None
+        if first and len(outs) > 1:
+            spread[i, 0] = float(np.std(Ts))
+            if k_oh is not None:
+                spread[i, 1] = float(np.std(np.log10(np.maximum([o[k_oh] for o in outs], Y_FLOOR))))
+        y_full[:] = 0.0
+        y_full[idx] = y
+        gas.TPY = T, P, y_full
+        h = gas.enthalpy_mass
+        y[:] = np.clip(np.mean(outs, axis=0), 0.0, None)
+        y_full[:] = 0.0
+        y_full[idx] = y
+        gas.HPY = h, P, y_full
+        return gas.T
+
     for i in range(n):
-        y_full = np.zeros(len(species))
         for mode in ("alone", "hybrid"):
             y = np.ascontiguousarray(Y0[i, idx], dtype=float).copy()
-            ptr = y.ctypes.data_as(dp)
             T, n_ode = float(T0[i]), 0
             for k in range(steps):
-                lib.cm_ood(model, ctypes.byref(opt), ptr, T, P0[i], ctypes.byref(info))
-                flagged = (info.flags & 0x3F) != 0
+                flagged = flagged_any(y, T, P0[i])
                 if k == 0 and mode == "alone":
                     ood0[i] = int(flagged)
                 if mode == "hybrid" and flagged:
@@ -258,9 +336,9 @@ def _model_worker(job):
                     T = r.T
                     n_ode += 1
                 else:
-                    if lib.cm_advance(model, ctypes.byref(opt), ptr, T, P0[i], dt, ctypes.byref(info)) != 0:
+                    T = advance(y, T, P0[i], i, first=(k == 0 and mode == "alone"))
+                    if T is None:
                         break
-                    T = info.T_out
                 if not np.isfinite(T):
                     break
                 res[mode][0][i, k] = T
@@ -268,8 +346,11 @@ def _model_worker(job):
                     res[mode][1][i, cps.index(k), idx] = y
             if mode == "hybrid":
                 ode_share[i] = n_ode / steps
-    lib.cm_free(ctypes.c_void_p(model)) if hasattr(lib, "cm_free") else None
-    return res, ood0, ode_share
+    for m in models:
+        lib.cm_free(m)
+    if ens:
+        lib.cme_free(ens)
+    return res, ood0, ode_share, spread
 
 
 def chunks(n, k):
@@ -291,6 +372,9 @@ def model_specs(args):
             rel = f.parent.relative_to(args.models_dir).parts
             name, seed = rel[0], int(re.sub(r"\D", "", rel[1]) or 0) if len(rel) > 1 else 0
             specs.append((f"{name}/s{seed}", name, seed, f))
+    for s in args.ensembles or []:          # NAME=path1,path2,... -> one deep-ensemble "model"
+        name, _, paths = s.partition("=")
+        specs.append((f"{name}/s0", name, 0, [Path(x) for x in paths.split(",")]))
     if args.only:
         specs = [s for s in specs if s[1] in args.only]
     return specs
@@ -409,10 +493,12 @@ def main(cfg, args):
             parts = list(ex.map(_model_worker, jobs))
         ood0 = np.concatenate([p[1] for p in parts])
         share = np.concatenate([p[2] for p in parts])
+        spread = np.vstack([p[3] for p in parts])
         for mode in ("alone", "hybrid"):
             out = (np.vstack([p[0][mode][0] for p in parts]), np.vstack([p[0][mode][1] for p in parts]))
             df = per_state_table(st, ref, out, label, name, seed, mode, cps_list, cp)
             df["ood_start"], df["ode_share"] = ood0, share if mode == "hybrid" else 0.0
+            df["spread_T"], df["spread_logOH"] = spread[:, 0], spread[:, 1]
             tables.append(df)
         print(f"  {label}: {time.time() - t1:.0f} s, OOD at start {ood0.mean():.0%}, hybrid steps to Cantera "
               f"{share.mean():.1%}")
@@ -549,6 +635,8 @@ if __name__ == "__main__":
     p = base_parser(__doc__)
     p.add_argument("--models", nargs="*", help="label=path/to/chemmanifold_model.txt; label name/s1 = seed 1 of name")
     p.add_argument("--models-dir", help="directory of <name>/chemmanifold_model.txt or <name>/seed<k>/...")
+    p.add_argument("--ensembles", nargs="*",
+                   help="NAME=path1,path2,... : deep ensemble (mean of the members' steps), reported as model NAME")
     p.add_argument("--only", nargs="*", help="restrict to these model names")
     p.add_argument("--cfd-reference", help="CSV: model, and numeric CFD columns to rank against (evaluation only)")
     p.add_argument("--label", default="default")

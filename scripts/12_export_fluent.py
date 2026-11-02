@@ -35,6 +35,10 @@ def test_cases(ds, rng, n=60):
 def main(cfg, arch, n_landmarks, quantile, tag=None):
     model, scalers, thermo = load_surrogate(cfg, arch, tag)
     ds = load_npz(stage_dir(cfg, "prep") / "dataset.npz")
+    if cfg["training"].get("subset"):     # expert of an ensemble: OOD tables from its own pairs only
+        from chemmanifold.ensemble import subset_dataset
+        ds, keep, _ = subset_dataset(cfg, ds, scalers["species"], cfg["training"]["subset"])
+        print(f"  expert subset: OOD tables and test vectors from {int(keep.sum())} of {len(keep)} pairs")
     gas = make_gas(cfg)
     dt_range = (float(ds["dt"].min()), float(ds["dt"].max()))
     tables = build_ood_tables(gas, cfg, scalers, ds, vq_K=int(cfg["manifold"]["n_clusters"]),
