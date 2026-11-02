@@ -315,7 +315,11 @@ def _model_worker(job):
         y[:] = np.clip(np.mean(outs, axis=0), 0.0, None)
         y_full[:] = 0.0
         y_full[idx] = y
-        gas.HPY = h, P, y_full
+        try:
+            gas.TPY = float(np.mean(Ts)), P, y_full      # start the (h, P) solve from the members' mean T
+            gas.HPY = h, P, y_full
+        except ct.CanteraError:
+            return None                                  # counted as a failed state, like an invalid step
         return gas.T
 
     for i in range(n):

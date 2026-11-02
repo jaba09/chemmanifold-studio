@@ -189,3 +189,46 @@ E0 and E1 can start right away and already answer part of the question for free.
 1. Go-ahead for E0 to E2 (light, no heavy jobs), which I would start with.
 2. Which single baseline is the reference: ood8 (data already in the project files) or ITERML iteration 1 (best pure CFD, but its training data must be handed off from the ITERML container first).
 3. Later, go-ahead for the heavy stages E3 and E4.
+
+## 11. Progress
+
+### 2026-11-02 (morning, CET): E0, E1 and E2 done; Javier chose ood8 as the baseline
+
+**E0, deep ensembles from existing seeds** (stage 18, 440 states, 50 ms; results in `chemmanifold/ensemble/e0_deep_ensemble/`). The ensemble step is the mean of 3 members' mass fractions, with T solved from (h, P).
+
+| surrogate alone | dT 10 ms [K] | dT 50 ms [K] | drift > 100 K |
+|---|---|---|---|
+| ood6, 3 seeds | 37 [22, 62] | 79 [61, 110] | 26 % |
+| **mean of the 3 ood6 seeds** | **15** | **39** | 18 % |
+| ood1, 3 seeds | 46 [33, 60] | 73 [61, 89] | 27 % |
+| **mean of the 3 ood1 seeds** | **23** | **51** | 24 % |
+| eqfp8, 3 warm-started seeds | 25 [24, 25] | 59 [58, 60] | 22 % |
+| mean of the 3 eqfp8 seeds | 24 | 57 | 22 % |
+| ood8 (single, baseline) | 25 | 49 | 21 % |
+
+- Averaging independently trained seeds beats **every** member, and the ood6 average beats ood8 too. Averaging warm-started seeds (eqfp8) gives nothing, because those members are almost identical.
+- Disagreement predicts error. The Spearman correlation between the members' first-step T spread and the ensemble error is 0.67 to 0.82 at 1 ms and 0.45 to 0.63 at 10 ms. So it works as a short-horizon OOD signal.
+- Hybrid mode tells the same story (ens_ood6 20 K at 50 ms vs ood6 27 [20, 33] K, ood8 27 K).
+- **Verdict:** go for P0 with members trained from scratch. Strictly, the gain (ensemble 15 K vs best member 22 K) is smaller than the members' spread (22 to 62 K), so the result is "better than any member", not "better by more than the spread". Cost is 3x the network part of the step.
+
+**Benchmark fix found on the way.** `cm_ood` only sets bits, and stage 18 reused one info struct, so a flagged state stayed flagged. This inflated the hybrid Cantera share and "OOD at start" in earlier benchmark reports (v1 to v3: 59 to 91 % OOD at start, now 18 to 34 %). Alone-mode metrics were not affected. The CFD codes (userChemStep, UDF) zero the struct and are not affected.
+
+**E1, error map of ood8** (26.9k validation pairs of the a priori exploration; `chemmanifold/ensemble/e1_error_map/`).
+
+- One-step T error: 64 % of the squared error sits in reacting near-stoichiometric gas (0.5 to 1.5 Z_st, 1200 to 1900 K, more than 200 K from equilibrium), which is 2 % of the data.
+- Species error (physical units): 46 % sits in near-stoichiometric gas at 1200 to 1900 K close to equilibrium (7 % of the data); OH and H increments are off by 19 to 37 % there.
+- Closed loop: the vitiated and partially burnt families (ignition) hold 69 % of the 50 ms T error.
+- In the Box-Cox training-loss space, 58 % of the error is cold lean gas near equilibrium (trace species, physically irrelevant). The single network spends its loss there.
+- **Verdict:** go. The error is concentrated in 2 to 3 regions that T and the progress variable c separate.
+
+**E2, code** (PR #21):
+- `fluent/udf/chemmanifold_ensemble.{c,h}`: a mean or gated blend (soft boxes in T and c = Yc / Yc_eq(Z)).
+- `scripts/make_ensemble.py`: writes the ensemble file, plus a self-test of the C blend against Python (passes to 1e-11 K).
+- Stage 18 runs ensemble files.
+- `training.subset` in stages 07 and 12 trains an expert and builds its OOD tables on its own box.
+- Still to do before E4: call the ensemble API from `userChemStep` and the Fluent UDF, and register ensembles in stage 15.
+
+**Suggested E3 set** (for Javier's OK):
+- P0 = 3 ood8 seeds from scratch (about 3 h each).
+- P1 = 3 experts: cold / reacting (c < 0.8) / near-equilibrium (c > 0.8), warm-started from ood8.
+- Matched single-network controls.
