@@ -47,6 +47,9 @@ struct cm_model {
     const double *A, *W, *T_mid, *a_lo, *a_hi;   /* A: Ne x Ns, a_*: Ns x 7 */
     double R[CM_MAX_SPECIES], h_form[CM_MAX_SPECIES];
     int P_frozen;                                  /* trained at a single pressure */
+    int out_mode;                                  /* 0: next Box-Cox state, 1: physical dY, dT */
+    const double *sdYp;                            /* out_mode 1: scales of dY_k; sdTp of dT */
+    double sdTp;
 
     /* ResNet-FiLM */
     int hidden, n_blocks;
@@ -253,7 +256,12 @@ cm_model *cm_load(const char *path, char *err, int errlen)
             return NULL;
         }
         linear(m, &m->inp, "net.inp", H, Ns + 4, err, errlen, &ok);
-        linear(m, &m->out, "net.out", Ns, H, err, errlen, &ok);
+        m->out_mode = (int)get_scalar(m, "out_mode", 0);
+        linear(m, &m->out, "net.out", m->out_mode ? Ns + 1 : Ns, H, err, errlen, &ok);
+        if (m->out_mode) {
+            m->sdYp = get(m, "sigma_dYp", Ns, err, errlen, &ok);
+            m->sdTp = get_scalar(m, "sigma_dTp", 1.0);
+        }
         for (i = 0; i < m->n_blocks; i++) {
             snprintf(name, sizeof name, "net.blocks.%d.film", i);
             linear(m, &m->film[i], name, 2 * H, 4, err, errlen, &ok);
@@ -517,6 +525,7 @@ static void resnet_film(const cm_model *m, const double *yt, const double *c, do
         for (i = 0; i < H; i++) h[i] += v[i];
     }
     apply(&m->out, h, y_cand, 0);                              /* Eq. 37 */
+    if (m->out_mode) return;                                   /* Ns + 1 scaled increments */
     for (i = 0; i < Ns; i++) y_cand[i] += yt[i];
 }
 
@@ -571,7 +580,7 @@ int cm_step(const cm_model *m, const double *Y, double T, double P, double h, do
             double *Y_out, double *T_out)
 {
     const int Ns = m->Ns;
-    double yt[CM_MAX_SPECIES], yc[CM_MAX_SPECIES], c[4], raw[4];
+    double yt[CM_MAX_SPECIES], yc[CM_MAX_SPECIES + 1], c[4], raw[4];
     int k;
     for (k = 0; k < Ns; k++) yt[k] = (boxcox(Y[k], m->lam) - m->mu_y[k]) / m->sigma_y[k];
     /* A model trained at one pressure has ctx_sigma[P] ~ 1e-12: feed it its own pressure,
@@ -586,7 +595,9 @@ int cm_step(const cm_model *m, const double *Y, double T, double P, double h, do
     else
         chemnode(m, yt, c, dt / m->dt_base, yc);
     for (k = 0; k < Ns; k++) {
-        Y_out[k] = inv_boxcox(yc[k] * m->sigma_y[k] + m->mu_y[k], m->lam);
+        /* out_mode 1: Y + dY; the network's dT (yc[Ns]) is not used, T follows from the enthalpy */
+        Y_out[k] = m->out_mode ? Y[k] + yc[k] * m->sdYp[k]
+                               : inv_boxcox(yc[k] * m->sigma_y[k] + m->mu_y[k], m->lam);
         if (!cm_finite(Y_out[k])) return -1;
     }
     project(m, Y, Y_out);
