@@ -161,7 +161,7 @@ def rollout_loss(model, seg, idx, sigma_dT, sigma_dy=None):
     return loss / K
 
 
-def main(cfg, arch, seed=None, tag=None):
+def main(cfg, arch, seed=None, tag=None, resume=False):
     tc = cfg["training"]
     # --seed, else training.seed (train_seeds.py), else the top-level seed: weights and batches only
     seed = int(tc.get("seed", cfg["seed"]) if seed is None else seed)
@@ -229,17 +229,31 @@ def main(cfg, arch, seed=None, tag=None):
     noise_off = int(np.ceil(tc["noise_end_frac"] * E))   # the clean validation loss is 2-3x higher
     t_start, started = time.time(), datetime.now(timezone.utc)
     hist, best, best_epoch = [], np.inf, 0
-    if tc.get("init_from"):   # the parent is the checkpoint to beat: if nothing improves on it, keep it
+    resuming = resume and (out_dir / "train_state.pt").exists()
+    if tc.get("init_from") and not resuming:   # the parent is the checkpoint to beat: if nothing improves on it, keep it
         model.eval()
         with torch.no_grad():
             best = float(batch_losses(model, val, A, sigma_dT, w, tc["equil_threshold"], 0.0, rel)[0])
         state = {k: v.detach().cpu() for k, v in model.state_dict().items()}
         torch.save({"arch": arch, "latent_dim": d, "state_dict": state, "epoch": 0}, out_dir / "model.pt")
         print(f"  parent validation loss {best:.5f} (epoch 0)")
+    first_epoch = 1
+    ckpt_path = out_dir / "train_state.pt"
+    if resuming:   # continue an interrupted run exactly where it stopped
+        st = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+        model.load_state_dict(st["model"])
+        model.net.to(device)
+        opt.load_state_dict(st["opt"])
+        sched.load_state_dict(st["sched"])
+        torch.set_rng_state(st["rng"])
+        hist, best, best_epoch, first_epoch = st["hist"], st["best"], st["best_epoch"], st["epoch"] + 1
+        t_start -= st.get("wall", 0.0)
+        print(f"  resuming after epoch {st['epoch']} (best {best:.5f} at epoch {best_epoch})")
     n_params = sum(p.numel() for p in model.net.parameters())
     print(f"  {arch}: {n_params} parameters, latent d={d}, {n_train} train pairs, {E} epochs, "
           f"network on {device}, {torch.get_num_threads()} CPU threads")
-    for e in range(1, E + 1):
+    e = first_epoch - 1
+    for e in range(first_epoch, E + 1):
         t0 = time.time()
         alpha = tc["noise_amp"] * max(0.0, 1.0 - e / (tc["noise_end_frac"] * E))
         model.train()
@@ -277,6 +291,11 @@ def main(cfg, arch, seed=None, tag=None):
         elif rolling and patience and alpha == 0 and e - max(best_epoch, noise_off) >= patience:
             print(f"  early stop at epoch {e}: no validation improvement since epoch {best_epoch}")
             break
+        if resume:
+            torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), sched=sched.state_dict(),
+                            rng=torch.get_rng_state(), hist=hist, best=best, best_epoch=best_epoch, epoch=e,
+                            wall=time.time() - t_start), ckpt_path.with_suffix(".tmp"))
+            ckpt_path.with_suffix(".tmp").replace(ckpt_path)
         if e == 1 or e % 5 == 0 or e == E:
             print(f"  epoch {e:3d}  alpha={alpha:.4f}  train_inc={agg['inc']:.4f}  val_inc={vparts['inc']:.4f}  "
                   + (f"train_roll={agg['roll']:.4f}  " if "roll" in agg else "")
@@ -322,5 +341,7 @@ if __name__ == "__main__":
     p.add_argument("--arch", choices=["resnet_film", "chemnode"], default="resnet_film")
     p.add_argument("--seed", type=int, default=None, help="training seed (default: the config's seed)")
     p.add_argument("--tag", default=None, help="write to 06_models/<arch>_<tag> (e.g. s1 for seed 1)")
+    p.add_argument("--resume", action="store_true",
+                   help="save the full training state every epoch (train_state.pt) and continue from it if present")
     a = p.parse_args()
-    main(load_config(a.config), a.arch, a.seed, a.tag)
+    main(load_config(a.config), a.arch, a.seed, a.tag, a.resume)
