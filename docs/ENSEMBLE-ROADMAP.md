@@ -232,3 +232,39 @@ E0 and E1 can start right away and already answer part of the question for free.
 - P0 = 3 ood8 seeds from scratch (about 3 h each).
 - P1 = 3 experts: cold / reacting (c < 0.8) / near-equilibrium (c > 0.8), warm-started from ood8.
 - Matched single-network controls.
+
+### 2026-11-02 (afternoon and evening, CET): E3 offline screening
+
+Javier OK'd the full E3 at 15:57 CET. At 19:01 CET he chose to stop after the seeds and the region networks, so the 3x-parameter control was not trained. All results are on the 440-state benchmark, 50 ms; files are in `chemmanifold/ensemble/e3/`, which holds the model files, configs and benchmark reports. Training is resumable (`07_train.py --resume`).
+
+| surrogate alone (as in Fluent) | dT 10 ms [K] | dT 50 ms [K] | drift > 100 K | cost per step |
+|---|---|---|---|---|
+| ood8 seed 0 (the original) | 25 | 49 | 21 % | 1x |
+| ood8 seed 1, from scratch | 45 | 99 | 26 % | 1x |
+| ood8 seed 2, from scratch | 41 | 88 | 27 % | 1x |
+| **P0: mean of ood8 seeds 0, 1, 2** | **15** | **32** | 15 % | 2.7x |
+| P1 warm: 3 region experts warm-started from ood8 | 31 | 67 | 25 % | 1x (1.05 in overlaps) |
+| control: ood8 fine-tuned on all pairs, same settings | 31 | 58 | 24 % | 1x |
+| P1 scratch: the same 3 experts trained from scratch | 25 | 50 | 17 % | 1x |
+
+The P1 regions are: cold below 1000 K; hot and reacting with c < 0.93; hot and near equilibrium with c > 0.93. Blending widths are 100 K and 0.04 in c.
+
+- **P0 (deep ensemble): GO to CFD.**
+  - The mean beats every member on every family except vitiated, where it ties.
+  - At 10 ms it is 15 K, against 37 K for the average seed and 25 K for the best (lucky) seed.
+  - Hybrid mode: 10 / 26 K against 16 to 22 / 27 to 62 K.
+  - The first-step T spread of the members predicts the error (Spearman 0.83 at 1 ms).
+  - This also shows that ood8 seed 0 was a lucky draw: two more seeds with the same data are about twice as bad. Single-seed comparisons of a priori models in this project should be read with that in mind.
+- **P1 warm-started: NO-GO.**
+  - Every expert, swapped in alone, makes the result worse (`p1_warm_ablation/`).
+  - The fine-tuned single control is equally worse.
+  - So 40 epochs of warm-start fine-tuning at lr 1e-4 degrade closed-loop accuracy even though the one-step validation loss improves. The same pattern was seen for eqfp8.
+- **P1 from scratch: inconclusive** (one seed).
+  - It equals the best ood8 seed (25 / 50 K) at the same cost and is better than the average seed. It has fewer drifting states (17 vs 21 %) and is better in the hybrid mode (15 vs 27 K at 50 ms), but it flags more states as out of range (31 vs 18 % at the start).
+  - Its one-step T increment error is higher (inc_T 61 vs 30 %), probably at the region boundaries.
+  - Settling it needs 2 more seeds of the experts (about 2 h on 4 cores).
+- **Gate mechanics are neutral:** three copies of ood8 behind the gate reproduce ood8 exactly.
+
+Before E4 (CFD, pure mode, P0):
+- the ensemble API has to be wired into `userChemStep` (OpenFOAM) and the Fluent UDF;
+- this container has no OpenFOAM; the ITERML container did.
