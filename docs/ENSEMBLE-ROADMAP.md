@@ -268,3 +268,45 @@ The P1 regions are: cold below 1000 K; hot and reacting with c < 0.93; hot and n
 Before E4 (CFD, pure mode, P0):
 - the ensemble API has to be wired into `userChemStep` (OpenFOAM) and the Fluent UDF;
 - this container has no OpenFOAM; the ITERML container did.
+
+### 2026-11-03 (CET): E3b region-net seeds and E4 CFD of the deep ensemble
+
+Javier chose "Both" at 06:53 CET: two more seeds of the from-scratch region networks, and the CFD test of P0.
+
+**E3b, P1 from scratch with 3 seeds** (benchmark, surrogate alone; `chemmanifold/ensemble/e3/p1_scratch_3seeds/`):
+
+| | dT 10 ms [K], mean [range] | dT 50 ms [K], mean [range] |
+|---|---|---|
+| ood8, 3 seeds | 37 [25, 45] | 78 [49, 99] |
+| P1 scratch, 3 seeds | 29 [25, 36] | 58 [50, 65] |
+
+- Better on average and with a smaller seed spread, but the ranges overlap, so criterion 1 of E3 is not met. **Verdict: not advanced to CFD.**
+- Hybrid mode is better too, but it hands more cells to Cantera (30 to 36 % vs 17 to 20 %), because P1 flags more states as out of range at the start (31 vs 18 %).
+
+**E4, CFD protocol v1, pure mode, 50 ms** (OpenFOAM v2412, 2 ranks, same lit start; reports in `chemmanifold/ensemble/e4/`). The ensemble file is loaded by `userChemStep` through `cme_*`. S is the ITERML score, S = max(F, I, C), from `openfoam/iterml/rules.py` with window 25-50 ms.
+
+| | ood8 seed 0 (single) | P0: mean of ood8 seeds 0, 1, 2 |
+|---|---|---|
+| flame mean abs dT, 25-50 ms | 24.2 K (F 4.85) | **4.4 K (F 0.88)** |
+| hot cells mean abs dT / p95 | 4.6 / 15 K | 0.6 / 3 K |
+| ignition (Tmax > 1600 K), DI 2.45 ms | 1.37 ms (I 3.61) | 1.55 ms (I 3.01) |
+| CO, OH total model/DI at 50 ms | x4.4, x5.5 | x0.93, x1.19 |
+| C (CO/OH ln ratio / ln 1.4) | 5.23 | **0.92** |
+| L1 error in hot cells, OH / CO / H | 419 / 469 / 1479 % | 45 / 9 / 34 % |
+| drift of flame error | -10.6 K per 10 ms | -0.6 K per 10 ms |
+| OOD share, flame phase | 58.5 % | 0.4 % |
+| **S** | **5.23** | **3.01** |
+| cost | 3.42 s/step | 9.84 s/step (**2.9x**) |
+
+- P0 meets the flame-T and the CO/OH targets (F and C below 1). ood8 misses both by about 5x. P0 also keeps the run inside the trained range (0.4 % OOD vs 58.5 %).
+- Ignition is still early, by 0.9 ms (single net: 1.1 ms). Averaging does not fix it, so the cause is in the shared training data, not in seed noise. Ignition alone sets S = 3.01.
+- For reference, ITERML iteration 1 (CFD-seeded physics exploration, single net) scored S 2.22 (flame 3.3 K). P0 reaches a similar flame and species accuracy with a priori data only, but its ignition is worse.
+- Cost is 2.9x, which is inside the 3x limit for P0.
+- Caveats:
+  - This is one CFD run per model. ood8 seeds 1 and 2 were not run alone in CFD; offline they are about twice as bad as seed 0, so the single-net baseline used here is the best seed.
+  - The 3x-parameter single control was skipped (Javier, 2026-11-02), so part of the gain could be capacity rather than averaging.
+- **Verdict: partial GO.** The flame and species gain is large, outside any plausible seed noise, and within the cost limit. The full GO criterion is not met, because ignition is not within 0.3 ms and there is no second CFD seed.
+- Suggested next steps, not started:
+  1. Run P0 built from ITERML iter1 seeds, to see whether averaging and better data add up.
+  2. Fix ignition through exploration of the induction region, using physics data only.
+  3. Run the 3x-parameter control, if the paper needs to separate capacity from averaging.
