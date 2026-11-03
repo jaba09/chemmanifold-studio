@@ -38,6 +38,7 @@
 #endif
 
 #include "chemmanifold_core.h"
+#include "chemmanifold_ensemble.h"
 
 #define CM_N_UDM 7
 #define CM_PATH 512
@@ -49,7 +50,8 @@ typedef struct {
     double dt_min, dt_max;   /* chemistry dt Fluent passed this iteration [s] (0 = no call) */
 } cm_counters;
 
-static cm_model *cm_m = NULL;
+static cm_model *cm_m = NULL;        /* the model, or member 0 of an ensemble (owned by cm_e) */
+static cm_ensemble *cm_e = NULL;     /* ensemble file (chemmanifold_ensemble.txt), or NULL */
 static cm_options cm_opt;
 static int cm_map[CM_MAX_SPECIES];   /* Fluent species index -> model species index */
 static int cm_map_n = -1;            /* n_spe the map was built for; -1 = not built */
@@ -115,8 +117,17 @@ static void cm_load_all(void)
 #if !RP_HOST
     char err[512];
     cm_read_options();
-    if (cm_m) cm_free(cm_m);
-    cm_m = cm_load(cm_model_path, err, sizeof err);
+    if (cm_e) cme_free(cm_e);           /* frees its members, cm_m among them */
+    else if (cm_m) cm_free(cm_m);
+    cm_e = NULL;
+    if (cme_is_ensemble_file(cm_model_path)) {
+        cm_e = cme_load(cm_model_path, err, sizeof err);
+        cm_m = cm_e ? cme_member(cm_e, 0) : NULL;
+        if (cm_e) Message0("chemmanifold: ensemble of %d surrogates (%s)\n", cme_n_members(cm_e),
+                           cme_blend(cm_e) == CME_BLEND_MEAN ? "mean" : "gate");
+    } else {
+        cm_m = cm_load(cm_model_path, err, sizeof err);
+    }
     cm_map_n = -1;
     cm_load_failed = (cm_m == NULL);
     memset(&cm_cnt, 0, sizeof cm_cnt);
@@ -227,7 +238,8 @@ DEFINE_CHEM_STEP(user_chem_step, c, t, p, num_p, n_spe, dt, pres, temp, yk)
     for (i = 0; i < n_spe; i++) Y[cm_map[i]] = yk[i];
     P = *pres;
     if (P < 0.5 * 101325.0) P += cm_op_pressure;   /* gauge pressure passed: make it absolute */
-    cm_advance(cm_m, &cm_opt, Y, *temp, P, *dt, &info);
+    if (cm_e) cme_advance(cm_e, &cm_opt, Y, *temp, P, *dt, &info, NULL);
+    else cm_advance(cm_m, &cm_opt, Y, *temp, P, *dt, &info);
     for (i = 0; i < n_spe; i++) yk[i] = Y[cm_map[i]];
 
     cm_cnt.calls += 1;

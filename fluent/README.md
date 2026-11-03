@@ -75,17 +75,22 @@ the UDF build scripts break on such paths. Start Fluent standalone (Fluent Launc
 *Double Precision*, *Processes* 4 for the Student edition); the case was saved with 12 partitions and
 Fluent repartitions it for 4 processes when it reads it.
 
-1. Copy `fluent/udf/chemmanifold_udf.c`, `chemmanifold_core.c` and `chemmanifold_core.h` into the case folder.
-2. Go to *User-Defined > Functions > Compiled…*. Add **both `.c` files** under *Source Files* and
-   `chemmanifold_core.h` under *Header Files*. Click *Build*, then *Load* with the library name `libudf`.
+1. Copy `fluent/udf/chemmanifold_udf.c`, `chemmanifold_core.c`, `chemmanifold_ensemble.c` and their two
+   `.h` files into the case folder.
+2. Go to *User-Defined > Functions > Compiled…*. Add **the three `.c` files** under *Source Files* and
+   `chemmanifold_core.h` and `chemmanifold_ensemble.h` under *Header Files*. Click *Build*, then *Load* with the library name `libudf`.
    On Windows you need either Visual Studio (Build Tools) or the *Use Built-In Compiler* option that
    2020 R2 offers.
    The TUI equivalent is:
    ```
-   /define/user-defined/compiled-functions compile libudf yes chemmanifold_udf.c chemmanifold_core.c "" chemmanifold_core.h ""
+   /define/user-defined/compiled-functions compile libudf yes chemmanifold_udf.c chemmanifold_core.c chemmanifold_ensemble.c "" chemmanifold_core.h chemmanifold_ensemble.h ""
    /define/user-defined/compiled-functions load libudf
    ```
 3. On load, the console prints `chemmanifold: loaded chemmanifold_model.txt (resnet_film, 18 species, …)`.
+   The `model` line of `chemmanifold.ini` may also point to an ensemble file (`chemmanifold_ensemble.txt`,
+   from `scripts/make_ensemble.py`: several surrogates averaged or gated by region). Keep the member model
+   files at the relative paths the ensemble file lists. The console then also prints
+   `chemmanifold: ensemble of N surrogates (mean)`; the self-test checks member 0.
 
 The old example UDF (the one with the `exp(-dt)` decay) must not be in the same library, because it
 defines the same `user_chem_step` name.

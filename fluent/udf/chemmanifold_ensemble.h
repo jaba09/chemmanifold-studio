@@ -46,6 +46,13 @@ int cme_n_species(const cm_ensemble *e);
 const char *cme_species_name(const cm_ensemble *e, int k);
 int cme_blend(const cm_ensemble *e);
 
+/* Member i (owned by the ensemble: do not cm_free it). Member 0's species, NASA tables and dt range
+ * stand for the ensemble (all members are checked to have the same species at load). */
+cm_model *cme_member(const cm_ensemble *e, int i);
+
+/* 1 if the file at path is an ensemble file (starts with chemmanifold_ensemble), else 0. */
+int cme_is_ensemble_file(const char *path);
+
 /* Gate weights of a state (sum 1); returns the number of members with weight > 0. Also gives Z and c. */
 int cme_weights(const cm_ensemble *e, const double *Y, double T, double *w, double *Z, double *c);
 

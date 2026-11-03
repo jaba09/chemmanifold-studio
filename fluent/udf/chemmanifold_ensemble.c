@@ -146,6 +146,18 @@ int cme_n_members(const cm_ensemble *e) { return e->n; }
 int cme_n_species(const cm_ensemble *e) { return e->Ns; }
 const char *cme_species_name(const cm_ensemble *e, int k) { return cm_species_name(e->m[0], k); }
 int cme_blend(const cm_ensemble *e) { return e->blend; }
+cm_model *cme_member(const cm_ensemble *e, int i) { return (i >= 0 && i < e->n) ? e->m[i] : NULL; }
+
+int cme_is_ensemble_file(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    char t[64];
+    int yes;
+    if (!f) return 0;
+    yes = token(f, t, sizeof t) && strcmp(t, "chemmanifold_ensemble") == 0;
+    fclose(f);
+    return yes;
+}
 
 /* soft box: 1 inside, 0 outside, linear over a width w centred on each edge (w <= 0: sharp, [lo, hi)) */
 static double box(double x, double lo, double hi, double w)
