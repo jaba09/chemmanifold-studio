@@ -23,3 +23,5 @@ dist/
 
 # Exception: the Fluent base case (DI) is committed on purpose
 !fluent/cases/*.cas.h5
+openfoam/userChemStep/chemmanifold_ensemble.c
+openfoam/userChemStep/chemmanifold_ensemble.h

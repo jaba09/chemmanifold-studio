@@ -29,6 +29,7 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     coeffsDict_(this->subOrEmptyDict("userChemStepCoeffs")),
     Y_(this->nSpecie()),
     model_(nullptr),
+    ens_(nullptr),
     map_(this->nSpecie(), -1),
     oodFallback_(coeffsDict_.getOrDefault<bool>("oodFallback", false)),
     odeAbove_(coeffsDict_.getOrDefault<scalar>("odeAbove", GREAT)),
@@ -80,7 +81,22 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     options_.check_ood = coeffsDict_.getOrDefault<bool>("checkOOD", true);
 
     char err[512];
-    model_ = cm_load(modelFile.c_str(), err, sizeof(err));
+    if (cme_is_ensemble_file(modelFile.c_str()))
+    {
+        ens_ = cme_load(modelFile.c_str(), err, sizeof(err));
+        if (!ens_)
+        {
+            FatalErrorInFunction
+                << "cannot load ensemble " << modelFile << ": " << err << exit(FatalError);
+        }
+        model_ = cme_member(ens_, 0);
+        Info<< "userChemStep: ensemble of " << cme_n_members(ens_) << " surrogates, blend "
+            << (cme_blend(ens_) == CME_BLEND_MEAN ? "mean" : "gate") << endl;
+    }
+    else
+    {
+        model_ = cm_load(modelFile.c_str(), err, sizeof(err));
+    }
     if (!model_)
     {
         FatalErrorInFunction
@@ -130,6 +146,11 @@ Foam::userChemStep<ChemistryModel>::userChemStep
             << "oodFallback needs checkOOD true" << exit(FatalError);
     }
 
+    if (isann_ && ens_)
+    {
+        FatalErrorInFunction
+            << "isann does not support ensemble model files" << exit(FatalError);
+    }
     if (isann_)
     {
         if (!cm_has_ood(model_))
@@ -211,7 +232,11 @@ Foam::userChemStep<ChemistryModel>::~userChemStep()
         for (label k=0; k<cm_n_species(model_); k++) names.push_back(cm_species_name(model_, k));
         store_->write(this->mesh().time().path()/"isannPairs.csv", names);
     }
-    if (model_)
+    if (ens_)
+    {
+        cme_free(ens_);          // also frees its members, model_ among them
+    }
+    else if (model_)
     {
         cm_free(model_);
     }
@@ -237,7 +262,7 @@ void Foam::userChemStep<ChemistryModel>::chemStep
             Y[map_[i]] = yk[i];
         }
         cm_info info;
-        const int status = cm_advance(model_, &options_, Y, T, p, dt, &info);
+        const int status = surrogateAdvance(Y, T, p, dt, &info);
         forAll(yk, i)
         {
             yk[i] = Y[map_[i]];
@@ -339,7 +364,7 @@ void Foam::userChemStep<ChemistryModel>::shadow
     double Y0[CM_MAX_SPECIES];
     for (label i=0; i<nSpecie; i++) Y0[map_[i]] = c[i]*thermos[i].W()/rho;
     cm_info oi{};
-    cm_ood(model_, &options_, Y0, T, p, &oi);
+    surrogateOOD(Y0, T, p, &oi);
     const int ood = (oi.flags & CM_OOD_ANY) ? 1 : 0;
     const int bt = std::min(nShadowT - 1, std::max(0, int((T - 600.0)/100.0)));
     int bz = 0;
@@ -352,7 +377,7 @@ void Foam::userChemStep<ChemistryModel>::shadow
     double Ys[CM_MAX_SPECIES];
     for (label k=0; k<nSpecie; k++) Ys[k] = Y0[k];
     cm_info si{};
-    cm_advance(model_, &options_, Ys, T, p, deltaT, &si);
+    surrogateAdvance(Ys, T, p, deltaT, &si);
 
     // GA18 (odeCoeffs) from the same state
     scalarField cd(c);
@@ -580,7 +605,7 @@ void Foam::userChemStep<ChemistryModel>::solve
         if (T >= options_.T_freeze)
         {
             iHot_++;
-            cm_ood(model_, &options_, Y0, T, p, &info);
+            surrogateOOD(Y0, T, p, &info);
             if (!isannActive_) reason = 0;
             else if (info.flags & CM_OOD_ANY) reason = 1;
             else
@@ -636,7 +661,7 @@ void Foam::userChemStep<ChemistryModel>::solve
             Y[map_[i]] = Y_[i];
         }
         cm_info info{};     // cm_ood only sets the OOD bits it finds
-        cm_ood(model_, &options_, Y, T, p, &info);
+        surrogateOOD(Y, T, p, &info);
         const bool induction = odeInduction_.size() && T >= odeInduction_[0] && T < odeInduction_[1]
             && Y_[iFuel_] > odeInduction_[2] && Y_[iO2_] > odeInduction_[3];
         if ((info.flags & CM_OOD_ANY) || T >= odeAbove_ || induction)

@@ -54,10 +54,12 @@ class CmInfo(ctypes.Structure):
 
 def core_library(build_dir):
     """Compile the UDF's C core to a shared library (once) and declare its functions."""
-    src = ROOT / "fluent" / "udf" / "chemmanifold_core.c"
+    udf = ROOT / "fluent" / "udf"
+    srcs = [udf / "chemmanifold_core.c", udf / "chemmanifold_ensemble.c"]
+    deps = srcs + [udf / "chemmanifold_core.h", udf / "chemmanifold_ensemble.h"]
     so = Path(build_dir) / "libchemmanifold_core.so"
-    if not so.exists() or so.stat().st_mtime < src.stat().st_mtime:
-        subprocess.run(["cc", "-O2", "-shared", "-fPIC", "-o", str(so), str(src), "-lm"], check=True)
+    if not so.exists() or so.stat().st_mtime < max(d.stat().st_mtime for d in deps):
+        subprocess.run(["cc", "-O2", "-shared", "-fPIC", "-o", str(so)] + [str(x) for x in srcs] + ["-lm"], check=True)
     lib = ctypes.CDLL(str(so))
     lib.cm_load.restype = ctypes.c_void_p
     lib.cm_load.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
@@ -70,7 +72,27 @@ def core_library(build_dir):
                                ctypes.c_double, ctypes.POINTER(CmInfo)]
     lib.cm_ood.argtypes = [ctypes.c_void_p, ctypes.POINTER(CmOptions), dp, ctypes.c_double, ctypes.c_double,
                            ctypes.POINTER(CmInfo)]
+    lib.cm_free.argtypes = [ctypes.c_void_p]
+    # ensembles (chemmanifold_ensemble.c)
+    lib.cme_load.restype = ctypes.c_void_p
+    lib.cme_load.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    lib.cme_free.argtypes = [ctypes.c_void_p]
+    for f in ("cme_n_members", "cme_n_species", "cme_blend"):
+        getattr(lib, f).argtypes = [ctypes.c_void_p]
+    lib.cme_species_name.restype = ctypes.c_char_p
+    lib.cme_species_name.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.cme_weights.argtypes = [ctypes.c_void_p, dp, ctypes.c_double, dp, dp, dp]
+    lib.cme_ood.argtypes = [ctypes.c_void_p, ctypes.POINTER(CmOptions), dp, ctypes.c_double, ctypes.c_double,
+                            ctypes.POINTER(CmInfo)]
+    lib.cme_advance.argtypes = [ctypes.c_void_p, ctypes.POINTER(CmOptions), dp, ctypes.c_double, ctypes.c_double,
+                                ctypes.c_double, ctypes.POINTER(CmInfo), dp]
     return lib
+
+
+def is_ensemble_file(path):
+    """True for a chemmanifold_ensemble.txt (scripts/make_ensemble.py) rather than a single model file."""
+    with open(path) as f:
+        return f.read(64).lstrip().startswith("chemmanifold_ensemble")
 
 
 def read_openfoam_field(path):
