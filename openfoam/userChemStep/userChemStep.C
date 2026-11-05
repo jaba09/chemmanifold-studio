@@ -37,8 +37,9 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
     tauCellMode_(coeffsDict_.getOrDefault<word>("dtMode", "flow") == "tauCell"),
     tauLimits_(coeffsDict_.getOrDefault<scalarList>("tauCellLimits", scalarList({1e-7, 1.0}))),
+    tauMaxScale_(coeffsDict_.getOrDefault<scalar>("tauMaxScale", GREAT)),
     wedgeAngle_(coeffsDict_.getOrDefault<scalar>("wedgeAngle", 5.0)),
-    tau_(), tauIndex_(-1), tauCall_(0), tauWarned_(0), tauSumScale_(0), tauN_(0),
+    tau_(), tauIndex_(-1), tauCall_(0), tauWarned_(0), tauSumScale_(0), tauN_(0), tauLimited_(0),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
     nFallback_(0),
     dtMin_(GREAT), dtMax_(0),
@@ -690,12 +691,14 @@ void Foam::userChemStep<ChemistryModel>::updateTau() const
     }
     if (tauIndex_ >= 0 && tauN_ > 0)
     {
-        Info<< "userChemStep tauCell: mean dt_flow/tau_cell " << tauSumScale_/tauN_ << endl;
+        Info<< "userChemStep tauCell: mean applied dt_flow/tau_cell " << tauSumScale_/tauN_
+            << ", positivity-limited cells " << tauLimited_ << endl;
     }
     tauIndex_ = ti;
     tauCall_ = 0;
     tauSumScale_ = 0;
     tauN_ = 0;
+    tauLimited_ = 0;
     const volVectorField& U = mesh.lookupObject<volVectorField>("U");
     const volScalarField& rho = mesh.lookupObject<volScalarField>("rho");
     const scalarField alpha(this->thermo().alpha().primitiveField());
@@ -750,7 +753,23 @@ void Foam::userChemStep<ChemistryModel>::solve
     const scalarField c0(c);
     scalar sub = dt;
     solveCell(c, T, p, dt, sub);
-    const scalar s = deltaT/max(dt, VSMALL);
+    // the source dY(tau)/tau applied over the solver's deltaT is a linear extrapolation by
+    // s = deltaT/tau; it is limited so that no major species goes negative (positivity-preserving), which also bounds the heat released to complete consumption
+    scalar s = deltaT/max(dt, VSMALL);
+    // (only species above 0.1 % by mass set the limit; minor species are clipped at zero)
+    const auto& th = this->specieThermo();
+    scalar rho0 = 0;
+    forAll(c0, k) rho0 += c0[k]*th[k].W();
+    scalar sLim = GREAT;
+    forAll(c, k)
+    {
+        const scalar d = c[k] - c0[k];
+        if (d < 0 && c0[k]*th[k].W() > 1e-3*rho0) sLim = min(sLim, c0[k]/(-d));
+    }
+    // optional cap on the extrapolation (tauMaxScale): s > ~2 also overshoots the radical pool,
+    // which makes the next call's integration stiff and the pseudo-transient unstable
+    sLim = min(sLim, tauMaxScale_);
+    if (s > sLim) { s = sLim; tauLimited_++; }
     tauSumScale_ += s;
     tauN_++;
     forAll(c, k)

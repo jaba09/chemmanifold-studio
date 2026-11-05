@@ -288,7 +288,11 @@ def plot(c, st, path, label, T_min):
 def compare(out, ref, labels, factor=2.0, psi_tol=0.05):
     R = json.loads((out / ref / "stats.json").read_text())
     rep = dict(reference=ref, factor=factor, psi_tol=psi_tol, runs={})
-    checks = [("chi", "z_st"), ("age", "overall"), ("tau_cell", "overall"), ("strain", "z_st")]
+    # age is reported but not gated: the closed hood pocket has no through-flow, so the age equation
+    # never converges there (values of 1e3-1e9 s that only reflect how long it was iterated), and the
+    # unbounded pocket age leaks into the rest of the domain by diffusion
+    checks = [("chi", "z_st"), ("age", "z_st"), ("tau_cell", "overall"), ("strain", "z_st")]
+    info_only = {"age@z_st"}
     for lab in labels:
         S = json.loads((out / lab / "stats.json").read_text())
         res = {}
@@ -304,7 +308,9 @@ def compare(out, ref, labels, factor=2.0, psi_tol=0.05):
         d = {p: a[PCTS.index(p)] - b[PCTS.index(p)] for p in (1, 50, 99)}
         res["psi@overall"] = dict(ok=bool(all(abs(v) <= psi_tol for v in d.values())),
                                   diff_p1=d[1], diff_p50=d[50], diff_p99=d[99])
-        verdict = [v["ok"] for v in res.values() if v["ok"] is not None]
+        for k in info_only & set(res):
+            res[k]["info_only"] = True
+        verdict = [v["ok"] for k, v in res.items() if v["ok"] is not None and k not in info_only]
         rep["runs"][lab] = dict(checks=res, passed=bool(verdict and all(verdict)),
                                 n_fail=int(sum(1 for v in verdict if not v)), T_max=S["T_max"])
     (out / f"gate_{ref}.json").write_text(json.dumps(rep, indent=1))
@@ -315,7 +321,8 @@ def compare(out, ref, labels, factor=2.0, psi_tol=0.05):
             if v["ok"] is None:
                 lines.append(f"| {lab} | {k} | n/a | | | |")
             elif "ratio_p1" in v:
-                lines.append(f"| {lab} | {k} | {v['ok']} | x{v['ratio_p1']:.2f} | x{v['ratio_p50']:.2f} | x{v['ratio_p99']:.2f} |")
+                ok = f"{v['ok']} (info only)" if v.get("info_only") else v["ok"]
+                lines.append(f"| {lab} | {k} | {ok} | x{v['ratio_p1']:.2f} | x{v['ratio_p50']:.2f} | x{v['ratio_p99']:.2f} |")
             else:
                 lines.append(f"| {lab} | {k} | {v['ok']} | {v['diff_p1']:+.3f} | {v['diff_p50']:+.3f} | {v['diff_p99']:+.3f} |")
         lines.append(f"| {lab} | **passed** | **{r['passed']}** | T_max {r['T_max']:.0f} K | | |")

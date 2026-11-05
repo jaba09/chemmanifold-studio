@@ -46,7 +46,8 @@ Usage
                                  // tauCell: Fluent's steady stiff-chemistry step, each cell
                                  //  advanced over tau_cell = 0.1 min(dx/|U|, dx^2/D),
                                  //  D = (alpha + alphat)/rho, and the source taken as
-                                 //  dY(tau_cell)/tau_cell (timescale roadmap, test 6b)
+                                 //  dY(tau_cell)/tau_cell (timescale roadmap, test 6b),
+                                 //  limited so no species goes negative
             tauCellLimits (1e-7 1);  // s, clip of tau_cell
             wedgeAngle   5;      // deg, for dx = sqrt(V/(r theta)); 0 = planar/3D (dx = V^(1/3))
         }
@@ -143,11 +144,12 @@ class userChemStep
         //- dtMode tauCell: per-cell chemistry dt from Fluent's tau_cell
         bool tauCellMode_;
         scalarList tauLimits_;
+        scalar tauMaxScale_;
         scalar wedgeAngle_;
         mutable scalarField tau_;
         mutable label tauIndex_, tauCall_, tauWarned_;
         mutable scalar tauSumScale_;
-        mutable label tauN_;
+        mutable label tauN_, tauLimited_;
 
         //- Counters since the last report: calls, advanced, frozen, OOD, invalid, capped
         mutable label nCalls_, nAdvanced_, nFrozen_, nOOD_, nInvalid_, nCapped_;
