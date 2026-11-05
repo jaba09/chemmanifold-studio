@@ -49,7 +49,8 @@ functions
     #includeFunc flowRatePatch(name=inlet-fuel)
     #includeFunc flowRatePatch(name=inlet-coflow-fff-fluid-mixing)
     #includeFunc flowRatePatch(name=inlet-coflow-fff-fluid-exterior)
-    #includeFunc flowRatePatch(name=outlet-lab-026)
+    #includeFunc flowRatePatch(name=outlet-lab)
+    #includeFunc flowRatePatch(name=wall-fff-fluid-exhaust)
 }
 
 // ************************************************************************* //
