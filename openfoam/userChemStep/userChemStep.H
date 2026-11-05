@@ -42,7 +42,18 @@ Usage
             odeInduction ();     // (T_lo T_hi Y_CH4 Y_O2): with oodFallback, flammable unburnt
                                  //  gas (T in [T_lo, T_hi), CH4 and O2 above) goes to the ODE solver
             isann        { ... } // optional: online learning (ISANN), see below
+            dtMode       flow;   // flow: chemistry dt = the solver's (local) time step;
+                                 // tauCell: Fluent's steady stiff-chemistry step, each cell
+                                 //  advanced over tau_cell = 0.1 min(dx/|U|, dx^2/D),
+                                 //  D = (alpha + alphat)/rho, and the source taken as
+                                 //  dY(tau_cell)/tau_cell (timescale roadmap, test 6b)
+            tauCellLimits (1e-7 1);  // s, clip of tau_cell
+            wedgeAngle   5;      // deg, for dx = sqrt(V/(r theta)); 0 = planar/3D (dx = V^(1/3))
         }
+
+    dtMode tauCell assumes the chemistry model calls solve() once per cell in
+    cell order per time step (StandardChemistryModel with Treact 0, the
+    default); the call count is checked against the cell count every step.
 
     ISANN (isann sub-dictionary, replaces oodFallback): the run starts with
     every cell on the ODE solver (GA18) while the (state, dt, GA18 result)
@@ -128,6 +139,15 @@ class userChemStep
 
         //- Print the counters every this many calls (0 = never)
         label reportCalls_;
+
+        //- dtMode tauCell: per-cell chemistry dt from Fluent's tau_cell
+        bool tauCellMode_;
+        scalarList tauLimits_;
+        scalar wedgeAngle_;
+        mutable scalarField tau_;
+        mutable label tauIndex_, tauCall_, tauWarned_;
+        mutable scalar tauSumScale_;
+        mutable label tauN_;
 
         //- Counters since the last report: calls, advanced, frozen, OOD, invalid, capped
         mutable label nCalls_, nAdvanced_, nFrozen_, nOOD_, nInvalid_, nCapped_;
@@ -236,6 +256,19 @@ public:
 
 
     // Member Functions
+
+        //- One cell's update over deltaT (flow dt mode)
+        void solveCell
+        (
+            scalarField& c,
+            scalar& T,
+            scalar& p,
+            scalar& deltaT,
+            scalar& subDeltaT
+        ) const;
+
+        //- Recompute tau_cell for this time step
+        void updateTau() const;
 
         //- Advance the concentrations over deltaT
         virtual void solve

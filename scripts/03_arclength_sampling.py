@@ -26,7 +26,7 @@ import numpy as np
 
 from chemmanifold.boxcox import boxcox
 from chemmanifold.chemistry import advance_const_p, make_gas
-from chemmanifold.io import base_parser, dt_strides, load_config, load_npz, save_npz, stage_dir
+from chemmanifold.io import base_parser, choose_strides, dt_strides, load_config, load_npz, save_npz, stage_dir
 
 
 def slice_strides(cfg):
@@ -138,7 +138,7 @@ def readvance_pairs(gas, tr, idx, tid, cfg, out, strides, rng, regime=0):
     k = min(int(cfg.get("dt_range", {}).get("per_state", len(strides))), len(strides))
     rows = {key: [] for key in out}
     for i in idx:
-        for s in rng.choice(strides, size=k, replace=False):
+        for s in choose_strides(cfg, rng, strides, size=k, replace=False):
             gas.HPY = tr["h"][i], tr["P"][i], tr["Y"][i]
             advance_const_p(gas, float(s) * dt_base)
             for key, v in (("Y_in", tr["Y"][i]), ("T_in", tr["T"][i]), ("P_in", tr["P"][i]), ("h_in", tr["h"][i]),

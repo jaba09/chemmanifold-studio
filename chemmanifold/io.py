@@ -37,6 +37,33 @@ def dt_strides(cfg, section):
     return [int(v) if v >= 1 else float(f"{v:.3g}") for v in np.unique(s)]
 
 
+def stride_probs(cfg, strides):
+    """Probabilities for drawing each dt stride, or None (uniform).
+
+    With `dt_range.histogram: {log10_dt: [...bin centres], mass: [...]}` (stage 20, from the tau_cell
+    histogram of a cheap flow solution) each stride gets the histogram mass of its window in log dt
+    (midway to its neighbours), mixed with a uniform share `dt_range.uniform_share` (default 0.3) so
+    no stride of the range is starved."""
+    h = (cfg.get("dt_range") or {}).get("histogram")
+    if not h or len(strides) < 2:
+        return None
+    x = np.log10(np.asarray(strides, float) * cfg["autoignition"]["dt_base"])
+    c, m = np.asarray(h["log10_dt"], float), np.asarray(h["mass"], float)
+    mid = 0.5 * (x[1:] + x[:-1])
+    lo, hi = np.r_[-np.inf, mid], np.r_[mid, np.inf]
+    share = np.array([m[(c >= a) & (c < b)].sum() for a, b in zip(lo, hi)])
+    share = share / share.sum() if share.sum() > 0 else np.full(len(x), 1.0 / len(x))
+    f = float(cfg["dt_range"].get("uniform_share", 0.3))
+    p = (1 - f) * share + f / len(x)
+    return p / p.sum()
+
+
+def choose_strides(cfg, rng, strides, size=None, replace=True):
+    """rng.choice over the dt strides, weighted by stride_probs when the config gives a histogram."""
+    p = stride_probs(cfg, strides)
+    return rng.choice(strides, size=size, replace=replace, p=p)
+
+
 def load_config(path):
     with open(path) as f:
         cfg = yaml.safe_load(f)

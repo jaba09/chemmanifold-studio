@@ -35,6 +35,10 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     odeInduction_(coeffsDict_.getOrDefault<scalarList>("odeInduction", scalarList())),
     iFuel_(-1), iO2_(-1), nInduction_(0),
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
+    tauCellMode_(coeffsDict_.getOrDefault<word>("dtMode", "flow") == "tauCell"),
+    tauLimits_(coeffsDict_.getOrDefault<scalarList>("tauCellLimits", scalarList({1e-7, 1.0}))),
+    wedgeAngle_(coeffsDict_.getOrDefault<scalar>("wedgeAngle", 5.0)),
+    tau_(), tauIndex_(-1), tauCall_(0), tauWarned_(0), tauSumScale_(0), tauN_(0),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
     nFallback_(0),
     dtMin_(GREAT), dtMax_(0),
@@ -538,7 +542,7 @@ void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
 template<class ChemistryModel>
-void Foam::userChemStep<ChemistryModel>::solve
+void Foam::userChemStep<ChemistryModel>::solveCell
 (
     scalarField& c,
     scalar& T,
@@ -668,6 +672,91 @@ void Foam::userChemStep<ChemistryModel>::solve
 
     // The whole step is taken in one call (no sub-stepping); report deltaT
     // as the chemical time scale so local time stepping is not restricted
+    subDeltaT = deltaT;
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::updateTau() const
+{
+    const fvMesh& mesh = this->mesh();
+    const label ti = mesh.time().timeIndex();
+    if (ti == tauIndex_) return;
+    if (tauIndex_ >= 0 && tauCall_ != mesh.nCells() && tauWarned_ < 5)
+    {
+        WarningInFunction << "userChemStep dtMode tauCell: " << tauCall_ << " calls for "
+            << mesh.nCells() << " cells in the last step; the cell order may be wrong" << endl;
+        tauWarned_++;
+    }
+    if (tauIndex_ >= 0 && tauN_ > 0)
+    {
+        Info<< "userChemStep tauCell: mean dt_flow/tau_cell " << tauSumScale_/tauN_ << endl;
+    }
+    tauIndex_ = ti;
+    tauCall_ = 0;
+    tauSumScale_ = 0;
+    tauN_ = 0;
+    const volVectorField& U = mesh.lookupObject<volVectorField>("U");
+    const volScalarField& rho = mesh.lookupObject<volScalarField>("rho");
+    const scalarField alpha(this->thermo().alpha().primitiveField());
+    scalarField alphat(mesh.nCells(), 0.0);
+    if (mesh.foundObject<volScalarField>("alphat"))
+    {
+        alphat = mesh.lookupObject<volScalarField>("alphat").primitiveField();
+    }
+    const scalarField& V = mesh.V();
+    const vectorField& C = mesh.C();
+    tau_.setSize(mesh.nCells());
+    const scalar th = wedgeAngle_*constant::mathematical::pi/180.0;
+    forAll(tau_, i)
+    {
+        scalar dx;
+        if (th > 0)
+        {
+            const scalar r = max(Foam::sqrt(sqr(C[i].y()) + sqr(C[i].z())), 1e-9);
+            dx = Foam::sqrt(V[i]/(r*th));
+        }
+        else
+        {
+            dx = Foam::cbrt(V[i]);
+        }
+        const scalar D = max(alpha[i] + alphat[i], 1e-12)/max(rho[i], 1e-6);
+        const scalar tconv = dx/max(mag(U[i]), 1e-9);
+        const scalar tdiff = sqr(dx)/D;
+        tau_[i] = min(max(0.1*min(tconv, tdiff), tauLimits_[0]), tauLimits_[1]);
+    }
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::solve
+(
+    scalarField& c,
+    scalar& T,
+    scalar& p,
+    scalar& deltaT,
+    scalar& subDeltaT
+) const
+{
+    if (!tauCellMode_)
+    {
+        solveCell(c, T, p, deltaT, subDeltaT);
+        return;
+    }
+    // Fluent's steady stiff chemistry: advance over tau_cell, source = dY(tau)/tau
+    updateTau();
+    const label i = tauCall_++;
+    scalar dt = (i < tau_.size()) ? tau_[i] : deltaT;
+    const scalarField c0(c);
+    scalar sub = dt;
+    solveCell(c, T, p, dt, sub);
+    const scalar s = deltaT/max(dt, VSMALL);
+    tauSumScale_ += s;
+    tauN_++;
+    forAll(c, k)
+    {
+        c[k] = max(0.0, c0[k] + (c[k] - c0[k])*s);
+    }
     subDeltaT = deltaT;
 }
 
