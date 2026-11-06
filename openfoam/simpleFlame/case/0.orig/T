@@ -10,7 +10,7 @@ FoamFile
 // Fluent-vs-OpenFOAM comparison. Mesh from ../make_mesh.py (same cells as coflow.msh).
 
 dimensions          [0 0 0 1 0 0 0];
-internalField       uniform 2000;               // whole domain starts as hot air (ignition)
+internalField       uniform 300;                // cold air; setFieldsDict lights a hot kernel at the nozzle
 boundaryField
 {
     "inlet.*"

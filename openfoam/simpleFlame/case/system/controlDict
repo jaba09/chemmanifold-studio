@@ -12,11 +12,11 @@ application         rhoReactingBuoyantLeFoam;   // rhoReactingBuoyantFoam + choi
 startFrom           latestTime;
 startTime           0;
 stopAt              endTime;
-endTime             6000;
+endTime             8000;
 deltaT              1;
 writeControl        timeStep;
-writeInterval       500;
-purgeWrite          0;
+writeInterval       100;
+purgeWrite          5;
 writeFormat         ascii;
 writePrecision      8;
 writeCompression    off;

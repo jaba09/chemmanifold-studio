@@ -17,6 +17,8 @@ chemistryType
 
 chemistry           on;
 
+Treact              400;            // no chemistry in cells below 400 K (Fluent: min-temp-chemistry)
+
 initialChemicalTimeStep 1e-07;
 
 odeCoeffs

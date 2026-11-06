@@ -12,7 +12,7 @@ geometry, no turbulence, no radiation.
 | outlet | x = 0.12 m, 0 Pa gauge, backflow air 300 K |
 | side | r = 0.03 m, symmetry |
 | Models | steady (LTS in OpenFOAM), laminar, g = -9.81 x, GA18 laminar finite rate, no radiation |
-| Start | air at 2000 K, 0.2 m/s everywhere |
+| Start | cold air 300 K, 0.2 m/s; 2000 K hot box x < 15 mm, r < 8 mm (setFields) |
 
 - `make_mesh.py <case dir>` writes `coflow.msh` (ASCII Fluent mesh) and the identical 5 deg wedge
   polyMesh (same cell order) via `../tools/fluent_h5_to_foam.write_wedge`.

@@ -1,0 +1,20 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// Ignition: hot air (2000 K) in x < 15 mm, r < 8 mm. Same patch as step 18 of the Fluent guide.
+
+defaultFieldValues ( volScalarFieldValue T 300 );
+
+regions
+(
+    boxToCell
+    {
+        box (-1 -1 -1) (0.015 0.008 1);
+        fieldValues ( volScalarFieldValue T 2000 );
+    }
+);

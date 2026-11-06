@@ -62,14 +62,14 @@ PIMPLE
     // local time-step control (LTS)
     maxDeltaT           0.01;
     maxCo               0.5;
-    alphaTemp           0.05;   // limit the temperature change per step to 5 %
+    alphaTemp           0.2;    // limit the temperature change per step to 20 %
     alphaY              0.05;   // and the change of the reference species below
     Yref
     {
         O2              0.1;
         CH4             0.1;
     }
-    rDeltaTSmoothingCoeff 0.02;
+    rDeltaTSmoothingCoeff 1;    // no spatial smoothing of the local time step
     rDeltaTDampingCoeff 1;
 }
 
