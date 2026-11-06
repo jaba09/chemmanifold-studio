@@ -227,7 +227,7 @@ def render(cards):
             if cert.get("coverage_heldout_flamelets") is not None:
                 parts.append(f"held-out flamelet coverage {cert['coverage_heldout_flamelets']:.1%}")
             if t2:
-                parts.append(f"Tier 2 tau error {t2['tau_ign_err_pct']:+.0f}%" + (
+                parts.append(f"Tier 2 tau error {fmt(t2.get('tau_ign_err_pct'), '{:+.0f}')}%" + (
                     f", final T {t2['T_final_ml_K']:.0f} K (Cantera {t2['T_final_cantera_K']:.0f} K)"
                     if t2.get("T_final_ml_K") is not None else ""))
             if t3:
