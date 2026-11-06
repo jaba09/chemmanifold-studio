@@ -21,6 +21,11 @@ Increment error = sum |surrogate - Cantera| / sum |Cantera - start| over the gro
     python scripts/21_tau_step_apriori.py --config configs/burner_openfoam_tix1.yaml \\
         --states /opt/ofb/tix/runs/di_tau/1500 --tau /opt/ofb/tix/stats/di_tau/cells.npz \\
         --models ood8=/path/model.txt tix1=/path/model.txt --out /path/out
+
+A label with several comma-separated model files is a LADDER of fixed-dt models (Javier, 2026-11-06),
+used exactly as userChemStep does: tau_cell rounded to the nearest multiple of the smallest model dt
+(at least one), then split greedily, largest dt first; the cell is OOD if any call's input is.
+    --models ladder=m1e-4.txt,m1e-5.txt,m1e-6.txt
 """
 
 import ctypes
@@ -61,6 +66,26 @@ def sample(Zc, Tc, tau, hot, n_per, rng):
     return np.concatenate(picks)
 
 
+def ladder_step(lib, models, opt, Y, T, P, tau):
+    """One tau_cell step with a ladder [(dt, model), ...] sorted by dt, largest first."""
+    dts = [d for d, _ in models]
+    n = max(1, int(round(tau / dts[-1])))
+    y = np.ascontiguousarray(Y, dtype=float).copy()
+    ptr = y.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+    info = s17.CmInfo()
+    flags, calls = 0, 0
+    for d, m in models:
+        k, n = n // int(round(d / dts[-1])), n % int(round(d / dts[-1]))
+        for _ in range(k):
+            lib.cm_ood(m, ctypes.byref(opt), ptr, T, P, ctypes.byref(info))
+            flags |= info.flags & 0x3F
+            if T < opt.T_freeze or lib.cm_advance(m, ctypes.byref(opt), ptr, T, P, d, ctypes.byref(info)) != 0:
+                return np.array([np.nan]), {}, flags, calls
+            T = info.T_out
+            calls += 1
+    return np.array([T]), {0: y.copy()}, flags, calls
+
+
 def main(cfg, a):
     gas = make_gas(cfg)
     species = list(gas.species_names)
@@ -87,19 +112,28 @@ def main(cfg, a):
     for spec in a.models:
         name, path = spec.split("=", 1)
         err = ctypes.create_string_buffer(512)
-        model = lib.cm_load(path.encode(), err, 512)
-        if not model:
-            raise RuntimeError(f"{path}: {err.value.decode()}")
+        ladder = []
+        for pth in path.split(","):
+            model = lib.cm_load(pth.encode(), err, 512)
+            if not model:
+                raise RuntimeError(f"{pth}: {err.value.decode()}")
+            ladder.append((lib.cm_dt_max(model), model))
+        ladder.sort(key=lambda x: -x[0])
+        is_ladder = len(ladder) > 1
         names = [lib.cm_species_name(model, k).decode() for k in range(lib.cm_n_species(model))]
         idx = [species.index(s) for s in names]
         opt = s17.CmOptions()
         lib.cm_default_options(ctypes.byref(opt))
         for j, i in enumerate(cells):
-            Ts, Ys, flags = s17.surrogate(lib, model, opt, Y[i, idx], T[i], P[i], float(tau[i]), 1, {0})
+            if is_ladder:
+                Ts, Ys, flags, ncalls = ladder_step(lib, ladder, opt, Y[i, idx], T[i], P[i], float(tau[i]))
+            else:
+                Ts, Ys, flags = s17.surrogate(lib, model, opt, Y[i, idx], T[i], P[i], float(tau[i]), 1, {0})
+                ncalls = 1
             ys = Ys.get(0, np.full(len(names), np.nan))
             Tr, Yr = ref[j]
             rows.append(dict(model=name.split("_r")[0], run=name, cell=int(i), Z=Z[i], T0=T[i], tau=tau[i],
-                             ood=int(flags != 0), dT=Ts[0] - Tr, incT=Tr - T[i],
+                             ood=int(flags != 0), calls=ncalls, dT=Ts[0] - Tr, incT=Tr - T[i],
                              dCO=ys[names.index("CO")] - Yr[iCO], incCO=Yr[iCO] - Y[i, iCO], CO0=Y[i, iCO], OH0=Y[i, iOH],
                              dOH=ys[names.index("OH")] - Yr[iOH], incOH=Yr[iOH] - Y[i, iOH]))
         print(f"  {name}: done")

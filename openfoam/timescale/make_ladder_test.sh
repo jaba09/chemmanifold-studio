@@ -19,7 +19,13 @@ for d in "$@"; do
     cp "$d/chemmanifold_model.txt" "$n"
     list="$list \"$n\""
 done
-sed -i "0,/userChemStepCoeffs\s*{/s//userChemStepCoeffs\n{\n    ladder       ($list );   \/\/ fixed-dt models, tau_cell split largest first/" constant/chemistryProperties
+python3 - "$list" <<'PY2'
+import re, sys
+f = "constant/chemistryProperties"; t = open(f).read()
+t, n = re.subn(r"(userChemStepCoeffs\s*\{)", r"\1\n    ladder       (" + sys.argv[1] + " );   // fixed-dt models, tau_cell split largest first", t, count=1)
+assert n == 1, "no userChemStepCoeffs block"
+open(f, "w").write(t)
+PY2
 # processor dirs copy constant/ by reference in v2412 (case-level constant); re-decompose to be safe
 decomposePar -force > log.decomposePar 2>&1
 echo "ladder: $list"
