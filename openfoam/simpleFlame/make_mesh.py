@@ -4,7 +4,7 @@
 2D axisymmetric (x = axis, y = r), structured quads:
     fuel jet   r 0 - 2.5 mm   (same nozzle radius and CH4 mass flow as the burner)
     air coflow r 2.5 - 30 mm
-    height     x 0 - 120 mm
+    height     x 0 - 250 mm
 
 Outputs
     coflow.msh                   ASCII Fluent mesh (File > Read > Mesh)
@@ -21,7 +21,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools"))
 from fluent_h5_to_foam import write_wedge  # noqa: E402
 
-R_FUEL, R_OUT, H = 2.5e-3, 30e-3, 120e-3
+R_FUEL, R_OUT, H = 2.5e-3, 30e-3, 250e-3   # laminar flame is ~140 mm long (Roper)
 
 
 def graded(x0, x1, d0, d1):
@@ -42,7 +42,7 @@ def nodes_1d():
                         graded(R_FUEL, 10e-3, 0.125e-3, 0.4e-3),  # flame zone
                         graded(10e-3, R_OUT, 0.4e-3, 1.5e-3)])
     x = np.unique(np.r_[graded(0.0, 20e-3, 0.1e-3, 0.4e-3),
-                        graded(20e-3, H, 0.4e-3, 1.5e-3)])
+                        graded(20e-3, H, 0.4e-3, 2.5e-3)])
     return x, r
 
 

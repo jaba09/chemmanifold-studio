@@ -6,7 +6,7 @@ geometry, no turbulence, no radiation.
 
 | | |
 |---|---|
-| Domain | 2D axisymmetric, x 0-0.12 m (axis, up), r 0-0.03 m; 212 x 76 = 16112 quads |
+| Domain | 2D axisymmetric, x 0-0.25 m (axis, up), r 0-0.03 m; 292 x 76 = 22192 quads |
 | inlet-fuel | r < 2.5 mm, 0.5263 m/s CH4, 300 K |
 | inlet-air | r 2.5-30 mm, 0.2 m/s, Y_O2 0.233 / N2, 300 K |
 | outlet | x = 0.12 m, 0 Pa gauge, backflow air 300 K |

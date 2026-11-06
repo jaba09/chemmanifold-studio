@@ -1,0 +1,11 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      mapFieldsDict;
+}
+// map a solution from an older/shorter mesh of the same case (mapFields <src> -sourceTime <t>)
+patchMap        ( );
+cuttingPatches  ( );
