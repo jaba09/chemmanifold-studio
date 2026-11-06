@@ -50,7 +50,17 @@ Usage
                                  //  limited so no species goes negative
             tauCellLimits (1e-7 1);  // s, clip of tau_cell
             wedgeAngle   5;      // deg, for dx = sqrt(V/(r theta)); 0 = planar/3D (dx = V^(1/3))
+            ladder       ("m1e-2.txt" "m1e-3.txt" ...); // optional: fixed-dt models (see below)
         }
+
+    Ladder of fixed-time-step models (ladder list, 2026-11-06): each file is a
+    surrogate trained at ONE dt (dt_min = dt_max), with the same species as
+    `model` (which still gives the OOD checks of the shadow file and the
+    self-test). A chemistry step dt is first rounded to the nearest multiple of
+    the smallest ladder dt (at least one), then split greedily, largest model
+    first: 1.36e-3 s = 1 x 1e-3 + 3 x 1e-4 + 6 x 1e-5. A cell is OOD if any of
+    its calls is. Calls per model and the calls-per-cell histogram are
+    printed with the counters and written to ladderCalls.csv.
 
     dtMode tauCell assumes the chemistry model calls solve() once per cell in
     cell order per time step (StandardChemistryModel with Treact 0, the
@@ -173,6 +183,25 @@ class userChemStep
         //  log10(dt) bins of 0.1 from 1e-8 s to 1 s, for cells below and
         //  above T_freeze; rewritten to dtHistogram.csv at each report
         mutable List<label> dtHist_;
+
+        // fixed-dt ladder (empty: one model with dt as an input)
+        List<cm_model*> ladder_;
+        labelList ladderRatio_;     // dt of each model / smallest dt (integers)
+        mutable List<label> ladderCalls_, ladderCellHist_;
+        mutable label ladderCells_, ladderTotal_;
+
+        int ladderAdvance
+        (
+            double* Y, const scalar T, const scalar p, const scalar dt, cm_info* info
+        ) const;
+
+        //- the surrogate step (ladder or single model)
+        int advance
+        (
+            double* Y, const scalar T, const scalar p, const scalar dt, cm_info* info
+        ) const;
+
+        void writeLadderCalls() const;
 
         //- Write dtHistogram.csv
         void writeDtHistogram() const;

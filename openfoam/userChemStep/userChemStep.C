@@ -3,7 +3,10 @@
 \*---------------------------------------------------------------------------*/
 
 #include "userChemStep.H"
+#include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -48,6 +51,7 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     shadowIndex_(-1),
     shadowCount_(),
     dtHist_(2*80, 0),
+    ladder_(), ladderRatio_(), ladderCalls_(), ladderCellHist_(201, 0), ladderCells_(0), ladderTotal_(0),
     isann_(coeffsDict_.found("isann")),
     isannDict_(coeffsDict_.subOrEmptyDict("isann")),
     isannControl_(isannDict_.getOrDefault<fileName>("control", "isann/control")),
@@ -121,6 +125,61 @@ Foam::userChemStep<ChemistryModel>::userChemStep
         FatalErrorInFunction
             << "the model has " << nModel << " species, the case "
             << map_.size() << exit(FatalError);
+    }
+
+    {
+        fileNameList files;
+        if (coeffsDict_.readIfPresent("ladder", files) && files.size())
+        {
+            List<std::pair<double, cm_model*>> ms;
+            for (fileName f : files)
+            {
+                f.expand();
+                cm_model* m = cm_load(f.c_str(), err, sizeof(err));
+                if (!m)
+                {
+                    FatalErrorInFunction << "cannot load ladder model " << f << ": " << err
+                        << exit(FatalError);
+                }
+                if (cm_n_species(m) != nModel)
+                {
+                    FatalErrorInFunction << "ladder model " << f << " has " << cm_n_species(m)
+                        << " species, the main model " << nModel << exit(FatalError);
+                }
+                for (label k=0; k<nModel; k++)
+                {
+                    if (strcmp(cm_species_name(m, k), cm_species_name(model_, k)) != 0)
+                    {
+                        FatalErrorInFunction << "ladder model " << f << ": species " << k
+                            << " differs from the main model" << exit(FatalError);
+                    }
+                }
+                if (cm_dt_max(m) > cm_dt_min(m)*(1 + 1e-9))
+                {
+                    WarningInFunction << "ladder model " << f << " was trained over dt "
+                        << cm_dt_min(m) << "-" << cm_dt_max(m) << " s; its dt_max is used" << endl;
+                }
+                ms.append(std::make_pair(cm_dt_max(m), m));
+                Info<< "userChemStep: ladder model dt " << cm_dt_max(m) << " s from " << f << endl;
+            }
+            std::sort(ms.begin(), ms.end(),
+                [](const std::pair<double, cm_model*>& a, const std::pair<double, cm_model*>& b)
+                { return a.first > b.first; });
+            ladder_.setSize(ms.size());
+            ladderRatio_.setSize(ms.size());
+            ladderCalls_.setSize(ms.size(), 0);
+            const double dtSmall = ms.last().first;
+            forAll(ms, j)
+            {
+                ladder_[j] = ms[j].second;
+                ladderRatio_[j] = label(std::llround(ms[j].first/dtSmall));
+                if (mag(ladderRatio_[j]*dtSmall - ms[j].first) > 1e-6*ms[j].first)
+                {
+                    FatalErrorInFunction << "ladder dt " << ms[j].first
+                        << " s is not a whole multiple of the smallest, " << dtSmall << exit(FatalError);
+                }
+            }
+        }
     }
 
     Info<< "userChemStep: ChemManifold surrogate " << cm_arch(model_)
@@ -209,6 +268,8 @@ template<class ChemistryModel>
 Foam::userChemStep<ChemistryModel>::~userChemStep()
 {
     writeDtHistogram();
+    writeLadderCalls();
+    forAll(ladder_, j) cm_free(ladder_[j]);
     if (store_)
     {
         isannBeginStep();     // last status line
@@ -242,7 +303,7 @@ void Foam::userChemStep<ChemistryModel>::chemStep
             Y[map_[i]] = yk[i];
         }
         cm_info info;
-        const int status = cm_advance(model_, &options_, Y, T, p, dt, &info);
+        const int status = advance(Y, T, p, dt, &info);
         forAll(yk, i)
         {
             yk[i] = Y[map_[i]];
@@ -308,6 +369,14 @@ void Foam::userChemStep<ChemistryModel>::report() const
         << nFlag_[0] << ", T|Z " << nFlag_[1] << ", p " << nFlag_[2]
         << ", species " << nFlag_[3] << ", manifold " << nFlag_[4]
         << ", data " << nFlag_[5] << endl;
+    if (ladder_.size())
+    {
+        Pout<< "userChemStep ladder: " << ladderCells_ << " cells, "
+            << (ladderCells_ ? scalar(ladderTotal_)/ladderCells_ : 0.0) << " model calls per cell; calls by dt";
+        forAll(ladder_, j) Pout<< ' ' << cm_dt_max(ladder_[j]) << ':' << ladderCalls_[j];
+        Pout<< endl;
+        writeLadderCalls();
+    }
     nCalls_ = nAdvanced_ = nFrozen_ = nOOD_ = nInvalid_ = nCapped_ = 0;
     nFallback_ = 0;
     nInduction_ = 0;
@@ -357,7 +426,7 @@ void Foam::userChemStep<ChemistryModel>::shadow
     double Ys[CM_MAX_SPECIES];
     for (label k=0; k<nSpecie; k++) Ys[k] = Y0[k];
     cm_info si{};
-    cm_advance(model_, &options_, Ys, T, p, deltaT, &si);
+    advance(Ys, T, p, deltaT, &si);
 
     // GA18 (odeCoeffs) from the same state
     scalarField cd(c);
@@ -678,6 +747,93 @@ void Foam::userChemStep<ChemistryModel>::solveCell
 
 
 template<class ChemistryModel>
+int Foam::userChemStep<ChemistryModel>::advance
+(
+    double* Y, const scalar T, const scalar p, const scalar dt, cm_info* info
+) const
+{
+    if (ladder_.size()) return ladderAdvance(Y, T, p, dt, info);
+    return cm_advance(model_, &options_, Y, T, p, dt, info);
+}
+
+
+template<class ChemistryModel>
+int Foam::userChemStep<ChemistryModel>::ladderAdvance
+(
+    double* Y, const scalar T, const scalar p, const scalar dt, cm_info* info
+) const
+{
+    // Remainder rule: dt is rounded to the nearest multiple of the smallest ladder step (at least
+    // one step), then split greedily, largest step first.
+    const double dtSmall = cm_dt_max(ladder_.last());
+    label n = max(label(1), label(std::llround(dt/dtSmall)));
+    double Tc = T;
+    unsigned flags = 0;
+    double hrr = 0;
+    label calls = 0;
+    double Y0[CM_MAX_SPECIES];
+    const int Ns = cm_n_species(ladder_[0]);
+    for (int k=0; k<Ns; k++) Y0[k] = Y[k];
+    memset(info, 0, sizeof *info);
+    info->T_out = T;
+    forAll(ladder_, j)
+    {
+        const label k = n/ladderRatio_[j];
+        n -= k*ladderRatio_[j];
+        for (label s=0; s<k; s++)
+        {
+            cm_info ci;
+            const int st = cm_advance(ladder_[j], &options_, Y, Tc, p, cm_dt_max(ladder_[j]), &ci);
+            flags |= ci.flags;
+            if (calls == 0) { info->Z = ci.Z; info->manifold_ratio = ci.manifold_ratio; info->data_ratio = ci.data_ratio; }
+            if (st != 0 || (ci.flags & CM_INVALID))
+            {
+                for (int k=0; k<Ns; k++) Y[k] = Y0[k];   // the whole cell step is undone
+                info->flags = flags | CM_INVALID;
+                return -1;
+            }
+            if (ci.flags & (CM_FROZEN | CM_OOD_SKIPPED))
+            {
+                // below T_freeze (or skipped OOD): nothing to advance
+                info->flags = flags;
+                info->T_out = Tc;
+                return 0;
+            }
+            hrr += ci.hrr*cm_dt_max(ladder_[j]);
+            Tc = ci.T_out;
+            ladderCalls_[j]++;
+            calls++;
+        }
+    }
+    ladderCells_++;
+    ladderTotal_ += calls;
+    ladderCellHist_[min(calls, label(ladderCellHist_.size() - 1))]++;
+    info->flags = flags;
+    info->T_out = Tc;
+    info->hrr = hrr/max(dt, VSMALL);
+    info->n_sub = calls;
+    info->dt_sub = dtSmall;
+    return 0;
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::writeLadderCalls() const
+{
+    if (!ladder_.size() || ladderCells_ == 0) return;
+    OFstream f(this->mesh().time().path()/"ladderCalls.csv");
+    f << "# cells advanced " << ladderCells_ << ", model calls " << ladderTotal_ << nl;
+    f << "# calls by dt:";
+    forAll(ladder_, j) f << ' ' << cm_dt_max(ladder_[j]) << '=' << ladderCalls_[j];
+    f << nl << "calls_per_cell,cells" << nl;
+    forAll(ladderCellHist_, i)
+    {
+        if (ladderCellHist_[i]) f << i << ',' << ladderCellHist_[i] << nl;
+    }
+}
+
+
+template<class ChemistryModel>
 void Foam::userChemStep<ChemistryModel>::updateTau() const
 {
     const fvMesh& mesh = this->mesh();
@@ -750,6 +906,12 @@ void Foam::userChemStep<ChemistryModel>::solve
     updateTau();
     const label i = tauCall_++;
     scalar dt = (i < tau_.size()) ? tau_[i] : deltaT;
+    if (ladder_.size())
+    {
+        // the ladder advances a whole number of its smallest steps (see ladderAdvance)
+        const scalar dtSmall = cm_dt_max(ladder_.last());
+        dt = max(scalar(1), scalar(std::llround(dt/dtSmall)))*dtSmall;
+    }
     const scalarField c0(c);
     scalar sub = dt;
     solveCell(c, T, p, dt, sub);
