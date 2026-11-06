@@ -60,9 +60,9 @@ PIMPLE
     nNonOrthogonalCorrectors 0;
 
     // local time-step control (LTS)
-    maxDeltaT           0.01;
+    maxDeltaT           2e-4;   // cap the local step: keeps the chemistry sub-steps short and robust
     maxCo               0.5;
-    alphaTemp           0.2;    // limit the temperature change per step to 20 %
+    alphaTemp           0.05;   // limit the temperature change per step to 5 %
     alphaY              0.05;   // and the change of the reference species below
     Yref
     {
