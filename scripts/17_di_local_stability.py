@@ -64,6 +64,8 @@ def core_library(build_dir):
     lib.cm_n_species.argtypes = [ctypes.c_void_p]
     lib.cm_species_name.restype = ctypes.c_char_p
     lib.cm_species_name.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.cm_dt_max.restype = ctypes.c_double
+    lib.cm_dt_max.argtypes = [ctypes.c_void_p]
     lib.cm_default_options.argtypes = [ctypes.POINTER(CmOptions)]
     dp = ctypes.POINTER(ctypes.c_double)
     lib.cm_advance.argtypes = [ctypes.c_void_p, ctypes.POINTER(CmOptions), dp, ctypes.c_double, ctypes.c_double,

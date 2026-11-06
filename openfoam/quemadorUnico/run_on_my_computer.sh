@@ -84,7 +84,7 @@ esac
 CAS=$1
 if [ -z "$CAS" ]; then
     set -- *.cas.h5
-    [ -e "$1" ] || die "no .cas.h5 file in $(pwd). Copy quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 here, or give its path."
+    [ -e "$1" ] || die "no .cas.h5 file in $(pwd). Copy quemadorUnicoTesis_60KCells-GA18--ID.cas.h5 (the corrected case in fluent/cases/) here, or give its path."
     CAS=$1
 fi
 [ -f "$CAS" ] || die "file not found: $CAS"

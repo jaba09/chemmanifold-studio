@@ -19,7 +19,7 @@ openfoam/
 ```bash
 # OpenFOAM (openfoam.com) environment sourced; python3 with numpy and h5py
 cd openfoam/quemadorUnico
-./Allrun /path/to/quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 4     # 4 = MPI ranks
+./Allrun ../../fluent/cases/quemadorUnicoTesis_60KCells-GA18--ID.cas.h5 4     # 4 = MPI ranks
 ```
 
 Without OpenFOAM installed, `quemadorUnico/run_on_my_computer.sh` does everything on any x86_64
@@ -45,7 +45,8 @@ HDF5 mesh directly. `chemkin/transportProperties` is committed, so Cantera is on
 | `inlet-fuel`: mass flow 6.735e-6 kg/s CH4, 300 K | `flowRateInletVelocity`, 6.735e-6 × 5/360 kg/s |
 | `inlet-coflow-fff-fluid-mixing`: mass flow 5.7675e-5 kg/s air, 300 K | `flowRateInletVelocity`, 5.7675e-5 × 5/360 kg/s |
 | `inlet-coflow-fff-fluid-exterior`: 0.05 m/s air, 300 K | `surfaceNormalFixedValue` |
-| `outlet-lab:026` (r = 0.14 m side): pressure outlet 0 Pa gauge, backflow air 300 K | fixed `p_rgh` + `inletOutlet` (patch `outlet-lab-026`); Fluent's gauge pressure excludes the hydrostatic head, so fixing `p` on this vertical boundary would drive a spurious through-flow |
+| `outlet-lab` (top, x = 0.52 m, r 0.02–0.14 m) and `wall-fff-fluid-exhaust` (chimney exit, r < 0.02 m): pressure outlets 0 Pa gauge, backflow air 300 K | fixed `p_rgh` + `pressureInletOutletVelocity` + `inletOutlet`; both are at the same height, so fixed `p_rgh` equals fixed `p` |
+| `outlet-lab:026` (r = 0.14 m side): adiabatic wall | `wall` group: `noSlip`, `zeroGradient` T |
 | Turbulence at inlets: 5 % intensity, viscosity ratio 10 | fixed k = 1.5 (0.05 U)², ω = k / (10 ν) |
 | `wall-disk`: 300 K | `fixedValue` |
 | `wall-pot-fff-fluid-exhaust`, `-mixing`: convection, h = 15, Tinf = 323 K | `externalWallHeatFluxTemperature` |
@@ -58,8 +59,13 @@ Notes on the Fluent setup:
 - The air streams set O2 = 0.21 with *species in mole fractions* on, so they are normal air. The case
   uses **Y_O2 = 0.233, Y_N2 = 0.767 by mass** (Z_st = 0.055). The first version of this case read the
   0.21 as a mass fraction; that was wrong.
-- `outlet-lab` (top, r = 0.02–0.14 m) and `wall-fff-fluid-exhaust` (top of the chimney, r < 0.02 m)
-  are **adiabatic walls**, so the only open boundary is the side at r = 0.14 m and the chimney is closed.
+- **Outlets (corrected 2026-11-05).** The first Fluent case (`--ID-UDF`, `--DI`) had the outlets wrong: the
+  side at r = 0.14 m was the only open boundary and the room top and chimney exit were adiabatic walls. The
+  corrected case `fluent/cases/quemadorUnicoTesis_60KCells-GA18--ID.cas.h5` opens the top (`outlet-lab`) and
+  the chimney exit (`wall-fff-fluid-exhaust`) and makes the side (`outlet-lab:026`) an adiabatic wall; nothing
+  else changed. The patch types come from the .cas.h5, so build the mesh from the corrected case.
+- `tools/fluent_dat_to_foam.py` copies a Fluent `.dat.h5` solution (T, U, k, ω, Y) into an OpenFOAM time
+  directory, to start a run from a Fluent field (the converter keeps Fluent's cell order).
 
 Known modelling differences:
 

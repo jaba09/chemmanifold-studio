@@ -30,7 +30,7 @@ boundaryField
         value           uniform 0;
     }
 
-    outlet-lab-026
+    "(outlet-lab|wall-fff-fluid-exhaust)"
     {
         type            inletOutlet;
         inletValue      uniform 0;
