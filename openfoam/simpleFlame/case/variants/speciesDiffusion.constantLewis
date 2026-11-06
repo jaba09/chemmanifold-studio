@@ -1,0 +1,37 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      speciesDiffusion;
+}
+// Simple laminar CH4/air coflow flame (openfoam/simpleFlame)
+
+model           constantLewis;  // rho D_k = kappa/(cp Le_k) + mu_t/Sct, close to Fluent kinetic-theory diffusion
+Sct             0.7;
+
+// Le_k = kappa/(rho cp D_k,mix) from a Cantera GA18 counterflow CH4/air flame (mixture-averaged,
+// 1 atm, strain ~35 1/s), weighted by |dY_k/dx| where T > 600 K
+Le
+{
+    H2      0.309;
+    H       0.185;
+    O       0.712;
+    O2      1.084;
+    OH      0.729;
+    H2O     0.816;
+    HO2     1.086;
+    H2O2    1.081;
+    CH2     0.995;
+    CH2(S)  0.995;
+    CH3     1.014;
+    CH4     0.870;
+    CO      1.120;
+    CO2     1.370;
+    HCO     1.281;
+    CH2O    1.290;
+    CH3O    1.323;
+    N2      1.151;
+    default 1;
+}

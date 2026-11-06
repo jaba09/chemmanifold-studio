@@ -1,0 +1,21 @@
+#!/bin/sh
+# Simple laminar CH4/air coflow flame: build the mesh, convert GA18, set the diffusion variant, run.
+#   ./Allrun <stock|unityLewis|constantLewis> [run directory, default ./run-<variant>]
+# Needs OpenFOAM v2412 sourced, python3 with numpy+h5py, and the solver in ../solver built (wmake).
+cd "${0%/*}" || exit 1
+set -e
+VARIANT=${1:?usage: ./Allrun <stock|unityLewis|constantLewis> [run dir]}
+RUN=${2:-run-$VARIANT}
+HERE=$(pwd)
+CHEM=$HERE/../../quemadorUnico/chemkin
+[ -f variants/speciesDiffusion.$VARIANT ] || { echo "unknown variant $VARIANT"; exit 1; }
+mkdir -p "$RUN"
+cp -r 0.orig constant system "$RUN"/
+cp variants/speciesDiffusion.$VARIANT "$RUN"/constant/speciesDiffusion
+cd "$RUN"
+python3 "$HERE"/../make_mesh.py . --out coflow.msh > log.mesh
+checkMesh > log.checkMesh 2>&1
+chemkinToFoam "$CHEM"/chem.foam.inp "$CHEM"/therm.foam.dat "$CHEM"/transportProperties \
+    constant/reactions constant/thermo.compressibleGas > log.chemkinToFoam 2>&1
+rm -rf 0 && cp -r 0.orig 0
+rhoReactingBuoyantLeFoam > log.solver 2>&1

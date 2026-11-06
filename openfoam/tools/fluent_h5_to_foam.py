@@ -117,7 +117,15 @@ def main():
     args = ap.parse_args()
 
     xy, fnodes, c0, c1, fzones, czones, ncell = read_mesh(args.cas)
-    xy = xy * args.scale
+    write_wedge(xy * args.scale, fnodes, c0, c1, fzones, czones, ncell, args.case,
+                angle=args.angle, axis_tol=args.axis_tol, source=os.path.basename(args.cas))
+
+
+def write_wedge(xy, fnodes, c0, c1, fzones, czones, ncell, case, angle=5.0, axis_tol=1e-12,
+                source="2D mesh"):
+    """Revolve a 2D axisymmetric mesh (nodes, 2-node faces, c0/c1, zones) into a wedge polyMesh."""
+    from types import SimpleNamespace
+    args = SimpleNamespace(angle=angle, axis_tol=axis_tol, case=case, cas=source)
     if xy[:, 1].min() < -args.axis_tol:
         raise SystemExit("negative radial coordinates: the axis must be y = 0 with the mesh at y >= 0")
     nnode = len(xy)
@@ -189,7 +197,7 @@ def main():
 
     mesh = os.path.join(args.case, "constant", "polyMesh")
     os.makedirs(mesh, exist_ok=True)
-    note = f"converted from {os.path.basename(args.cas)}: {args.angle} deg wedge about the x axis"
+    note = f"converted from {args.cas}: {args.angle} deg wedge about the x axis"
     write_list(os.path.join(mesh, "points"), "vectorField", "points", pts,
                lambda p: f"({p[0]:.17g} {p[1]:.17g} {p[2]:.17g})", note)
     write_list(os.path.join(mesh, "faces"), "faceList", "faces", faces,

@@ -1,0 +1,11 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      speciesDiffusion;
+}
+// Simple laminar CH4/air coflow flame (openfoam/simpleFlame)
+
+model           stock;          // rho D_k = mu + mu_t (what rhoReactingBuoyantFoam does)

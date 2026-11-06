@@ -1,0 +1,12 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      turbulenceProperties;
+}
+// Simple laminar CH4/air coflow flame (openfoam/simpleFlame), the OpenFOAM half of the
+// Fluent-vs-OpenFOAM comparison. Mesh from ../make_mesh.py (same cells as coflow.msh).
+
+simulationType      laminar;

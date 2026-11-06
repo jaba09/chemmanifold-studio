@@ -1,0 +1,40 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      O2;
+}
+// Simple laminar CH4/air coflow flame (openfoam/simpleFlame), the OpenFOAM half of the
+// Fluent-vs-OpenFOAM comparison. Mesh from ../make_mesh.py (same cells as coflow.msh).
+
+dimensions          [0 0 0 0 0 0 0];
+internalField       uniform 0.233;
+boundaryField
+{
+    inlet-fuel
+    {
+        type            fixedValue;
+        value           uniform 0;
+    }
+    inlet-air
+    {
+        type            fixedValue;
+        value           uniform 0.233;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 0.233;
+        value           uniform 0.233;
+    }
+    side
+    {
+        type            symmetryPlane;
+    }
+    "(front|back)"
+    {
+        type            wedge;
+    }
+}

@@ -63,10 +63,15 @@ Notes on the Fluent setup:
 
 Known modelling differences:
 
-- **Species diffusion.** Fluent used kinetic-theory mass diffusivities with thermal diffusion;
-  `rhoReactingBuoyantFoam` uses unity Lewis number. The inlet jets are close to laminar
-  (fuel jet Re ≈ 150), so this can shift the flame position and peak temperature.
-- **Turbulent Schmidt number.** Fluent Sc_t = 0.7; OpenFOAM diffuses species with α_t (Pr_t = 0.85).
+- **Species diffusion.** Fluent used kinetic-theory mass diffusivities with thermal diffusion.
+  `rhoReactingBuoyantFoam` (reactingFoam family, openfoam.com) solves `laplacian(muEff, Yi)`, i.e.
+  rho D_k = mu + mu_t for every species: Schmidt number 1 and Sc_t = 1, so Le_k ~ 1.4 for all species
+  (real CH4 0.87, O2 1.08, H2 0.31, H 0.19), and the energy equation has no species-enthalpy diffusion
+  term. Species diffuse ~1.4-1.6x slower than in Fluent. The burner flame is nearly laminar
+  (Fluent mu_t/mu ~ 0.01-0.06 in the reacting cells), so this matters. `simpleFlame/` tests it and has a
+  solver variant with unity or per-species Lewis numbers.
+- **Turbulent Schmidt number.** Fluent Sc_t = 0.7; OpenFOAM uses mu_t for species (Sc_t = 1) and
+  alpha_t (Pr_t = 0.85) for heat. Minor here because mu_t is small.
 - **Initial state.** Fluent's data file was not supplied. The run starts from still air at 300 K with
   the fuel region under the pot already full of CH4 and the mixing annulus full of stoichiometric
   CH4/air products at 2000 K (`system/setFieldsDict`). Hot products hold no O2, so they light the

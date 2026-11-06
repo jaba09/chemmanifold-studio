@@ -1,0 +1,29 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      thermophysicalProperties;
+}
+// Simple laminar CH4/air coflow flame (openfoam/simpleFlame), the OpenFOAM half of the
+// Fluent-vs-OpenFOAM comparison. Mesh from ../make_mesh.py (same cells as coflow.msh).
+
+thermoType
+{
+    type            heRhoThermo;
+    mixture         reactingMixture;   // species + reactions from the chemistry files below
+    transport       sutherland;     // fitted to the Chemkin LJ data, see chemkin/transportProperties
+    thermo          janaf;
+    energy          sensibleEnthalpy;
+    equationOfState perfectGas;
+    specie          specie;
+}
+
+inertSpecie         N2;
+
+chemistryReader     foamChemistryReader;
+foamChemistryFile   "<constant>/reactions";              // written by chemkinToFoam (Allrun)
+foamChemistryThermoFile "<constant>/thermo.compressibleGas";
+
+// ************************************************************************* //

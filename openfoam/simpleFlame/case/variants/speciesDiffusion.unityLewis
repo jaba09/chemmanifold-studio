@@ -1,0 +1,12 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      speciesDiffusion;
+}
+// Simple laminar CH4/air coflow flame (openfoam/simpleFlame)
+
+model           unityLewis;     // rho D_k = kappa/cp + mu_t/Sct, same as Fluent "unity-lewis-number"
+Sct             0.7;
