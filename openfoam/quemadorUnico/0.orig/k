@@ -37,7 +37,7 @@ boundaryField
         value           uniform 9.375e-06;      // U = 0.05 m/s
     }
 
-    outlet-lab-026
+    "(outlet-lab|wall-fff-fluid-exhaust)"
     {
         type            inletOutlet;
         inletValue      uniform 9.375e-06;
