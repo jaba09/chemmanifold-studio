@@ -1,0 +1,4 @@
+inlet-fuel mdot=6.73458e-06 kg/s heat=-3.1288e+01 W  species kg/s: ch4=6.7346e-06  co=0.0000e+00  co2=0.0000e+00  h2o=0.0000e+00  o2=0.0000e+00  h2=0.0000e+00  ch2o=0.0000e+00
+inlet-air  mdot=6.58131e-04 kg/s heat=1.2555e+00 W  species kg/s: ch4=0.0000e+00  co=0.0000e+00  co2=0.0000e+00  h2o=0.0000e+00  o2=1.5334e-04  h2=0.0000e+00  ch2o=0.0000e+00
+outlet     mdot=-4.04299e-04 kg/s heat=1.2479e+01 W  species kg/s: ch4=-7.0265e-12  co=-1.4757e-09  co2=-6.0597e-06  h2o=-4.2940e-06  o2=-8.5325e-05  h2=-3.8880e-11  ch2o=-4.4383e-13
+NET heat = -1.7554e+01 W (flux reports are full 2*pi)
