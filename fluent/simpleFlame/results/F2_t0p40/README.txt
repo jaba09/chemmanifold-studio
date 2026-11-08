@@ -1,0 +1,1 @@
+﻿F2 transient continued from 0.300 s to 0.400 s (dt 1e-3 s). Same columns as F2_t0p30. balance.txt now ends with the signed last-row species fluxes (the mass-avg species flows above that line are biased by outlet backflow). tmax_vs_time_0p30_0p40.out: time step counter restarts at 0 = t 0.300 s.
