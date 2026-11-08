@@ -1,0 +1,7 @@
+﻿RUN-F2R patched cells=3680 xmax=0.0198 rmax=0.005984 Tmin_patched=2000.0
+TMAXREPORT t=0.7100 liftoff=1.4 tip=196.8 tmax=2551.6 V1500=27.71
+TMAXREPORT t=0.7200 liftoff=2.7 tip=198.8 tmax=2470.5 V1500=32.61
+TMAXREPORT t=0.7450 liftoff=8.7 tip=211.5 tmax=2285.5 V1500=38.70
+TMAXREPORT t=0.7700 liftoff=17.5 tip=175.6 tmax=2218.4 V1500=44.51
+TMAXREPORT t=0.7950 liftoff=29.0 tip=172.0 tmax=2217.4 V1500=52.38
+TMAXREPORT t=0.8200 liftoff=42.6 tip=163.2 tmax=2197.5 V1500=56.90
