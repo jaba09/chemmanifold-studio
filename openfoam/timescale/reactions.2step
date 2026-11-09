@@ -1,0 +1,48 @@
+/*  Global 2-step CH4/air mechanism (Westbrook-Dryer form), same rate data as Fluent's
+    "methane-air-2step" mixture (SI: kmol, m3, s, J/kmol):
+      R1  CH4 + 1.5 O2 -> CO + 2 H2O     A 5.012e11  Ea 2.0e8   orders CH4^0.7 O2^0.8
+      R2  CO + 0.5 O2  -> CO2            A 2.239e12  Ea 1.7e8   orders CO^1 O2^0.25 H2O^0.5
+      R3  CO2 -> CO + 0.5 O2             A 5.0e8     Ea 1.7e8   order  CO2^1
+    R2 carries H2O as a catalyst (rate order 0.5, net stoichiometry 0), so it is written irreversible
+    with its reverse as R3. Ta = Ea/R.  Used only as a cheap flow proxy (timescale roadmap, step 1).  */
+elements        4(H O C N);
+
+species
+6
+(
+CH4
+O2
+H2O
+CO
+CO2
+N2
+)
+;
+
+reactions
+{
+    wd2-R1
+    {
+        type            irreversibleArrheniusReaction;
+        reaction        "CH4^0.7 + 1.5O2^0.8 = CO + 2H2O";
+        A               5.012e+11;
+        beta            0;
+        Ta              24054.5;
+    }
+    wd2-R2
+    {
+        type            irreversibleArrheniusReaction;
+        reaction        "CO + 0.5O2^0.25 + H2O^0.5 = CO2 + H2O";
+        A               2.239e+12;
+        beta            0;
+        Ta              20446.3;
+    }
+    wd2-R3
+    {
+        type            irreversibleArrheniusReaction;
+        reaction        "CO2 = CO + 0.5O2";
+        A               5.0e+08;
+        beta            0;
+        Ta              20446.3;
+    }
+}

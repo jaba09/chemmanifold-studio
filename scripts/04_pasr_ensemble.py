@@ -49,7 +49,7 @@ import pandas as pd
 from chemmanifold.chemistry import advance_const_p, const_p_reactor, make_gas, set_unburnt
 from chemmanifold.flame import (FlameSeeds, case_label, flame_pressure, heat_loss, is_flame, wall_temperature,
                                z_from_unit)
-from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
+from chemmanifold.io import base_parser, choose_strides, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
 from chemmanifold.unsteady_flamelet import ZFlamelet, chi_profile, run_transient, z_grid
 
 
@@ -98,7 +98,7 @@ def main(cfg, only=None):
             dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
             if p.get("dh_scale_by_alpha", False):
                 dh = dh * alpha
-        strides = rng.choice(dt_strides(cfg, "pasr"), size=p["n_particles"])
+        strides = choose_strides(cfg, rng, dt_strides(cfg, "pasr"), size=p["n_particles"])
         for i, (a, d, s) in enumerate(zip(alpha, dh, strides)):
             Y_mix = (1 - a) * Y_fresh + a * Y_burnt                        # Eq. 16
             h_mix = (1 - a) * h_fresh + a * h_burnt
@@ -152,7 +152,7 @@ def flamelet_pairs(gas, cfg, seeds, rng):
     out = {k: [] for k in ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")}
     for j in seeds.train_ids:
         for Y, h in zip(*seeds.raw[j]):
-            s = rng.choice(dt_strides(cfg, "pasr"))
+            s = choose_strides(cfg, rng, dt_strides(cfg, "pasr"))
             gas.HPY = h, seeds.P, Y
             Y_in, T_in = gas.Y.copy(), gas.T
             advance_const_p(gas, s * dt_base)
@@ -182,7 +182,7 @@ def recirculation_pairs(gas, cfg, seeds, rng):
         beta = rng.beta(rc.get("beta_a", 0.7), rc.get("beta_b", 0.7), size=rc["n_particles"])
         aged = rng.uniform(size=rc["n_particles"]) < rc.get("f_aged", 0.5)
         ages = 10.0 ** rng.uniform(lo, hi, size=rc["n_particles"])
-        strides = rng.choice(dt_strides(cfg, "pasr"), size=rc["n_particles"])
+        strides = choose_strides(cfg, rng, dt_strides(cfg, "pasr"), size=rc["n_particles"])
         for b, a, age, s in zip(beta, aged, ages, strides):
             try:
                 gas.HPY = b * h_p + (1 - b) * h_s, seeds.P, b * Y_p + (1 - b) * Y_s
@@ -257,7 +257,7 @@ def vitiated_pairs(gas, cfg, seeds, rng):
         p_pick = (1 - v.get("time_share", 0.0)) * w / w.sum() + v.get("time_share", 0.0) / len(w)
         idx = rng.choice(len(w), size=min(v.get("n_pick", 150), len(w)), replace=False, p=p_pick)
         for i in idx:
-            for st in rng.choice(strides, size=k_dt, replace=False):
+            for st in choose_strides(cfg, rng, strides, size=k_dt, replace=False):
                 gas.HPY = hs, seeds.P, Ys[i]
                 T_in = gas.T
                 advance_const_p(gas, float(st) * dt_base)
@@ -282,7 +282,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
     """Regime 8: burnt gas relaxing to its equilibrium, the state most of a lit burner sits in.
 
     Products at Z (log-uniform in Z_range, a training flamelet's burnt state) lose a fraction psi of
-    their largest heat loss (psi uniform in [0, psi_max]). Half of the cases start at the HP
+    their largest heat loss (psi uniform in [psi_min, psi_max], psi_min default 0; psi < 0 = excess enthalpy). Half of the cases start at the HP
     equilibrium of that enthalpy with every radical scaled by 10^u (u uniform in +-radical_decades),
     the other half at the cooled frozen composition; the 0D reactor then runs for t_max at dt_base and
     n_pick states, log-uniform in time, are paired at the strides of the dt range. Near equilibrium the
@@ -300,7 +300,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
     for e in range(v["n"]):
         Z = float(10 ** rng.uniform(lo, hi))
         j = int(rng.choice(seeds.train_ids))
-        psi = rng.uniform(0.0, v.get("psi_max", 0.5))
+        psi = rng.uniform(v.get("psi_min", 0.0), v.get("psi_max", 0.5))   # psi < 0: excess enthalpy
         Y, h = seeds.burnt(Z, j)
         h = h + heat_loss(gas, Y, h, psi, seeds.P, T_wall)
         from_eq = e % 2 == 0 or v.get("all_from_equilibrium", False)
@@ -329,7 +329,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
         t_pick = 10 ** rng.uniform(np.log10(dt_base), np.log10(n_max * dt_base), size=v.get("n_pick", 60))
         idx = np.unique(np.concatenate([[0], np.searchsorted(times, t_pick).clip(0, n_max)]))
         for i in idx:
-            for st in rng.choice(strides, size=k_dt, replace=False):
+            for st in choose_strides(cfg, rng, strides, size=k_dt, replace=False):
                 gas.HPY = h, seeds.P, Ys[i]
                 T_in = gas.T
                 advance_const_p(gas, float(st) * dt_base)
@@ -443,7 +443,7 @@ def _transient(job):
             if gas.T > T_min:
                 cand.append(i)
         for i in rng.permutation(cand)[:n_pts]:
-            s = float(rng.choice(strides))
+            s = float(choose_strides(cfg, rng, strides))
             gas.HPY = hs[i], P, Ys[i]
             Y_in, T_in = gas.Y.copy(), gas.T
             try:

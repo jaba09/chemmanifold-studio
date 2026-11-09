@@ -36,6 +36,11 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     odeInduction_(coeffsDict_.getOrDefault<scalarList>("odeInduction", scalarList())),
     iFuel_(-1), iO2_(-1), nInduction_(0),
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
+    tauCellMode_(coeffsDict_.getOrDefault<word>("dtMode", "flow") == "tauCell"),
+    tauLimits_(coeffsDict_.getOrDefault<scalarList>("tauCellLimits", scalarList({1e-7, 1.0}))),
+    tauMaxScale_(coeffsDict_.getOrDefault<scalar>("tauMaxScale", GREAT)),
+    wedgeAngle_(coeffsDict_.getOrDefault<scalar>("wedgeAngle", 5.0)),
+    tau_(), tauIndex_(-1), tauCall_(0), tauWarned_(0), tauSumScale_(0), tauN_(0), tauLimited_(0),
     nCalls_(0), nAdvanced_(0), nFrozen_(0), nOOD_(0), nInvalid_(0), nCapped_(0),
     nFallback_(0),
     dtMin_(GREAT), dtMax_(0),
@@ -575,7 +580,7 @@ void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
 // * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
 
 template<class ChemistryModel>
-void Foam::userChemStep<ChemistryModel>::solve
+void Foam::userChemStep<ChemistryModel>::solveCell
 (
     scalarField& c,
     scalar& T,
@@ -735,6 +740,109 @@ void Foam::userChemStep<ChemistryModel>::solve
 
     // The whole step is taken in one call (no sub-stepping); report deltaT
     // as the chemical time scale so local time stepping is not restricted
+    subDeltaT = deltaT;
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::updateTau() const
+{
+    const fvMesh& mesh = this->mesh();
+    const label ti = mesh.time().timeIndex();
+    if (ti == tauIndex_) return;
+    if (tauIndex_ >= 0 && tauCall_ != mesh.nCells() && tauWarned_ < 5)
+    {
+        WarningInFunction << "userChemStep dtMode tauCell: " << tauCall_ << " calls for "
+            << mesh.nCells() << " cells in the last step; the cell order may be wrong" << endl;
+        tauWarned_++;
+    }
+    if (tauIndex_ >= 0 && tauN_ > 0)
+    {
+        Info<< "userChemStep tauCell: mean applied dt_flow/tau_cell " << tauSumScale_/tauN_
+            << ", positivity-limited cells " << tauLimited_ << endl;
+    }
+    tauIndex_ = ti;
+    tauCall_ = 0;
+    tauSumScale_ = 0;
+    tauN_ = 0;
+    tauLimited_ = 0;
+    const volVectorField& U = mesh.lookupObject<volVectorField>("U");
+    const volScalarField& rho = mesh.lookupObject<volScalarField>("rho");
+    const scalarField alpha(this->thermo().alpha().primitiveField());
+    scalarField alphat(mesh.nCells(), 0.0);
+    if (mesh.foundObject<volScalarField>("alphat"))
+    {
+        alphat = mesh.lookupObject<volScalarField>("alphat").primitiveField();
+    }
+    const scalarField& V = mesh.V();
+    const vectorField& C = mesh.C();
+    tau_.setSize(mesh.nCells());
+    const scalar th = wedgeAngle_*constant::mathematical::pi/180.0;
+    forAll(tau_, i)
+    {
+        scalar dx;
+        if (th > 0)
+        {
+            const scalar r = max(Foam::sqrt(sqr(C[i].y()) + sqr(C[i].z())), 1e-9);
+            dx = Foam::sqrt(V[i]/(r*th));
+        }
+        else
+        {
+            dx = Foam::cbrt(V[i]);
+        }
+        const scalar D = max(alpha[i] + alphat[i], 1e-12)/max(rho[i], 1e-6);
+        const scalar tconv = dx/max(mag(U[i]), 1e-9);
+        const scalar tdiff = sqr(dx)/D;
+        tau_[i] = min(max(0.1*min(tconv, tdiff), tauLimits_[0]), tauLimits_[1]);
+    }
+}
+
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::solve
+(
+    scalarField& c,
+    scalar& T,
+    scalar& p,
+    scalar& deltaT,
+    scalar& subDeltaT
+) const
+{
+    if (!tauCellMode_)
+    {
+        solveCell(c, T, p, deltaT, subDeltaT);
+        return;
+    }
+    // Fluent's steady stiff chemistry: advance over tau_cell, source = dY(tau)/tau
+    updateTau();
+    const label i = tauCall_++;
+    scalar dt = (i < tau_.size()) ? tau_[i] : deltaT;
+    const scalarField c0(c);
+    scalar sub = dt;
+    solveCell(c, T, p, dt, sub);
+    // the source dY(tau)/tau applied over the solver's deltaT is a linear extrapolation by
+    // s = deltaT/tau; it is limited so that no major species goes negative (positivity-preserving), which also bounds the heat released to complete consumption
+    scalar s = deltaT/max(dt, VSMALL);
+    // (only species above 0.1 % by mass set the limit; minor species are clipped at zero)
+    const auto& th = this->specieThermo();
+    scalar rho0 = 0;
+    forAll(c0, k) rho0 += c0[k]*th[k].W();
+    scalar sLim = GREAT;
+    forAll(c, k)
+    {
+        const scalar d = c[k] - c0[k];
+        if (d < 0 && c0[k]*th[k].W() > 1e-3*rho0) sLim = min(sLim, c0[k]/(-d));
+    }
+    // optional cap on the extrapolation (tauMaxScale): s > ~2 also overshoots the radical pool,
+    // which makes the next call's integration stiff and the pseudo-transient unstable
+    sLim = min(sLim, tauMaxScale_);
+    if (s > sLim) { s = sLim; tauLimited_++; }
+    tauSumScale_ += s;
+    tauN_++;
+    forAll(c, k)
+    {
+        c[k] = max(0.0, c0[k] + (c[k] - c0[k])*s);
+    }
     subDeltaT = deltaT;
 }
 
