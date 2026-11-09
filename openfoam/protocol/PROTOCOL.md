@@ -67,22 +67,29 @@ Por instantánea, frente a la DI en el mismo tiempo:
   en las celdas calientes y en la llama; y la razón de cantidades totales (por ejemplo OH ×2).
 - **Forma de la llama:** volumen por encima de 1500 K (razón modelo/DI) y base y punta de la isoterma
   de 1500 K en el eje (r < 2 mm).
-- **Calor liberado:** el de GA18 evaluado con Cantera en el estado de cada corrida, total (razón) y error L1.
-  Mide si el estado del modelo es químicamente el mismo, no el calor que el surrogado aplicó.
+- **Calor liberado:** el de GA18 evaluado con Cantera en el estado de cada corrida. Se da la razón
+  modelo/DI en las celdas de llama, el calor liberado fuera de la llama como fracción del de la llama
+  DI (en la DI es casi cero; si el modelo deja el gas quemado lejos del equilibrio, por ejemplo con H u
+  OH de más, aquí sale grande) y el error L1 del campo. Mide si el estado del modelo es químicamente el
+  mismo, no el calor que el surrogado aplicó. El total sobre todas las celdas calientes no se usa: el
+  gran volumen de gas quemado casi se cancela y la razón queda mal condicionada.
 - **GA18 y OOD:** fracción de celdas avanzadas que fueron a GA18 (híbrido) o salieron como OOD.
 - **Coste:** mediana de s por paso.
 
 Resumen de cada fase:
 
 - **(a) Arranque:** tiempo de ignición (primer paso con Tmax del dominio > 1600 K) del modelo menos el de
-  la DI; máximo exceso de Tmax sobre la DI; sesgo de T en la boquilla en la peor instantánea; media de
-  |dT| en las calientes; error de OH.
+  la DI; máximo exceso de Tmax sobre la DI; sesgo de T de la llama en la peor instantánea y media de |dT|
+  de la llama; |dT| en la boquilla y en las calientes; error de OH.
 - **(b) Llama establecida:** media en el tiempo de |dT| de la llama (**la cifra principal**) y su sesgo;
   **deriva** = pendiente de un ajuste lineal de ese error entre 25 y 100 ms, en K cada 10 ms; el mismo
   error en los últimos 10 ms; |dT| por zona; errores de especies; volumen caliente, punta y base;
   calor liberado; GA18, OOD y coste.
 - **DI en sombra:** medianas por fase del error de un paso (|dT| y error relativo del incremento de T,
   OH y CO), dentro y fuera de los datos.
+
+Ruido de la referencia: la DI repetida con el mismo arranque coincide con la del bucle OOD a 0,01 K de
+media (máximo 4 K) a 2,5 y 5 ms. Diferencias por debajo de eso no significan nada.
 
 Referencias orientativas, no un aprobado: llama < 10 K, deriva < 1 K cada 10 ms, ignición a menos de
 0,25 ms de la DI, OH L1 < 50 %.

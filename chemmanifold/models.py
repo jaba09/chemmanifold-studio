@@ -38,11 +38,14 @@ class FiLMBlock(nn.Module):
 class ResNetFiLM(nn.Module):
     """Architecture A: variable-dt FiLM-modulated residual network."""
 
-    def __init__(self, n_species, hidden=192, n_blocks=3, n_ctx=4):
+    def __init__(self, n_species, hidden=192, n_blocks=3, n_ctx=4, increments=False):
         super().__init__()
+        self.increments = increments
         self.inp = nn.Linear(n_species + n_ctx, hidden)
         self.blocks = nn.ModuleList([FiLMBlock(hidden, n_ctx) for _ in range(n_blocks)])
-        self.out = nn.Linear(hidden, n_species)
+        # outputs: the next Box-Cox state as a residual on yt, or (increments) the scaled physical
+        # increments dY_k / sigma_dYp_k and dT / sigma_dTp
+        self.out = nn.Linear(hidden, n_species + 1 if increments else n_species)
         nn.init.zeros_(self.out.weight)  # start as the identity map: dy = 0
         nn.init.zeros_(self.out.bias)
         self.act = nn.SiLU()
@@ -51,6 +54,8 @@ class ResNetFiLM(nn.Module):
         h = self.act(self.inp(torch.cat([yt, c], dim=-1)))   # Eq. 32
         for blk in self.blocks:
             h = blk(h, c)
+        if self.increments:
+            return self.out(h), {}
         return yt + self.out(h), {}                            # Eq. 37
 
 
@@ -92,7 +97,13 @@ class Surrogate(nn.Module):
     def __init__(self, net, scalers, thermo):
         super().__init__()
         self.net = net
+        self.increments = bool(getattr(net, "increments", False))
         f64 = dict(dtype=torch.float64)
+        if self.increments:
+            for k in ("sigma_dYp", "sigma_dTp"):
+                if k not in scalers:
+                    raise ValueError(f"model.output dY needs {k} in scalers.json: re-run stage 5")
+                self.register_buffer(k, torch.as_tensor(np.asarray(scalers[k]), **f64))
         self.lam = float(scalers["boxcox_lambda"])
         self.dt_base = float(scalers["dt_base"])
         for k in ("mu_y", "sigma_y", "ctx_mu", "ctx_sigma", "sigma_dy"):
@@ -120,6 +131,16 @@ class Surrogate(nn.Module):
         y_cand, extras = self.net(yt.to(p.device, p.dtype), c.to(p.device, p.dtype), dt_star.to(p.device, p.dtype))
         y_cand = y_cand.to(yt.device, torch.float64)
         extras = {k: v.to(yt.device, torch.float64) for k, v in extras.items()}
+        if self.increments:
+            Ns = Y.shape[-1]
+            Y_cand = Y.to(torch.float64) + y_cand[..., :Ns] * self.sigma_dYp
+            T_net = T.to(torch.float64) + y_cand[..., Ns] * self.sigma_dTp
+            Y_phys = self.project(Y, Y_cand)
+            # The CFD solvers take T from the enthalpy, so the returned T is the enthalpy one; the
+            # network's own dT is a second output, trained against GA18 (reported, not used)
+            T_hat = self.temperature(Y_phys, h, T)
+            return {"Y": Y_phys, "T": T_hat, "T_net": T_net, "Y_cand": Y_cand,
+                    "yt_cand": self.encode_Y(torch.clamp(Y_cand, min=0.0)), "yt_in": yt, "extras": extras}
         Y_cand = self.decode_Y(y_cand)
         Y_phys = self.project(Y, Y_cand)
         T_hat = self.temperature(Y_phys, h, T)
@@ -148,7 +169,7 @@ def build_surrogate(arch, cfg, scalers, thermo, latent_dim=4):
     Ns = len(scalers["mu_y"])
     m = cfg["model"]
     if arch == "resnet_film":
-        net = ResNetFiLM(Ns, hidden=m["hidden"], n_blocks=m["n_blocks"])
+        net = ResNetFiLM(Ns, hidden=m["hidden"], n_blocks=m["n_blocks"], increments=m.get("output", "state") == "dY")
     elif arch == "chemnode":
         net = PhyChemNODE(Ns, latent_dim=latent_dim, hidden=m["node_hidden"], n_substeps=m["node_substeps"])
     else:
