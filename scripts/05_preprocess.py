@@ -29,6 +29,8 @@ def main(cfg):
                   "pairs_relax.npz", "pairs_relax_lean.npz", "pairs_eq_perturbed.npz", "pairs_equil.npz"):  # flame mode
         if (samples / extra).exists():
             parts.append(load_npz(samples / extra))
+    for extra in sorted(samples.glob("pairs_seeded*.npz")):    # ITERML seeded exploration (regimes 10-13)
+        parts.append(load_npz(extra))
     data = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     N = len(data["dt"])
 
