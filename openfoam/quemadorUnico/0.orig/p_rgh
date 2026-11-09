@@ -24,12 +24,13 @@ boundaryField
         value           $internalField;
     }
 
-    outlet-lab-026
+    "(outlet-lab|wall-fff-fluid-exhaust)"
     {
-        // Fluent's 0 Pa gauge is the pressure minus the operating-density hydrostatic
-        // head, i.e. uniform p_rgh. Fixing p instead (prghPressure) on this vertical
-        // boundary would impose a 6 Pa imbalance over its 0.52 m height and drive a
-        // spurious through-flow.
+        // Fluent: pressure outlets at the top of the domain (x = 0.52 m): the room top
+        // (outlet-lab, r 0.02-0.14 m) and the chimney exit (wall-fff-fluid-exhaust,
+        // r < 0.02 m), 0 Pa gauge. Both lie at the same height, so fixing p_rgh is the
+        // same as fixing p. (Before 2026-11-05 the case had the r = 0.14 m side open and
+        // these two closed; that was a set-up error in the Fluent case.)
         type            fixedValue;
         value           $internalField;
     }

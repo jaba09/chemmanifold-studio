@@ -14,7 +14,7 @@ FoamFile
 
 // Fluent ran this case steady (pressure-based, pseudo-transient). The OpenFOAM counterpart is
 // rhoReactingBuoyantFoam with local time stepping (ddt localEuler): each "time step" is one iteration.
-application         rhoReactingBuoyantFoam;   // reactingFoam with gravity (p_rgh)
+application         rhoReactingBuoyantLeFoam; // rhoReactingBuoyantFoam + per-species diffusion (constant/speciesDiffusion)
 
 startFrom           latestTime;
 startTime           0;
@@ -49,7 +49,8 @@ functions
     #includeFunc flowRatePatch(name=inlet-fuel)
     #includeFunc flowRatePatch(name=inlet-coflow-fff-fluid-mixing)
     #includeFunc flowRatePatch(name=inlet-coflow-fff-fluid-exterior)
-    #includeFunc flowRatePatch(name=outlet-lab-026)
+    #includeFunc flowRatePatch(name=outlet-lab)
+    #includeFunc flowRatePatch(name=wall-fff-fluid-exhaust)
 }
 
 // ************************************************************************* //

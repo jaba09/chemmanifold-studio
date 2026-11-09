@@ -1,6 +1,6 @@
 #!/bin/sh
 # Build and run the case from the Fluent .cas.h5.
-#   ./Allrun /path/to/quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 [nProcs]
+#   ./Allrun /path/to/quemadorUnicoTesis_60KCells-GA18--ID.cas.h5 [nProcs]
 # Needs: OpenFOAM (openfoam.com, v1912 or newer) sourced, python3 with numpy and h5py.
 cd "${0%/*}" || exit 1
 set -e
