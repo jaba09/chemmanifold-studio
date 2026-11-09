@@ -1,0 +1,28 @@
+﻿RUN-F2Rdt species: {'inlet_diffusion': False, 'thermal_diffusion': True, 'thickened_flame': False, 'diffusion_energy_source': True, 'multi_component_diffusion': False, 'save_gradients': False, 'species_transport_expert': False} {'option': 'kinetic-theory'}
+RUN-F2Rdt operating: {'gravity': {'enable': True, 'components': [-9.81], 'gravity_mrf_behavior': True}, 'operating_pressure': 101325, 'reference_pressure_location': [0, 0], 'reference_pressure_method': 'Connected and disconnected fluid zones', 'operating_density': {'enable': True, 'value': 1.177}, 'operating_temperature': 288.16}
+TMAXREPORT t=0.9600 liftoff=2.39 tip=190.8 tmax=2199.1 V1500=38.93
+TMAXREPORT t=0.9700 liftoff=2.39 tip=205.1 tmax=2147.6 V1500=40.38
+TMAXREPORT t=0.9800 liftoff=2.39 tip=220.3 tmax=2154.6 V1500=40.49
+TMAXREPORT t=0.9900 liftoff=2.39 tip=234.1 tmax=2160.5 V1500=39.15
+TMAXREPORT t=1.0000 liftoff=2.39 tip=146.8 tmax=2162.2 V1500=36.49
+TMAXREPORT t=1.0100 liftoff=2.39 tip=161.5 tmax=2158.9 V1500=35.36
+TMAXREPORT t=1.0200 liftoff=2.39 tip=175.6 tmax=2155.8 V1500=37.04
+TMAXREPORT t=1.0300 liftoff=2.39 tip=190.8 tmax=2146.8 V1500=37.81
+TMAXREPORT t=1.0400 liftoff=2.39 tip=205.1 tmax=2157.0 V1500=38.10
+TMAXREPORT t=1.0500 liftoff=2.39 tip=218.0 tmax=2168.1 V1500=37.29
+TMAXREPORT t=1.0600 liftoff=2.39 tip=137.6 tmax=2177.5 V1500=36.13
+TMAXREPORT t=1.0700 liftoff=2.39 tip=146.8 tmax=2179.7 V1500=34.69
+TMAXREPORT t=1.0800 liftoff=2.39 tip=159.8 tmax=2173.5 V1500=35.94
+TMAXREPORT t=1.0900 liftoff=2.39 tip=172.0 tmax=2153.7 V1500=36.03
+TMAXREPORT t=1.1000 liftoff=2.39 tip=185.0 tmax=2156.6 V1500=35.52
+RUN-F2Rdt data sampling: {'enabled': True, 'sampling_interval': 1, 'time_sampled': 0.0, 'flow_shear_stresses': True, 'flow_heat_fluxes': True, 'wall_statistics': True, 'force_statistics': False, 'species_list': ['ch4', 'o2', 'co2', 'h2o', 'co', 'h2', 'oh']}
+TMAXREPORT t=1.1100 liftoff=2.39 tip=200.9 tmax=2168.1 V1500=34.32
+TMAXREPORT t=1.1200 liftoff=2.39 tip=139.1 tmax=2178.9 V1500=33.88
+TMAXREPORT t=1.1300 liftoff=2.39 tip=145.2 tmax=2185.2 V1500=33.92
+TMAXREPORT t=1.1400 liftoff=2.39 tip=154.8 tmax=2178.6 V1500=34.49
+TMAXREPORT t=1.1500 liftoff=2.39 tip=163.2 tmax=2169.3 V1500=33.80
+TMAXREPORT t=1.1600 liftoff=2.39 tip=175.6 tmax=2151.3 V1500=33.35
+TMAXREPORT t=1.1700 liftoff=2.39 tip=188.9 tmax=2161.2 V1500=33.42
+TMAXREPORT t=1.1800 liftoff=2.39 tip=143.7 tmax=2170.7 V1500=33.44
+TMAXREPORT t=1.1900 liftoff=2.39 tip=153.2 tmax=2177.2 V1500=33.89
+TMAXREPORT t=1.2000 liftoff=2.39 tip=161.5 tmax=2175.1 V1500=34.63
