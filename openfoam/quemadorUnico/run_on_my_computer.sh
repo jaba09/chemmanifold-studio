@@ -55,8 +55,9 @@ command -v rhoReactingBuoyantFoam > /dev/null || die "OpenFOAM did not install c
 # rhoReactingBuoyantLeFoam (per-species Lewis numbers, constant/speciesDiffusion) is not part of
 # OpenFOAM: it is compiled once from ../simpleFlame/solver into the user bin directory.
 APP=$(foamDictionary -entry application -value system/controlDict)
-export FOAM_USER_APPBIN=${FOAM_USER_APPBIN:-$INSTALL_DIR/user/bin}
-export PATH=$FOAM_USER_APPBIN:$PATH
+USER_APPBIN=$INSTALL_DIR/user/bin
+export FOAM_USER_APPBIN=$USER_APPBIN
+export PATH=$USER_APPBIN:$PATH
 if ! command -v "$APP" > /dev/null; then
     SRC=../simpleFlame/solver/$APP
     [ -d "$SRC" ] || die "$APP is neither an OpenFOAM solver nor in $SRC"
@@ -80,7 +81,7 @@ if ! command -v "$APP" > /dev/null; then
     say "Compiling $APP (one time, a few minutes)..."
     mkdir -p "$FOAM_USER_APPBIN"
     ( . "$ENV_DIR/etc/bashrc" > /dev/null 2>&1 || true
-      export FOAM_USER_APPBIN
+      export FOAM_USER_APPBIN=$USER_APPBIN   # etc/bashrc resets it
       cd "$SRC" && wmake ) > log.wmake 2>&1 || die "compiling $APP failed, see $(pwd)/log.wmake"
     command -v "$APP" > /dev/null || die "compiling $APP failed, see $(pwd)/log.wmake"
 fi
