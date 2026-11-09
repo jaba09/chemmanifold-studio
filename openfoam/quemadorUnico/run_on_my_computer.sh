@@ -66,6 +66,14 @@ if ! command -v "$APP" > /dev/null; then
             -c conda-forge --override-channels gxx_linux-64 make \
             || die "could not install the compiler. Run the script again."
     fi
+    # wmake calls plain g++/gcc/cpp; conda names them x86_64-conda-linux-gnu-*
+    for t in g++ c++ gcc cpp; do
+        if [ -e "$ENV_DIR/bin/x86_64-conda-linux-gnu-$t" ] && [ ! -e "$ENV_DIR/bin/$t" ]; then
+            ln -s "x86_64-conda-linux-gnu-$t" "$ENV_DIR/bin/$t"
+        fi
+    done
+    if [ ! -e "$ENV_DIR/bin/gcc" ]; then ln -s x86_64-conda-linux-gnu-g++ "$ENV_DIR/bin/gcc"; fi
+    export CXX=g++ CC=g++
     say "Compiling $APP (one time, a few minutes)..."
     mkdir -p "$FOAM_USER_APPBIN"
     ( . "$ENV_DIR/etc/bashrc" > /dev/null 2>&1 || true
