@@ -26,4 +26,5 @@ EXE_LIBS = \
     -lfluidThermophysicalModels \
     -lchemistryModel \
     -lODE \
-    -lcombustionModels
+    -lcombustionModels \
+    -lthermoTools
