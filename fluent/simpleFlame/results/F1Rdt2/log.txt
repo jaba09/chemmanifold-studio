@@ -1,0 +1,22 @@
+﻿RUN-F1Rdt2 species: {'inlet_diffusion': False, 'thermal_diffusion': False, 'thickened_flame': False, 'diffusion_energy_source': True, 'multi_component_diffusion': False, 'save_gradients': False, 'species_transport_expert': False} {'option': 'unity-lewis-number'}
+RUN-F1Rdt2 operating: {'gravity': {'enable': True, 'components': [-9.81], 'gravity_mrf_behavior': True}, 'operating_pressure': 101325, 'reference_pressure_location': [0, 0], 'reference_pressure_method': 'Connected and disconnected fluid zones', 'operating_density': {'enable': True, 'value': 1.177}, 'operating_temperature': 288.16}
+TMAXREPORT t=0.7700 liftoff=2.13 tip=238.9 tmax=2246.1 V1500=59.07
+TMAXREPORT t=0.7800 liftoff=2.13 tip=248.7 tmax=2234.8 V1500=68.98
+TMAXREPORT t=0.7900 liftoff=2.13 tip=248.7 tmax=2225.5 V1500=77.27
+TMAXREPORT t=0.8000 liftoff=2.13 tip=248.7 tmax=2222.5 V1500=83.25
+TMAXREPORT t=0.8100 liftoff=2.13 tip=248.7 tmax=2231.4 V1500=89.91
+TMAXREPORT t=0.8200 liftoff=2.13 tip=248.7 tmax=2235.0 V1500=92.62
+TMAXREPORT t=0.8300 liftoff=2.13 tip=248.7 tmax=2233.1 V1500=95.85
+TMAXREPORT t=0.8400 liftoff=2.13 tip=248.7 tmax=2232.3 V1500=99.22
+TMAXREPORT t=0.8500 liftoff=2.13 tip=248.7 tmax=2237.9 V1500=104.10
+RUN-F1Rdt2 data sampling: {'enabled': True, 'sampling_interval': 1, 'time_sampled': 0.0, 'flow_shear_stresses': True, 'flow_heat_fluxes': True, 'wall_statistics': True, 'force_statistics': False, 'species_list': ['ch4', 'o2', 'co2', 'h2o', 'co', 'h2', 'oh']}
+TMAXREPORT t=0.8600 liftoff=2.13 tip=248.7 tmax=2240.4 V1500=106.11
+TMAXREPORT t=0.8700 liftoff=2.13 tip=248.7 tmax=2243.1 V1500=104.51
+TMAXREPORT t=0.8800 liftoff=2.13 tip=248.7 tmax=2245.3 V1500=98.12
+TMAXREPORT t=0.8900 liftoff=2.13 tip=248.7 tmax=2226.0 V1500=89.76
+TMAXREPORT t=0.9000 liftoff=2.13 tip=248.7 tmax=2220.8 V1500=77.98
+TMAXREPORT t=0.9100 liftoff=2.13 tip=248.7 tmax=2208.3 V1500=66.80
+TMAXREPORT t=0.9200 liftoff=2.13 tip=248.7 tmax=2210.7 V1500=60.32
+TMAXREPORT t=0.9300 liftoff=2.13 tip=248.7 tmax=2215.2 V1500=55.17
+TMAXREPORT t=0.9400 liftoff=2.13 tip=248.7 tmax=2220.1 V1500=48.51
+TMAXREPORT t=0.9500 liftoff=2.13 tip=177.4 tmax=2224.9 V1500=40.92
