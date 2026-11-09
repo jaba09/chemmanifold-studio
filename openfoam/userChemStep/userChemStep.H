@@ -86,6 +86,7 @@ SourceFiles
 #include "ode.H"
 #include "OFstream.H"
 #include "chemmanifold_core.h"
+#include "chemmanifold_ensemble.h"
 #include "isannStore.H"
 #include <memory>
 
@@ -111,8 +112,24 @@ class userChemStep
         //- Work array of mass fractions
         mutable scalarField Y_;
 
-        //- Surrogate model (nullptr: Fluent manual example)
+        //- Surrogate model (nullptr: Fluent manual example). For an ensemble file
+        //  this is member 0 (species, NASA tables, dt range), owned by ens_.
         mutable cm_model* model_;
+
+        //- Ensemble of surrogates (chemmanifold_ensemble.txt), or nullptr
+        mutable cm_ensemble* ens_;
+
+        //- One surrogate step / OOD check, through the ensemble when there is one
+        int surrogateAdvance(double* Y, double T, double p, double dt, cm_info* info) const
+        {
+            return ens_ ? cme_advance(ens_, &options_, Y, T, p, dt, info, nullptr)
+                        : cm_advance(model_, &options_, Y, T, p, dt, info);
+        }
+        void surrogateOOD(const double* Y, double T, double p, cm_info* info) const
+        {
+            if (ens_) cme_ood(ens_, &options_, Y, T, p, info);
+            else cm_ood(model_, &options_, Y, T, p, info);
+        }
 
         //- Surrogate options
         cm_options options_;
