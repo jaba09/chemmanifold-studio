@@ -73,7 +73,10 @@ if ! command -v "$APP" > /dev/null; then
         fi
     done
     if [ ! -e "$ENV_DIR/bin/gcc" ]; then ln -s x86_64-conda-linux-gnu-g++ "$ENV_DIR/bin/gcc"; fi
-    export CXX=g++ CC=g++
+    export GXX=g++ CXX=g++ CC=g++
+    # wmake looks for the headers in $WM_PROJECT_DIR/src; conda puts them in include/OpenFOAM-2412/src
+    if [ ! -e "$ENV_DIR/src" ]; then ln -s include/OpenFOAM-2412/src "$ENV_DIR/src"; fi
+    rm -rf "$SRC"/Make/linux64*
     say "Compiling $APP (one time, a few minutes)..."
     mkdir -p "$FOAM_USER_APPBIN"
     ( . "$ENV_DIR/etc/bashrc" > /dev/null 2>&1 || true
