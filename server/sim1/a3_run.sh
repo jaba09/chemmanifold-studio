@@ -13,7 +13,7 @@ latest() { ls processor0 | grep -E '^[0-9.e+-]+$' | sort -g | tail -1; }
 settled() {
     f=$(ls postProcessing/minMaxT/*/fieldMinMax.dat 2>/dev/null | sort -V | xargs cat 2>/dev/null)
     echo "$f" | awk -v L="$(latest)" '$1 !~ /#/ && $2 == "T" { t[$1] = $8 + 0 }
-        END { n = 0; mn = 1e9; mx = 0; for (i in t) if (i > L - 1000) { n++; if (t[i] < mn) mn = t[i]; if (t[i] > mx) mx = t[i] }
+        END { n = 0; mn = 1e9; mx = 0; for (i in t) if (i + 0 > L - 1000) { n++; if (t[i] < mn) mn = t[i]; if (t[i] > mx) mx = t[i] }
               printf "Tmax range over last 1000 it: %.1f K (%d samples)\n", mx - mn, n > "/dev/stderr"; exit !(L >= 4000 && n > 50 && mx - mn < 10) }'
 }
 echo running > status
