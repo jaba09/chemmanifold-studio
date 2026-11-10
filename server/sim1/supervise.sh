@@ -24,6 +24,16 @@ for L in "$@"; do
         from=$(latest); log "leg end=$END wi=$WI purge=$PURGE from $from (try $tries)"
         mpirun -np "$NP" "$APP" -parallel >> log.run 2>&1
         rc=$?
+        if [ $rc = 0 ] && [ "$(latest)" = "$from" ] && tail -3 log.run | grep -q '^Finalising'; then
+            # reached END cleanly but END is not on the write grid (timeStep control): rerun the last
+            # stretch writing on simulated time (multiples of END -> exactly at END)
+            log "END not on the write grid; rerunning from $from with writeControl runTime"
+            foamDictionary -entry writeControl -set runTime system/controlDict > /dev/null
+            foamDictionary -entry writeInterval -set "$END" system/controlDict > /dev/null
+            mpirun -np "$NP" "$APP" -parallel >> log.run 2>&1; rc=$?
+            foamDictionary -entry writeControl -set timeStep system/controlDict > /dev/null
+            foamDictionary -entry writeInterval -set "$WI" system/controlDict > /dev/null
+        fi
         if lt "$(latest)" "$END"; then
             tries=$((tries + 1)); log "solver exited rc=$rc at $(latest)"
             tail -30 log.run > "crash_$(latest).txt"
