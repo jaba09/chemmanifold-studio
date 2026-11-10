@@ -1,0 +1,8 @@
+{
+ "dt_range": "tau_cell p1 9.54e-06 s .. p99.5 0.000224 s (p50 9.17e-05 s)",
+ "envelope.u_knots": "hot-gas mass per Z interval [0.851, 0.098, 0.036, 0.012, 0.004] blended 50/50 with base [0.22, 0.18, 0.22, 0.18, 0.2]",
+ "pasr.burnt_relaxation.psi_max": "psi p99.5 0.561",
+ "flame.mdot_fuel_min": "chi_st p1 0.00245 1/s -> strain 0.0989 1/s < base 0.6 1/s",
+ "pasr.burnt_relaxation.t_max": "burnt-gas age p50 2.96 s (capped at 0.2 s)",
+ "pasr.burnt_relaxation_lean.t_max": "burnt-gas age p50 2.96 s (capped at 0.2 s)"
+}
