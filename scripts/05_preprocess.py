@@ -26,10 +26,14 @@ def main(cfg):
     samples = stage_dir(cfg, "samples")
     parts = [load_npz(samples / "pairs_0d.npz"), load_npz(samples / "pairs_pasr.npz")]
     for extra in ("pairs_flamelet.npz", "pairs_recirc.npz", "pairs_unsteady.npz", "pairs_vitiated.npz",
-                  "pairs_relax.npz", "pairs_relax_lean.npz", "pairs_eq_perturbed.npz", "pairs_equil.npz"):  # flame mode
+                  "pairs_relax.npz", "pairs_relax_lean.npz", "pairs_eq_perturbed.npz", "pairs_equil.npz",
+                  "pairs_relax_flamedt.npz", "pairs_dilution.npz", "pairs_dynpasr.npz", "pairs_induction.npz",
+                  "pairs_hotwall.npz"):  # flame mode
         if (samples / extra).exists():
             parts.append(load_npz(samples / extra))
     for extra in sorted(samples.glob("pairs_seeded*.npz")):    # ITERML seeded exploration (regimes 10-13)
+        parts.append(load_npz(extra))
+    for extra in sorted(samples.glob("pairs_committee*.npz")):  # stage 23 committee rounds (regime 21)
         parts.append(load_npz(extra))
     data = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     N = len(data["dt"])

@@ -1,0 +1,382 @@
+# ChemManifold Studio configuration - holes1 (2026-11-10): tix1 + the a-priori sets aimed at the
+# coverage holes measured on the Fluent GA18 DI solution (doc "New exploration methods to cover the
+# coverage holes"; chemmanifold/holes.py). Changes from configs/burner_openfoam_tix1.yaml:
+#   envelope.n_traj 160 -> 110 (regime 0 was 40 % of tix1's pairs)
+#   pasr.burnt_relaxation_lean.psi_min -0.333 -> 0 (excess enthalpy came from OpenFOAM's Sc = 1 transport;
+#     the Fluent DI solution has no hot cell with psi < 0)
+#   pasr.relaxation_flamedt (regime 19, M4): lean warm gas relaxing, paired at dt 10-200 us only
+#   pasr.holes: dilution (15, M1), dynamic_pasr (16, M2), induction_layer (17, M5), hot_wall (18, M6);
+#     defaults in chemmanifold/holes.py DEFAULTS
+# M3 (committee rounds) runs after training 3 seeds: scripts/23_committee_sampling.py.
+# On sim1, rerun scripts/20_stats_to_config.py on the A3 cheap-flame statistics to refresh dt_range first.
+# No CFD state is used as training data or as a start.
+
+data_dir: ../data/holes1
+seed: 0
+chemistry:
+  mechanism: mechanisms/ga18.yaml
+  fuel: CH4:1.0
+  fuel_T: 300.0
+  oxidizer: O2:0.232909, N2:0.767091
+  oxidizer_T: 300.0
+  P_atm: 1.0
+flame:
+  transport: unity-Lewis-number
+  width: 0.15
+  mdot_fuel_min: 0.00246
+  radiation_mdot_fuel_min: 0.02
+  strain_factor: 1.5
+  max_flamelets: 28
+  extinction_T: 1000.0
+  holdout_every: 3
+  radiation:
+  - false
+  - true
+envelope:
+  mode: flame
+  n_traj: 110
+  f_pasr: 0.35
+  z_knots:
+  - 0.0
+  - 0.0275
+  - 0.055
+  - 0.11
+  - 0.22
+  - 1.0
+  u_knots:
+  - 0.0
+  - 0.5445
+  - 0.6672
+  - 0.7982
+  - 0.8977
+  - 1.0
+  alpha:
+  - 0.0
+  - 1.0
+  heat_loss: fraction
+  psi_max: 0.85
+  T_wall: 300.0
+  f_cool: 0.35
+  tau_q_range:
+  - 0.001
+  - 1.0
+  burnt_seeds:
+    n: 64
+    Z_range:
+    - 0.01
+    - 0.3
+    alpha:
+    - 0.85
+    - 1.0
+    psi_max: 0.2
+autoignition:
+  dt_base: 1.0e-05
+  t_max: 0.02
+  min_steps: 10
+  dT_rise: 400.0
+  rise_frac: 0.9
+  dT_flat: 0.02
+  n_consecutive: 25
+  cooling_records: 2000
+  equilibrium_tail:
+    t_end: 0.03
+    n_records: 40
+    T_min: 1200.0
+arclength:
+  boxcox_lambda: 0.1
+  n_pick: 220
+  n_seed: 15
+  strides:
+  - 1
+  - 2
+  - 4
+  floor_frac: 0.05
+  max_slice_stride: 4
+pasr:
+  n_particles: 400
+  beta_a: 0.7
+  beta_b: 0.7
+  loss_fraction_range:
+  - 0.0
+  - 0.85
+  vitiated_ignition:
+    n: 160
+    Z_p_lean:
+    - 0.02
+    - 0.055
+    Z_p_rich:
+    - 0.055
+    - 0.3
+    psi_max: 0.15
+    stream_share:
+    - 0.003
+    - 0.5
+    t_max: 0.02
+    n_pick: 300
+    time_share: 0.5
+  burnt_relaxation:
+    n: 240
+    Z_range:
+    - 0.005
+    - 0.3
+    psi_max: 0.61
+    radical_decades: 1.5
+    T_min: 800
+    t_max: 0.2
+    n_pick: 60
+  burnt_relaxation_lean:
+    n: 300
+    Z_range:
+    - 0.002
+    - 0.06
+    psi_max: 0.85
+    radical_decades: 1.5
+    T_min: 450
+    t_max: 0.2
+    n_pick: 60
+    psi_min: 0.0
+  recirculation:
+    n_ensembles: 24
+    n_particles: 300
+    psi_range:
+    - 0.0
+    - 0.85
+    beta_a: 0.7
+    beta_b: 0.7
+    f_aged: 0.5
+    age_range:
+    - 1.0e-05
+    - 0.005
+  strides:
+  - 1
+  - 2
+  - 4
+  relaxation_flamedt:
+    n: 300
+    Z_range:
+    - 0.005
+    - 0.05
+    psi_max: 0.7
+    radical_decades: 1.0
+    T_min: 600.0
+    T_max: 1600.0
+    t_max: 0.1
+    n_pick: 40
+    dt_window:
+    - 1.0e-05
+    - 0.0002
+    regime: 19
+  holes:
+    workers: 16
+    dilution:
+      n: 800
+    dynamic_pasr:
+      n: 40
+    induction_layer:
+      n: 30
+    hot_wall:
+      n: 300
+unsteady_flamelets:
+  n_z: 61
+  workers: 4
+  t_end_chi: 3.0
+  t_max: 0.2
+  dt_bounds:
+  - 1.0e-05
+  - 0.001
+  max_steps: 2000
+  n_snapshots: 30
+  points_per_snapshot: 15
+  T_min_pair: 350.0
+  extinction:
+    n: 10
+    factor:
+    - 1.2
+    - 4.0
+  reignition:
+    n: 8
+    T_range:
+    - 1100.0
+    - 1700.0
+    strain_factor:
+    - 0.005
+    - 0.3
+  cooling:
+    n: 12
+    tau_q_range:
+    - 0.001
+    - 0.1
+  strain_jump:
+    n: 8
+    factor:
+    - 0.1
+    - 10.0
+preprocess:
+  boxcox_lambda: 0.1
+  val_frac: 0.12
+  sigma_y_min: 0.001
+  sigma_dy_min: 0.01
+manifold:
+  n_clusters: 4
+  candidate_dims:
+  - 2
+  - 3
+  - 4
+  - 6
+  - 8
+  variance_target: 0.995
+  max_samples: 40000
+coverage:
+  radius: 0.5
+rollout_loss:
+  weight: 0.2
+  steps: 8
+  stride: 4
+  batch_size: 128
+  segments_per_traj: 150
+  start_frac: 0.3
+model:
+  hidden: 192
+  n_blocks: 3
+  node_hidden: 128
+  node_substeps: 2
+  latent_dim: auto
+training:
+  epochs: 300
+  batch_size: 512
+  lr_max: 0.002
+  weight_decay: 1.0e-05
+  noise_amp: 0.015
+  noise_end_frac: 0.85
+  loss_weights:
+    inc: 1.0
+    mass: 1.0
+    T: 1.0
+    equil: 0.1
+    ae: 1.0
+  equil_threshold: 0.05
+  threads: 2
+  device: auto
+evaluation:
+  rollout:
+    Z: 0.055
+    alpha: 0.6
+    n_steps: 500
+    stride: 1
+  envelope_grid:
+    Z:
+    - 0.033
+    - 0.055
+    - 0.088
+    alpha:
+    - 0.6
+    - 0.7
+    - 0.8
+  cooled_grid:
+    Z:
+    - 0.033
+    - 0.055
+    - 0.088
+    psi:
+    - 0.2
+    - 0.4
+    - 0.6
+  cooled_rollout:
+    stride: 4
+    n_steps: 250
+  mixing_cases:
+  - Z_p: 0.088
+    psi: 0.0
+    stream: air
+    beta: 0.5
+  - Z_p: 0.15
+    psi: 0.2
+    stream: air
+    beta: 0.3
+  - Z_p: 0.088
+    psi: 0.4
+    stream: air
+    beta: 0.7
+  - Z_p: 0.033
+    psi: 0.4
+    stream: air
+    beta: 0.5
+  - Z_p: 0.055
+    psi: 0.0
+    stream: fuel
+    beta: 0.5
+  - Z_p: 0.055
+    psi: 0.4
+    stream: fuel
+    beta: 0.8
+dt_range:
+  min: 1.1e-05
+  max: 0.000845
+  n: 10
+  per_state: 2
+  uniform_share: 0.3
+  histogram:
+    log10_dt:
+    - -5.95
+    - -5.85
+    - -5.75
+    - -5.65
+    - -5.55
+    - -5.45
+    - -5.35
+    - -5.25
+    - -5.15
+    - -5.05
+    - -4.95
+    - -4.85
+    - -4.75
+    - -4.65
+    - -4.55
+    - -4.45
+    - -4.35
+    - -4.25
+    - -4.15
+    - -4.05
+    - -3.95
+    - -3.85
+    - -3.75
+    - -3.65
+    - -3.55
+    - -3.45
+    - -3.35
+    - -3.25
+    - -3.15
+    - -3.05
+    - -2.95
+    mass:
+    - 1.0e-05
+    - 8.0e-05
+    - 0.00017
+    - 0.00027
+    - 0.00037
+    - 0.0004
+    - 0.00029
+    - 0.00018
+    - 0.00012
+    - 0.00064
+    - 0.04364
+    - 0.04276
+    - 0.03023
+    - 0.02855
+    - 0.02927
+    - 0.03395
+    - 0.04313
+    - 0.12082
+    - 0.1288
+    - 0.10475
+    - 0.10407
+    - 0.11465
+    - 0.07639
+    - 0.03245
+    - 0.0175
+    - 0.01509
+    - 0.01013
+    - 0.00832
+    - 0.00173
+    - 0.0103
+    - 0.00095

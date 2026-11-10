@@ -199,7 +199,15 @@ Did the old ranking survive the new reference (report open question 3)?
 - Variant tix2n: same data but pairs restricted to the flame's own dt band (from A3, expected about
   10 to 80 us), following lesson 7 and the tix1 finding that spreading over 10 to 840 us cost flame
   accuracy. Another 3 repeats.
-- Scored with protocol v2 (6 runs, about 4 h wall at 3 slots).
+- **Variant tix2h (added 2026-11-10, coverage holes):** the same stage-20 config plus the
+  physics-only hole sets of `chemmanifold/holes.py` (regimes 15-19: lean dilution-cooling parcels,
+  dynamic multi-stream PaSR, jet induction mixing layer, hot-wall heating, near-equilibrium
+  relaxation at the flame's dt), regime 0 scaled by 0.7, `burnt_relaxation_lean.psi_min` clipped to
+  0. Built by `scripts/24_add_hole_sets.py --base configs/burner_openfoam_tix2.yaml --out
+  configs/burner_openfoam_tix2h.yaml --data-dir ../data/openfoam_tix2h`. Another 3 repeats. The hole
+  sets add about 1 h of stage 4 on 12 workers. Why: the Fluent DI solution keeps 59 % of its hot mass
+  at Z < 0.0275 (mostly 600-950 K), where ood8 and tix1 are 20-100 times thinner than elsewhere.
+- Scored with protocol v2 (6 runs, about 4 h wall at 3 slots; 9 with tix2h).
 - Can start as soon as A3 is done; it does not need G1 to train, only to be scored.
 
 Decides: whether timescale bounding plus a narrow dt band beats ood8 in pure mode (flame and lean
@@ -217,6 +225,14 @@ CO/OH together).
 
 Decides report open question 4: if more induction states fix the ignition time, the error was
 coverage; if not, it is radical-increment precision and the next work is on the loss or the outputs.
+
+### C2b. Committee rounds on the C1 winner (M3, 12 cores, 2 to 3 h per round)
+
+- `scripts/23_committee_sampling.py --round k --models <the 3 seeds' chemmanifold_model.txt>`: the
+  seeds roll out 3000 Cantera starts from the a-priori data; states where they disagree or drift from
+  Cantera (10 K, x1.4 on OH/H/CO) start new Cantera trajectories (regime 21). Then stages 5-7 for 3
+  seeds again (warm start not used). 2 to 3 rounds; stop when the score quantiles stop falling.
+- Physics only: the candidate states come from the surrogates run on Cantera starts, not from a CFD run.
 
 ### C3. ITERML automatic rerun on R2 (16 cores, 1 to 1.5 days)
 

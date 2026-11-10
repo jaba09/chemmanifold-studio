@@ -61,7 +61,12 @@ EXTRA_SETS = {   # flame-mode sets that `--only` can (re)generate alone, e.g. to
                                                                  "pairs_eq_perturbed.npz"),
     "equilibrium_fixed_point": lambda g, c, s, r: equilibrium_pairs(g, c, s, r),
     "seeded": lambda g, c, s, r: seeded_set(c, r),
+    "relaxation_flamedt": lambda g, c, s, r: relaxation_pairs(g, c, s, r, "relaxation_flamedt",
+                                                              "pairs_relax_flamedt.npz"),
+    "holes": lambda g, c, s, r: hole_sets(c, r),
 }
+for _name in ("dilution", "dynamic_pasr", "induction_layer", "hot_wall"):   # one holes set alone
+    EXTRA_SETS["holes." + _name] = (lambda n: lambda g, c, s, r: hole_sets(c, r, [n]))(_name)
 
 
 def main(cfg, only=None):
@@ -143,6 +148,10 @@ def main(cfg, only=None):
             equilibrium_pairs(gas, cfg, seeds, rng)
         if cfg.get("unsteady_flamelets"):
             unsteady_pairs(cfg, seeds, rng)
+        if p.get("relaxation_flamedt"):
+            relaxation_pairs(gas, cfg, seeds, rng, "relaxation_flamedt", "pairs_relax_flamedt.npz")
+        if p.get("holes"):
+            hole_sets(cfg, rng)
         if p.get("seeded"):
             seeded_set(cfg, rng)
 
@@ -292,6 +301,10 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
     v = cfg["pasr"][key]
     dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
     strides = dt_strides(cfg, "pasr")
+    if v.get("dt_window"):            # only the strides inside [lo, hi] s (e.g. the flame's own tau_cell)
+        lo_w, hi_w = v["dt_window"]
+        strides = [st for st in strides if lo_w <= float(st) * dt_base <= hi_w] or strides
+    regime = int(v.get("regime", 8))
     k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
     n_max = int(round(v.get("t_max", 0.02) / dt_base))
     rad = [gas.species_index(r) for r in v.get("radicals", RADICALS) if r in gas.species_names]
@@ -315,7 +328,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
                 if Y is None:
                     continue
                 gas.HPY = h, seeds.P, Y
-            if gas.T < v.get("T_min", 800.0):
+            if not v.get("T_min", 800.0) <= gas.T <= v.get("T_max", 4000.0):
                 continue
             _, net = const_p_reactor(gas)
             times, Ys = [0.0], [gas.Y.copy()]
@@ -335,7 +348,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
                 advance_const_p(gas, float(st) * dt_base)
                 for k, val in (("Y_in", Ys[i]), ("T_in", T_in), ("P_in", seeds.P), ("h_in", h),
                                ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
-                               ("regime", 8), ("traj_id", e)):
+                               ("regime", regime), ("traj_id", e)):
                     out[k].append(val)
         if e % 20 == 0:
             print(f"  relaxation {e:03d}: Z={Z:.3f} psi={psi:.2f} {'equilibrium x10^u radicals' if from_eq else 'frozen'} "
@@ -525,6 +538,12 @@ def unsteady_pairs(cfg, seeds, rng):
           f"(highest burning strain {a_ext:.0f} 1/s, {len(Z)} Z points)")
     save_npz(stage_dir(cfg, "samples") / "pairs_unsteady.npz", **arrays)
     save_json(stage_dir(cfg, "samples") / "unsteady_flamelets.json", log)
+
+
+def hole_sets(cfg, rng, only=None):
+    """Regimes 15-18 (chemmanifold/holes.py): a-priori sets aimed at the 2026-11-10 coverage holes."""
+    from chemmanifold.holes import hole_sets as _hole_sets
+    return _hole_sets(cfg, rng, only)
 
 
 def seeded_set(cfg, rng):
