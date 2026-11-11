@@ -5,7 +5,7 @@
 #   fvDOM (nPhi 4, nTheta 4 -> 64 rays on the wedge), absorptionEmissionModel none, black boundaries,
 #   radiation as an fvOption (rhoReactingBuoyantLeFoam passes fvOptions to the energy equation),
 #   radiation-aware wall BCs: Fluent's zero-heat-flux walls get zero TOTAL flux (convection + qr),
-#   the convective pot walls keep h 15 W/m2K to 323 K plus qr, the hood baffle couples qr too.
+#   the convective pot walls keep h 15 W/m2K to 323 K plus qr; the hood baffle stays non-radiative (see below).
 # Checked on the Fluent field with Fluent's wall temperatures (sim1, 10 Nov 2026): pot bottom emits 27.1 W/rad
 # (Fluent 25.1), pot side 3.3 (3.2), disk absorbs 13.1 (12.2).
 #   enable_radiation.sh <case> [time dir, default 0] [ILambda source time dir for a warm start]
@@ -52,8 +52,9 @@ done
 for p in wall-pot-fff-fluid-mixing wall-pot-fff-fluid-exhaust; do   # Fluent: convection h 15, Tinf 323
     D "boundaryField/$p/qr" qr "$T/T"
 done
-for p in wall-hood wall-hood-shadow; do                  # Fluent: coupled thin wall
-    D "boundaryField/$p" "{ type compressible::turbulentTemperatureRadCoupledMixed; Tnbr T; qrNbr qr; qr qr; kappaMethod fluidThermo; value uniform 337; }" "$T/T"
-done
+# hood (Fluent: coupled thin wall): kept as the plain coupled baffle WITHOUT qr. With
+# turbulentTemperatureRadCoupledMixed on both sides of the zero-thickness baffle the chimney gas next to it
+# cooled without bound (300 -> 52 K in 25 ms, then an FPE; sim1 A1r, 11 Nov). Fluent's net hood radiation
+# is only about +-1.8 W/rad, so the hood stays non-radiative.
 if [ -n "$WARM" ]; then cp "$WARM"/ILambda_* "$T/"; echo "warm start: $(ls "$WARM"/ILambda_* | wc -l) ray fields from $WARM"; fi
 echo "radiation enabled in $C ($T)"
