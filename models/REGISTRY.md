@@ -41,6 +41,7 @@ To identify the model a Fluent run used, compare the sha256 of its `chemmanifold
 | [`burner_openfoam_tix2h-resnet_film-20261110-6aab6735`](#burner_openfoam_tix2h-resnet_film-20261110-6aab6735) | candidate | 2026-11-10 | 388,128 | 12 | 0.03 | 59.1 | 1.7 | 3.9 | 96.4% |
 | [`burner_openfoam_tix2_s1-resnet_film-20261110-94cf7565`](#burner_openfoam_tix2_s1-resnet_film-20261110-94cf7565) | candidate | 2026-11-10 | 319,838 | 12 | 0.03 | 38.4 | 17.3 | 7.6 | 96.5% |
 | [`burner_openfoam_tix2h_s1-resnet_film-20261110-55b5be83`](#burner_openfoam_tix2h_s1-resnet_film-20261110-55b5be83) | candidate | 2026-11-10 | 388,128 | 12 | 0.03 | 20.9 | 4.4 | 2.8 | 96.4% |
+| [`burner_openfoam_tix2_s2-resnet_film-20261111-04efbe73`](#burner_openfoam_tix2_s2-resnet_film-20261111-04efbe73) | candidate | 2026-11-11 | 319,838 | 12 | 0.03 | 82.4 | 5.0 | 5.2 | 96.5% |
 
 ## h2_air_premixed-resnet_film-20261021-nofile
 
@@ -1024,3 +1025,31 @@ Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
 Training: latent d 12, hidden 192 x 3 blocks, best epoch 298 of 300, 472 min on 4 threads (Linux x86_64), git 0e3c97c-dirty.
 Certification: Tier 1 R2 0.9912, T MAE 0.03 K; held-out flamelet coverage 96.4%; Tier 2 tau error –%, final T 280 K (Cantera 337 K); Tier 3 mean |tau error| –%, T MAE 20.9 K; cooled gas T MAE 4.4 K (max 10 K); mixing T MAE 2.8 K (max 6 K).
 Fluent file sha256: `ccae88a7194f83d9dbc9e2b896b509774f2dd3ed9c4c5260bd8c16b60ce5f62b`.
+
+## burner_openfoam_tix2_s2-resnet_film-20261111-04efbe73
+
+Config `burner_openfoam_tix2_s2.yaml`, resnet_film, trained 2026-11-11T03:14:39+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 160 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.000659 kg/m2/s x 1.5^k, up to 31 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 319,838 train / 43,614 validation pairs (reactor_0D 162,390, PaSR 22,400, flamelet_states 11,720, wall_cooled_0D 11,396, recirculation 7,200, unsteady_flamelets 15,558, equilibrium_tail_0D 3,680, vitiated_ignition 94,638, burnt_relaxation 34,470).
+Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 297 of 300, 384 min on 4 threads (Linux x86_64), git e629666.
+Certification: Tier 1 R2 0.9936, T MAE 0.03 K; held-out flamelet coverage 96.5%; Tier 2 tau error –%, final T 321 K (Cantera 337 K); Tier 3 mean |tau error| –%, T MAE 82.4 K; cooled gas T MAE 5.0 K (max 12 K); mixing T MAE 5.2 K (max 11 K).
+Fluent file sha256: `72da3fe410d98393320b3d0a4fb10b79afad164724de6618407438b66bac17cb`.
