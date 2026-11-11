@@ -63,6 +63,13 @@ for L in $LEGS; do
     if lt "$(latest)" "$END"; then
         D endTime "$END" system/controlDict; D writeInterval "$WI" system/controlDict; D startFrom latestTime system/controlDict
         mpirun -np "$NP" "$APP" -parallel >> log.run 2>&1
+        if lt "$(latest)" "$END" && grep -aq "sigFpe" log.run; then
+            # an FPE (seen in the shadow DI check: GA18 on a surrogate-advanced state, comparison only):
+            # retry once from the last write with FPE trapping off, and record it
+            echo "$(date '+%F %T %Z') FPE retry from $(latest) with FOAM_SIGFPE=false" >> protocol_notes
+            D startFrom latestTime system/controlDict
+            FOAM_SIGFPE=false mpirun -np "$NP" -genv FOAM_SIGFPE false "$APP" -parallel >> log.run 2>&1
+        fi
         lt "$(latest)" "$END" && { echo "failed $(latest)" > protocol_status; break; }
     fi
 done
