@@ -28,6 +28,6 @@ while true; do
         [ "$(latest)" = "$L" ] && { echo "failed $L" > status; exit 1; }; }
 done
 T=$(latest); echo "$(date '+%F %T %Z') settled/stopped at $T; stage 19" >> supervisor.log
-cd "$REPO" && $PY scripts/19_flow_statistics.py case "$CASE" --time "$T" --label A3_wd2_lefoam \
+cd "$REPO" && $PY scripts/19_flow_statistics.py case "$CASE" --time "$T" --label "${LABEL:-A3_wd2_lefoam}" \
     --out "$REPO/data/timescale" > "$CASE/log.stage19" 2>&1 \
     && echo "completed $T" > "$CASE/status" || echo "stage19 failed $T" > "$CASE/status"
