@@ -1,0 +1,16 @@
+metric                                     Fluent OpenFOAM Le_k
+Tmax [K]                                   2087.5       2126.2
+x(Tmax) [mm]                               42.855       49.986
+r(Tmax) [mm]                               8.8673       32.844
+axis Tmax [K]                              1437.4       1393.8
+x(axis Tmax) [mm]                          46.374       49.986
+flame length T>1500 on axis [mm]              nan          nan
+flame base x T>1500 [mm]                   1.1459       1.6442
+hot volume T>1500 [cm3]                    18.248       60.145
+OH max                                  0.0032769    0.0029651
+CO max                                   0.053188      0.06337
+x(OH max) [mm]                             15.125       43.604
+Ux max [m/s]                                1.398       1.3147
+
+cell-by-cell T difference (OpenFOAM Le_k - Fluent): mean |dT| in hot cells 415.3 K, volume-weighted 605.2 K, max |dT| 1354 K
+saved /mnt/c/Users/Javier/GenSPARK/fluent-runs/openfoam-realistic-diffusion/compare_it10200.png
