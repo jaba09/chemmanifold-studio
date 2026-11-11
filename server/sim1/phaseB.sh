@@ -24,6 +24,6 @@ one() {
 }
 export -f one; export REPO P PY B OUT
 echo "$(date '+%F %T %Z') phase B start ($(wc -l < $LIST) candidates)" >> $B/phaseB.log
-grep -v '^#' $LIST | xargs -P 4 -L 1 bash -c 'one "$0" "$1"'
+grep -v "^#" $LIST | xargs -P ${SLOTS:-4} -L 1 bash -c 'one "$0" "$1"'
 $PY $P/score_v2.py --table $OUT/*/score_v2.json --out $OUT > /dev/null 2>&1
-echo "$(date '+%F %T %Z') phase B finished" >> $B/phaseB.log; echo completed > $B/status
+echo "$(date '+%F %T %Z') phase B lane $(basename $LIST) finished" >> $B/phaseB.log

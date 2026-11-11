@@ -22,7 +22,7 @@ FoamFile { version 2.0; format ascii; class dictionary; object radiationProperti
 // Fluent: DO, gas absorption 0, black walls; see enable_radiation.sh
 radiation       on;
 radiationModel  fvDOM;
-fvDOMCoeffs { nPhi 4; nTheta 4; tolerance 1e-4; maxIter 3; }
+fvDOMCoeffs { nPhi 4; nTheta 4; tolerance 1e-6; maxIter 3; }   // tolerance below the ray residuals so all 3 sweeps run (1e-4 froze the rays after ~0.15 s: sim1 A1r)
 solverFreq      10;             // flow steps per radiation solve (dt 2e-5 s -> every 0.2 ms)
 absorptionEmissionModel none;
 scatterModel    none;
@@ -44,7 +44,7 @@ boundaryField
 }
 X
 D "divSchemes/div(Ji,Ii_h)" "bounded Gauss linearUpwind grad(Ii_h)" system/fvSchemes
-D "solvers/Ii" "{ solver GAMG; tolerance 1e-4; relTol 0; smoother symGaussSeidel; maxIter 5; nPostSweeps 1; }" system/fvSolution
+D "solvers/Ii" "{ solver GAMG; tolerance 1e-6; relTol 0.01; smoother symGaussSeidel; maxIter 5; nPostSweeps 1; }" system/fvSolution   # 1e-4: ray residuals sat at 1e-4 and stopped iterating
 # wall BCs (T must be ASCII)
 for p in wall-pot-fff-fluid-fuel outlet-lab-026; do      # Fluent: heat flux 0 (total)
     D "boundaryField/$p" "{ type externalWallHeatFluxTemperature; mode flux; q uniform 0; qr qr; kappaMethod fluidThermo; value uniform 600; }" "$T/T"
