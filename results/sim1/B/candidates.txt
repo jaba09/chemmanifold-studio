@@ -1,0 +1,13 @@
+# label model_dir   (phase B, protocol v2 pure; ISANN v6 is CFD-adapted on the OLD reference: label isann)
+ood8_s0 /home/ubuntu/inputs/sim1-extra/models/ood8_s0
+ood8_s1 /home/ubuntu/inputs/sim1-extra/models/ood8_s1
+ood8_s2 /home/ubuntu/inputs/sim1-extra/models/ood8_s2
+P0_ood8 /opt/ofb/models/P0_ood8
+tix1_s0 /home/ubuntu/inputs/sim1-extra/models/tix1_s0
+isann_v6 /home/ubuntu/inputs/sim1-extra/models/isann_v6
+tix2_s0 /home/ubuntu/chemmanifold-studio/data/openfoam_tix2/08_fluent/resnet_film
+tix2_s1 /home/ubuntu/chemmanifold-studio/data/openfoam_tix2_seeds/s1/08_fluent/resnet_film
+tix2_s2 /home/ubuntu/chemmanifold-studio/data/openfoam_tix2_seeds/s2/08_fluent/resnet_film
+tix2h_s0 /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h/08_fluent/resnet_film
+tix2h_s1 /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s1/08_fluent/resnet_film
+tix2h_s2 /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s2/08_fluent/resnet_film

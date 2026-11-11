@@ -1,0 +1,14 @@
+{
+ "states": 500,
+ "dt": 2e-05,
+ "max_weight_diff": 0.0,
+ "max_dY": 0.0,
+ "max_dT_K": 0.0,
+ "passed": true,
+ "members_used_histogram": {
+  "0": 0,
+  "1": 0,
+  "2": 0,
+  "3": 500
+ }
+}
