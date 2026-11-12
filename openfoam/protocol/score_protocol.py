@@ -167,7 +167,8 @@ def read_log(path):
             prev_exec = e
         elif cur is not None:
             mm = COUNTERS.search(line)
-            if mm:
+            # ranks can interleave their counter lines in log.run; a garbled line can read OOD > advanced
+            if mm and int(mm.group(4)) <= int(mm.group(2)) and int(mm.group(2)) + int(mm.group(3)) == int(mm.group(1)):
                 cur["advanced"] += int(mm.group(2))
                 cur["ood"] += int(mm.group(4))
                 cur["fallback"] += int(mm.group(5))
