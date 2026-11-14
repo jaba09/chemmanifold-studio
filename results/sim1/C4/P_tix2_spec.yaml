@@ -1,0 +1,5 @@
+blend: mean
+note: "P_tix2 = mean of /home/ubuntu/chemmanifold-studio/data/openfoam_tix2/08_fluent/resnet_film /home/ubuntu/chemmanifold-studio/data/openfoam_tix2_seeds/s2/08_fluent/resnet_film (sim1 C4)"
+members:
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2/08_fluent/resnet_film/chemmanifold_model.txt
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2_seeds/s2/08_fluent/resnet_film/chemmanifold_model.txt

@@ -1,4 +1,4 @@
-# OpenFOAM case from the Fluent single-flame burner
+﻿# OpenFOAM case from the Fluent single-flame burner
 
 The Fluent case `quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5` (Fluent 20.2) rebuilt for OpenFOAM
 (openfoam.com, tested with v2412), plus the tools that did the conversion and an OpenFOAM counterpart
@@ -6,12 +6,12 @@ of the `DEFINE_CHEM_STEP` UDF.
 
 ```
 openfoam/
-├── tools/
-│   ├── fluent_h5_to_foam.py          .cas.h5 2D axisymmetric mesh -> OpenFOAM wedge polyMesh
-│   ├── fluent_cas_settings.py        .cas.h5 settings -> BC summary + the embedded Chemkin files
-│   └── chemkin_transport_to_foam.py  Chemkin tran.dat -> Sutherland coefficients for chemkinToFoam
-├── quemadorUnico/                    the case (Allrun builds the mesh from the .cas.h5)
-└── userChemStep/                     DEFINE_CHEM_STEP as an OpenFOAM chemistry solver library
+â”œâ”€â”€ tools/
+â”‚   â”œâ”€â”€ fluent_h5_to_foam.py          .cas.h5 2D axisymmetric mesh -> OpenFOAM wedge polyMesh
+â”‚   â”œâ”€â”€ fluent_cas_settings.py        .cas.h5 settings -> BC summary + the embedded Chemkin files
+â”‚   â””â”€â”€ chemkin_transport_to_foam.py  Chemkin tran.dat -> Sutherland coefficients for chemkinToFoam
+â”œâ”€â”€ quemadorUnico/                    the case (Allrun builds the mesh from the .cas.h5)
+â””â”€â”€ userChemStep/                     DEFINE_CHEM_STEP as an OpenFOAM chemistry solver library
 ```
 
 ## Running
@@ -19,7 +19,7 @@ openfoam/
 ```bash
 # OpenFOAM (openfoam.com) environment sourced; python3 with numpy and h5py
 cd openfoam/quemadorUnico
-./Allrun /path/to/quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 4     # 4 = MPI ranks
+./Allrun ../../fluent/cases/quemadorUnicoTesis_60KCells-GA18--ID.cas.h5 4     # 4 = MPI ranks
 ```
 
 Without OpenFOAM installed, `quemadorUnico/run_on_my_computer.sh` does everything on any x86_64
@@ -36,17 +36,18 @@ HDF5 mesh directly. `chemkin/transportProperties` is committed, so Cantera is on
 
 | Fluent | OpenFOAM |
 |---|---|
-| 2D axisymmetric (x = axis, gravity -9.8 in x) | 5° wedge about the x axis, `g = (-9.8 0 0)` |
+| 2D axisymmetric (x = axis, gravity -9.8 in x) | 5Â° wedge about the x axis, `g = (-9.8 0 0)` |
 | Pressure-based, steady | `rhoReactingBuoyantFoam` with local time stepping (`ddt localEuler`) |
-| k-ω SST | `kOmegaSST` |
+| k-Ï‰ SST | `kOmegaSST` |
 | Species transport, laminar finite-rate, stiff chemistry, ODE rtol 1e-5 / atol 1e-10 | `combustionModel laminar`, `ode` + `seulex` with the same tolerances |
 | Mechanism imported from Chemkin (GA18, 18 species, 92 reactions, CH4/air) | the Chemkin files Fluent stored in the .cas, via `chemkinToFoam`: all 92 reactions convert |
-| Kinetic-theory viscosity | Sutherland fits to the same Lennard-Jones data (max error 4.9 %, 300–2500 K) |
-| `inlet-fuel`: mass flow 6.735e-6 kg/s CH4, 300 K | `flowRateInletVelocity`, 6.735e-6 × 5/360 kg/s |
-| `inlet-coflow-fff-fluid-mixing`: mass flow 5.7675e-5 kg/s air, 300 K | `flowRateInletVelocity`, 5.7675e-5 × 5/360 kg/s |
+| Kinetic-theory viscosity | Sutherland fits to the same Lennard-Jones data (max error 4.9 %, 300â€“2500 K) |
+| `inlet-fuel`: mass flow 6.735e-6 kg/s CH4, 300 K | `flowRateInletVelocity`, 6.735e-6 Ã— 5/360 kg/s |
+| `inlet-coflow-fff-fluid-mixing`: mass flow 5.7675e-5 kg/s air, 300 K | `flowRateInletVelocity`, 5.7675e-5 Ã— 5/360 kg/s |
 | `inlet-coflow-fff-fluid-exterior`: 0.05 m/s air, 300 K | `surfaceNormalFixedValue` |
-| `outlet-lab:026` (r = 0.14 m side): pressure outlet 0 Pa gauge, backflow air 300 K | fixed `p_rgh` + `inletOutlet` (patch `outlet-lab-026`); Fluent's gauge pressure excludes the hydrostatic head, so fixing `p` on this vertical boundary would drive a spurious through-flow |
-| Turbulence at inlets: 5 % intensity, viscosity ratio 10 | fixed k = 1.5 (0.05 U)², ω = k / (10 ν) |
+| `outlet-lab` (top, x = 0.52 m, r 0.02â€“0.14 m) and `wall-fff-fluid-exhaust` (chimney exit, r < 0.02 m): pressure outlets 0 Pa gauge, backflow air 300 K | fixed `p_rgh` + `pressureInletOutletVelocity` + `inletOutlet`; both are at the same height, so fixed `p_rgh` equals fixed `p` |
+| `outlet-lab:026` (r = 0.14 m side): adiabatic wall | `wall` group: `noSlip`, `zeroGradient` T |
+| Turbulence at inlets: 5 % intensity, viscosity ratio 10 | fixed k = 1.5 (0.05 U)Â², Ï‰ = k / (10 Î½) |
 | `wall-disk`: 300 K | `fixedValue` |
 | `wall-pot-fff-fluid-exhaust`, `-mixing`: convection, h = 15, Tinf = 323 K | `externalWallHeatFluxTemperature` |
 | `wall-hood` / `wall-hood-shadow`: coupled zero-thickness wall | `mappedWall` pair + `turbulentTemperatureCoupledBaffleMixed` |
@@ -58,15 +59,25 @@ Notes on the Fluent setup:
 - The air streams set O2 = 0.21 with *species in mole fractions* on, so they are normal air. The case
   uses **Y_O2 = 0.233, Y_N2 = 0.767 by mass** (Z_st = 0.055). The first version of this case read the
   0.21 as a mass fraction; that was wrong.
-- `outlet-lab` (top, r = 0.02–0.14 m) and `wall-fff-fluid-exhaust` (top of the chimney, r < 0.02 m)
-  are **adiabatic walls**, so the only open boundary is the side at r = 0.14 m and the chimney is closed.
+- **Outlets (corrected 2026-11-05).** The first Fluent case (`--ID-UDF`, `--DI`) had the outlets wrong: the
+  side at r = 0.14 m was the only open boundary and the room top and chimney exit were adiabatic walls. The
+  corrected case `fluent/cases/quemadorUnicoTesis_60KCells-GA18--ID.cas.h5` opens the top (`outlet-lab`) and
+  the chimney exit (`wall-fff-fluid-exhaust`) and makes the side (`outlet-lab:026`) an adiabatic wall; nothing
+  else changed. The patch types come from the .cas.h5, so build the mesh from the corrected case.
+- **Species diffusion (2026-11-09).** The stock `rhoReactingBuoyantFoam` diffuses every species with
+  rho D = mu + mu_t (Sc = Sc_t = 1), while Fluent uses kinetic-theory diffusion and Sc_t = 0.7. The case now runs
+  `rhoReactingBuoyantLeFoam` (source in `simpleFlame/solver`, compiled by `run_on_my_computer.sh`) with
+  `constant/speciesDiffusion`: per-species Lewis numbers from a Cantera GA18 flame, Sct 0.7. Set `model stock;`
+  there to get the old behaviour back.
+- `tools/fluent_dat_to_foam.py` copies a Fluent `.dat.h5` solution (T, U, k, Ï‰, Y) into an OpenFOAM time
+  directory, to start a run from a Fluent field (the converter keeps Fluent's cell order).
 
 Known modelling differences:
 
 - **Species diffusion.** Fluent used kinetic-theory mass diffusivities with thermal diffusion;
   `rhoReactingBuoyantFoam` uses unity Lewis number. The inlet jets are close to laminar
-  (fuel jet Re ≈ 150), so this can shift the flame position and peak temperature.
-- **Turbulent Schmidt number.** Fluent Sc_t = 0.7; OpenFOAM diffuses species with α_t (Pr_t = 0.85).
+  (fuel jet Re â‰ˆ 150), so this can shift the flame position and peak temperature.
+- **Turbulent Schmidt number.** Fluent Sc_t = 0.7; OpenFOAM diffuses species with Î±_t (Pr_t = 0.85).
 - **Initial state.** Fluent's data file was not supplied. The run starts from still air at 300 K with
   the fuel region under the pot already full of CH4 and the mixing annulus full of stoichiometric
   CH4/air products at 2000 K (`system/setFieldsDict`). Hot products hold no O2, so they light the
@@ -81,9 +92,9 @@ Known modelling differences:
 Fluent calls `DEFINE_CHEM_STEP(name, c, t, p, num_p, n_spe, dt, pres, temp, yk)` per cell and
 expects the mass fractions after `dt`. In OpenFOAM the same hook is a chemistry solver:
 `StandardChemistryModel` calls `solver.solve(c, T, p, deltaT, subDeltaT)` per cell with molar
-concentrations and sets RR_i = W_i (c_i(dt) − c_i(0)) / dt. `userChemStep` converts c ↔ Y at the
+concentrations and sets RR_i = W_i (c_i(dt) âˆ’ c_i(0)) / dt. `userChemStep` converts c â†” Y at the
 cell density, so its `chemStep(yk, T, p, dt)` has the Fluent signature. Without a model file the body
-is the Fluent manual example from the UDF (dY_k/dt = 1/N − Y_k).
+is the Fluent manual example from the UDF (dY_k/dt = 1/N âˆ’ Y_k).
 
 With `userChemStepCoeffs/model` set, `chemStep` runs the ChemManifold surrogate through the same
 plain-C core as the Fluent UDF (`fluent/udf/chemmanifold_core.c`; `Allwmake` copies it in), with
@@ -137,7 +148,7 @@ cd openfoam/userChemStep && ./Allwmake        # -> $FOAM_USER_LIBBIN/libuserChem
 
 Then in the case: `libs (userChemStep);` in `system/controlDict`, and `solver userChemStep;` in
 `chemistryType` of `constant/chemistryProperties`. Tested with v2412: the species relax toward
-1/N by the expected exp(−dt) factor per step.
+1/N by the expected exp(âˆ’dt) factor per step.
 
 Two details of the original `UDF.c`: index `ico = 13` is **CO2** in this mixture (CO is 12; the
 order is H2 H O O2 OH H2O HO2 H2O2 CH2 CH2(S) CH3 CH4 CO CO2 HCO CH2O CH3O N2), and the

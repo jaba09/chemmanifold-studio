@@ -113,7 +113,7 @@ class Daemon:
         n_kept, n_new = self.counts()
         if step < self.state.get("retry_after", 0):   # after a failed or rejected round
             return None, {}
-        if self.state["version"] == 0:
+        if self.state["version"] == 0 and not self.cfg["di"].get("skip", False):
             c = self.cfg["di"]
             w = st[st["step"] > step - c["window"]]
             boxes = st["boxes"].to_numpy()
@@ -157,6 +157,8 @@ class Daemon:
                       h_in=enthalpy(self.gas, d["Y_in"][tr], d["T_in"][tr], P), dt=d["dt"][tr],
                       Y_out=d["Y_out"][tr], T_out=d["T_out"][tr],
                       regime=np.full(n_on, ONLINE_REGIME, dtype=np.int64), traj_id=-1 - np.arange(n_on))
+        if self.cfg["training"].get("relabel_dt", False):
+            self.relabel_dt(online)
         # Replay: a priori pairs of the parent, so the network does not forget what it knew
         c = self.cfg["training"]
         n_rep = int(np.clip(c["replay_factor"] * n_on, c["replay_min"], c["replay_max"]))
@@ -185,6 +187,30 @@ class Daemon:
         with open(rd / "config.yaml", "w") as f:
             yaml.safe_dump(cfg, f, sort_keys=False)
         return rd, n_on, len(sel)
+
+    def relabel_dt(self, online):
+        """Pairs whose dt is above the trained dt range (local time stepping gives each cell its own
+        dt, up to ~10x the range) are re-integrated with Cantera (GA18) over the first sub-step that
+        cm_advance takes for them, dt/n with n = ceil(dt/dt_max): the network is called on exactly
+        those steps, so it is trained on them. The held-out pairs keep the run's full dt."""
+        import cantera as ct
+        dt_max = self.dt_range[1]
+        long_ = np.flatnonzero(online["dt"] > dt_max * (1 + 1e-9))
+        for i in long_:
+            dts = online["dt"][i] / np.ceil(online["dt"][i] / dt_max * (1 - 1e-12))
+            try:
+                self.gas.TPY = online["T_in"][i], online["P_in"][i], online["Y_in"][i]
+                r = ct.IdealGasConstPressureReactor(self.gas, clone=True)
+                net = ct.ReactorNet([r])
+                net.rtol, net.atol = 1e-8, 1e-14
+                net.advance(dts)
+                online["Y_out"][i], online["T_out"][i], online["dt"][i] = r.thermo.Y, r.T, dts
+            except ct.CanteraError:
+                online["dt"][i] = np.nan
+        ok = np.isfinite(online["dt"])
+        for k in online:
+            online[k] = online[k][ok]
+        log(f"  relabelled {len(long_)} pairs with dt > {dt_max:.2e} s to their first sub-step", self.logf)
 
     def write_segments(self, smp, online, c):
         """Rollout-loss segments: the parent's a priori ones plus GA18 (Cantera) continuations of
@@ -266,7 +292,8 @@ class Daemon:
         # states (|dT| > roll_fail_K after roll_steps) and a median not worse than max_ratio
         ok = c["T_mae"] < n["T_mae"] and c["roll_fail"] <= n["roll_fail"] and \
             c["roll_T_p50"] <= g["max_ratio"] * n["roll_T_p50"] + 0.1
-        if self.state["version"] == 0:   # the first network must also be usable in absolute terms
+        if self.state["version"] == 0 and not self.cfg["di"].get("skip", False):
+            # the first network after a DI phase must also be usable in absolute terms
             ok = ok and c["T_mae"] < g["first_T_mae"]
         res["n_holdout"] = int(ho.sum())
         res["accepted"] = bool(ok)

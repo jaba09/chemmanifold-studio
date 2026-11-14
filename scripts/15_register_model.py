@@ -36,7 +36,7 @@ from chemmanifold.io import base_parser, load_config, stage_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 REG_DIR = ROOT / "models"
-REGIME_NAMES = {0: "reactor_0D", 1: "PaSR", 2: "flamelet_states", 3: "wall_cooled_0D", 4: "recirculation", 5: "unsteady_flamelets", 6: "equilibrium_tail_0D", 7: "vitiated_ignition", 8: "burnt_relaxation", 9: "equilibrium_fixed_point"}
+REGIME_NAMES = {0: "reactor_0D", 1: "PaSR", 2: "flamelet_states", 3: "wall_cooled_0D", 4: "recirculation", 5: "unsteady_flamelets", 6: "equilibrium_tail_0D", 7: "vitiated_ignition", 8: "burnt_relaxation", 9: "equilibrium_fixed_point", 10: "seeded_PaSR", 11: "seeded_relaxation", 12: "seeded_ignition", 13: "seeded_cooling", 15: "dilution_cooling", 16: "dynamic_PaSR", 17: "induction_layer", 18: "hot_wall", 19: "relaxation_flame_dt", 20: "isann_online"}
 STATUSES = ("candidate", "in-fluent", "superseded", "discarded")
 
 
@@ -227,7 +227,7 @@ def render(cards):
             if cert.get("coverage_heldout_flamelets") is not None:
                 parts.append(f"held-out flamelet coverage {cert['coverage_heldout_flamelets']:.1%}")
             if t2:
-                parts.append(f"Tier 2 tau error {t2['tau_ign_err_pct']:+.0f}%" + (
+                parts.append(f"Tier 2 tau error {fmt(t2.get('tau_ign_err_pct'), '{:+.0f}')}%" + (
                     f", final T {t2['T_final_ml_K']:.0f} K (Cantera {t2['T_final_cantera_K']:.0f} K)"
                     if t2.get("T_final_ml_K") is not None else ""))
             if t3:
