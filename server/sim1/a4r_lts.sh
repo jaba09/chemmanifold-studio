@@ -16,7 +16,7 @@ SRC=$(realpath "${1:?prepared radiation case}"); RUN=${2:?run dir}; NP=${3:-8}
 HERE=$(dirname "$(realpath "$0")"); REPO=$(realpath "$HERE/../.."); PY=/opt/ofb/ml/bin/python
 FLUENT_DAT=${FLUENT_DAT:-$HOME/inputs/sim1-extra/quemadorUnicoTesis_60KCells-GA18--ID.dat.h5}
 OUT=$REPO/results/sim1/A4r
-. /opt/ofb/ofenv.sh
+set +u; . /opt/ofb/ofenv.sh; set -u        # etc/bashrc reads unset variables
 D() { foamDictionary -entry "$1" -set "$2" "$3" > /dev/null; }
 log() { echo "$(date '+%F %T %Z') $*" >> "$RUN/supervisor.log"; }
 
