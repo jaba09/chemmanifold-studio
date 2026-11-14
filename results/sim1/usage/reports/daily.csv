@@ -1,0 +1,5 @@
+date,source,hours_covered,mean_util_pct,peak_busy_cores,peak_time,min_busy_cores,min_time,busy_core_hours,idle_core_hours,hours_with_idle_core,disk_free_gb_min,disk_free_gb_end,mem_used_gb_peak
+2026-11-10,sysstat,24.0,90.6,16.0,00:20,0.0,14:00,348.1,35.9,3.5,,,
+2026-11-11,sysstat,24.0,97.0,16.0,00:10,4.9,15:20,372.3,11.7,4.2,,,
+2026-11-12,sysstat,4.5,49.2,16.0,00:10,2.6,02:00,35.4,36.6,4.2,,,
+2026-11-13,sysstat,6.5,0.1,0.0,03:50,0.0,00:20,0.1,103.9,6.5,,,
