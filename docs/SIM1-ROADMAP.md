@@ -316,3 +316,17 @@ retried automatically, within the rules in section 0.
 - If sim1 is shut off or rebooted, Javier restarts the link: `ssh` in, `tmux new -s claude`,
   `cd chemmanifold-studio`, `claude remote-control`. All runs are resumable from their last write.
 - Keep at least 20 GB free: purge intermediate writes, keep only the scoring snapshots.
+
+## 13. Queued: A4r, steady LTS check with radiation (added 2026-11-14)
+
+From the PC thread's report (GA18 LTS + LeFoam/constantLewis, no radiation: settled at iteration ~9000 with V(T>1500)
+60 cm3 = 3.3x Fluent, flame base and peak T on Fluent's). A1r showed the missing piece is the wall radiation.
+A4r = that same steady LTS run plus `enable_radiation.sh`, from the Fluent DI start:
+`server/sim1/a4r_lts.sh <A1r prepared case> /opt/ofb/runs/A4r_lts 8`.
+
+- Settles when V(T>1500) changes < 3 % and Tmax < 10 K between two 1000-iteration checks (min 3000, hard stop 12000).
+- Cost: 8 ranks; the PC did 13-15 s per LTS iteration on 8 WSL cores without radiation. Starting from the Fluent field
+  it should settle well before the PC's 9000 iterations: estimate 3000-5000 iterations, 8-20 h.
+- Pass = the G1 limits against Fluent (V within 30 %, Tmax within 50 K, base within 3 mm, mean hot |dT| < 100 K).
+  Decides whether the steady test 6b can be rebuilt on an LTS state (hours instead of a day of DI per check).
+- Report: `results/sim1/A4r/summary.md`. Low priority: run in a free 8-core slot, after the current C4 scoring.
