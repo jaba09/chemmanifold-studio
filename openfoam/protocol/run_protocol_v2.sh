@@ -75,4 +75,13 @@ for L in $LEGS; do
 done
 grep -q failed protocol_status || echo "completed $(latest)" > protocol_status
 $PY "$HERE/../tools/foam_snapshot.py" . snap --label "${LABEL:-$(basename "$PWD")}" --skip-existing > log.snapshots 2>&1
+# disk: foam_snapshot leaves an ASCII reconstruction of every write in the case root (about 50 MB each) and the
+# decomposed writes stay in processor*/ (phase B filled 69 GB on sim1). Once the CSVs exist, keep only the latest
+# processor write (resume/extension) plus logs, minMaxT, shadowDI.csv and dtHistogram.csv: enough to re-score.
+if [ "$(ls snap 2>/dev/null | wc -l)" -gt 0 ]; then
+    L=$(latest)
+    find . -maxdepth 1 -type d -regex '\./[0-9.e+-]+' ! -name "$T0" -exec rm -rf {} +
+    for p in processor*; do find "$p" -maxdepth 1 -type d -regex '.*/[0-9.e+-]+' ! -name "$L" -exec rm -rf {} +; done
+    [ -f log.reconstruct_pp ] && gzip -f log.reconstruct_pp
+fi
 cat protocol_status
