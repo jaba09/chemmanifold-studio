@@ -8,6 +8,10 @@ WHAT=${1:-all}
 REPO=$(realpath "$(dirname "$(realpath "$0")")/../.."); P=$REPO/openfoam/protocol; PY=${PY:-/opt/ofb/ml/bin/python}
 W=${W:-/opt/ofb/runs/arc22}; OUT=${OUT:-$REPO/results/sim1/ARC22}; mkdir -p "$OUT"
 DAT=${DAT:-$HOME/inputs/sim1-extra/fluent-corrected/quemadorUnicoTesis_60KCells-GA18--ID.dat.h5}
+# Fluent DI with full GRI-Mech 3.0 (53 species), same mesh: the benchmark for the 22-species ARC
+GRI=${GRI:-$HOME/inputs/sim1-extra/fluent-gri/quemadorUnicoTesis_60KCells-GRI--ID}
+FL="--fluent Fluent_GA18 $DAT"
+[ -f "$GRI.dat.h5" ] && FL="$FL --fluent Fluent_GRI $GRI.dat.h5 $GRI.cas.h5"
 . /opt/ofb/ofenv.sh
 if [ "$WHAT" != ign ] && [ -d "$W/flame/snap" ]; then
     $PY $P/score_protocol.py --protocol $P/protocol_v2_flame.yaml --di /opt/ofb/runs/A1r_R2rad/snap --di-label A1r \
@@ -16,7 +20,7 @@ if [ "$WHAT" != ign ] && [ -d "$W/flame/snap" ]; then
         --set ARC22_0.15-0.2 "$W/flame/snap" arc22_flame 0.15 0.2 \
         --set ARC22_0.1-0.1875 "$W/flame/snap" arc22_flame 0.1 0.1875 \
         --set A1r_0.1-0.1875 /opt/ofb/runs/A1r_R2rad/snap A1r 0.1 0.1875 \
-        --fluent "$DAT" --out "$OUT/meanfield.json" > "$OUT/meanfield.txt" 2>&1
+        $FL --out "$OUT/meanfield.json" > "$OUT/meanfield.txt" 2>&1
     # outlet NOx (phi-weighted, every 10 steps): mean over 0.15-0.2 s and the last value
     for f in "$W"/flame/postProcessing/outletNOx_*/*/surfaceFieldValue.dat; do
         [ -f "$f" ] || continue
@@ -29,6 +33,12 @@ w = d[(d.Time >= 0.15) & (d.Time <= 0.2 + 1e-9)]
 print("mean 0.15-0.2 s (%d samples):" % len(w)); print(w.drop(columns="Time").mean().to_string(float_format="%.4g"))
 print("last (t = %.5f s):" % d.Time.iloc[-1]); print(d.iloc[-1].drop("Time").to_string(float_format="%.4g"))'
     done > "$OUT/outlet_nox.txt" 2>&1
+    # compact per-cell fields (Fluent cell order) for the cell-by-cell GRI-Mech 3.0 comparison in the cloud
+    mkdir -p "$OUT/fields"
+    $PY "$REPO/server/sim1/arc_fields.py" "$W/flame/snap" arc22_flame 0.15 0.2 "$OUT/fields/arc22_mean_0.15-0.2.npz"
+    $PY "$REPO/server/sim1/arc_fields.py" "$W/flame/snap" arc22_flame 0.2 0.2 "$OUT/fields/arc22_t0.2.npz"
+    [ -f "$OUT/fields/a1r_mean_0.1-0.1875.npz" ] || \
+        $PY "$REPO/server/sim1/arc_fields.py" /opt/ofb/runs/A1r_R2rad/snap A1r 0.1 0.1875 "$OUT/fields/a1r_mean_0.1-0.1875.npz"
     echo "flame: $(tail -1 "$OUT/score_flame.log")"
 fi
 if [ "$WHAT" != flame ] && [ -d "$W/ign/snap" ]; then
