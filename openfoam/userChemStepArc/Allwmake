@@ -1,0 +1,15 @@
+#!/bin/sh
+# Builds libuserChemStepArc: userChemStep (surrogate, ISANN, ITERML modes) whose direct integration
+# is the ARC_GRI30_NOx22 kernel (../userChemStep/arcDI.H) instead of the case's reaction list (GA18).
+# For ISANN on the 22-species ARC case (openfoam/isann/README.md, "ARC_GRI30_NOx22"). libuserChemStep
+# (GA18) is not touched; a case loads one of the two (both register the solver name userChemStep).
+#   nice -n 19 ./Allwmake          # single-threaded unless WM_NCOMPPROCS is set
+cd "${0%/*}" || exit 1
+U=../userChemStep; M=../../mechanisms/arc_gri30_nox22
+mkdir -p src
+cp ../../fluent/udf/chemmanifold_core.c ../../fluent/udf/chemmanifold_core.h \
+   ../../fluent/udf/chemmanifold_ensemble.c ../../fluent/udf/chemmanifold_ensemble.h \
+   $U/makeUserChemStep.C $U/userChemStep.C $U/userChemStep.H $U/isannStore.H $U/arcDI.H src/
+cp $M/arc_gri30_nox22.c $M/arc_gri30_nox22.h $M/arc_gri30_nox22_data.h src/
+cp $M/arc_kernel_original.cpp src/arc_kernel_original.C; mkdir -p src/original; cp $M/original/arc_gri30_nox22.hpp src/original/
+wmake libso

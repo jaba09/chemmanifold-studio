@@ -21,7 +21,7 @@ import numpy as np
 from sklearn.neighbors import NearestNeighbors
 
 from chemmanifold.boxcox import boxcox
-from chemmanifold.chemistry import make_gas
+from chemmanifold.chemistry import make_state_gas, state_map
 from chemmanifold.flame import BilgerZ, flamelet_split, stream_states
 from chemmanifold.io import base_parser, load_config, load_json, load_npz, save_json, stage_dir
 
@@ -40,7 +40,10 @@ def main(cfg):
     fl = load_npz(stage_dir(cfg, "flame") / "flamelets.npz")
     ref = load_json(stage_dir(cfg, "flame") / "flame_reference.json")
     br = load_npz(stage_dir(cfg, "flame") / "burnt_reference.npz")
-    gas = make_gas(cfg)
+    gas = make_state_gas(cfg)
+    sm = state_map(cfg)
+    if sm:
+        fl = dict(fl, Y=sm.project(fl["Y"]))
     (Yf, _), (Yo, _) = stream_states(gas, cfg)
     bz = BilgerZ(gas, Yf, Yo)
 

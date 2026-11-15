@@ -26,3 +26,8 @@ dist/
 log.Allwmake
 openfoam/userChemStep/chemmanifold_ensemble.c
 openfoam/userChemStep/chemmanifold_ensemble.h
+
+# libuserChemStepArc build copies (openfoam/userChemStepArc/Allwmake)
+openfoam/userChemStepArc/src/
+openfoam/userChemStepArc/lnInclude/
+openfoam/userChemStepArc/Make/linux64*/

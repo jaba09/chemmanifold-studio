@@ -65,6 +65,18 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     trustMin_(isannDict_.getOrDefault<label>("trustMin", 2)),
     iOHmodel_(-1)
 {
+#ifdef USERCHEMSTEP_ARC
+    {
+        wordList names(this->nSpecie());
+        scalarList W(this->nSpecie());
+        forAll(this->specieThermo(), i)
+        {
+            names[i] = this->specieThermo()[i].name();
+            W[i] = this->specieThermo()[i].W();
+        }
+        arc_.reset(new arcDI(coeffsDict_.subOrEmptyDict("arc"), names, W));
+    }
+#endif
     for (label b=0; b<6; b++) nFlag_[b] = 0;
     forAll(this->specieThermo(), i)
     {
@@ -235,6 +247,26 @@ Foam::userChemStep<ChemistryModel>::userChemStep
 }
 
 
+// * * * * * * * * * * * * * * * Member Functions  * * * * * * * * * * * * * //
+
+template<class ChemistryModel>
+void Foam::userChemStep<ChemistryModel>::diSolve
+(
+    scalarField& c,
+    scalar& T,
+    scalar& p,
+    scalar& deltaT,
+    scalar& subDeltaT
+) const
+{
+#ifdef USERCHEMSTEP_ARC
+    arc_->solve(c, T, p, deltaT, subDeltaT);
+#else
+    ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+#endif
+}
+
+
 // * * * * * * * * * * * * * * * * Destructor  * * * * * * * * * * * * * * * //
 
 template<class ChemistryModel>
@@ -398,7 +430,7 @@ void Foam::userChemStep<ChemistryModel>::shadow
     // GA18 (odeCoeffs) from the same state
     scalarField cd(c);
     scalar Td = T, pd = p, dtd = deltaT, subd = deltaT;
-    ode<ChemistryModel>::solve(cd, Td, pd, dtd, subd);
+    diSolve(cd, Td, pd, dtd, subd);
     scalar rhod = 0;
     for (label i=0; i<nSpecie; i++) rhod += cd[i]*thermos[i].W();
 
@@ -634,7 +666,7 @@ void Foam::userChemStep<ChemistryModel>::solveCell
         else if (!isannActive_)
         {
             // DI phase: cold cells on GA18 too, as in the DI run, but not kept
-            ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+            diSolve(c, T, p, deltaT, subDeltaT);
             return;
         }
         if
@@ -674,7 +706,7 @@ void Foam::userChemStep<ChemistryModel>::solveCell
         if (reason >= 0)
         {
             const scalar T0 = T;
-            ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+            diSolve(c, T, p, deltaT, subDeltaT);
             double Y1[CM_MAX_SPECIES];
             massFractions(c, Y1);
             isannKeep(Y0, T0, p, deltaT, info.Z, Y1, T, reason);
@@ -722,7 +754,7 @@ void Foam::userChemStep<ChemistryModel>::solveCell
             {
                 if (info.flags & (1u << b)) nFlag_[b]++;
             }
-            ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
+            diSolve(c, T, p, deltaT, subDeltaT);
             if (reportCalls_ > 0 && nCalls_ >= reportCalls_)
             {
                 report();

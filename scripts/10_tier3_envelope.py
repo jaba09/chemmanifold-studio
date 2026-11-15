@@ -21,7 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from chemmanifold.chemistry import make_gas
+from chemmanifold import rollout as _rollout
+from chemmanifold.chemistry import make_gas, state_map
 from chemmanifold.flame import flame_pressure, make_initializer
 from chemmanifold.io import base_parser, load_config, save_json, stage_dir
 from chemmanifold.loading import load_surrogate
@@ -34,6 +35,7 @@ def main(cfg, arch):
     r = cfg["evaluation"]["rollout"]
     model, _, _ = load_surrogate(cfg, arch)
     gas = make_gas(cfg)
+    _rollout.STATE_MAP = state_map(cfg, gas)   # references on the network's state species
     dt = r["stride"] * cfg["autoignition"]["dt_base"]
     n = r["n_steps"]
     t = np.arange(n + 1) * dt

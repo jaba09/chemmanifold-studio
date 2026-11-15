@@ -97,3 +97,26 @@ accepted), then six accepted networks (v1 at 11.2 ms ... v6 at 36.2 ms) out of 1
 hot cells with the network. 7.9 s/step in the DI phase, 4.2 s/step with the network (2 ranks).
 The network is adapted to this flame: it is not an a priori model. Full report (Spanish):
 `/mnt/project-files/chemmanifold/isann/INFORME-ISANN.md`.
+
+## ARC_GRI30_NOx22 (22 species, prepared 2026-11-15)
+
+ISANN on the ARC case (server/sim1/arc_case.sh: 22 transported species, no reaction list), with the
+ARC kernel as the DI chemistry instead of GA18:
+
+- **Parent** `configs/ch4_arc22.yaml`: the ood7 exploration on the 43-species skeletal GRI
+  (`mechanisms/arc_gri30_nox22/gri30_skel43.yaml`), network state = the 22 ARC species + T
+  (`chemistry.state_species`; `chemmanifold/chemistry.py` StateMap: QSS radicals dropped, mass
+  renormalised, C/H/O/N restored on CO2/H2O/O2/N2 as `arc_project` does, h_in/T_out recomputed in the
+  22-species thermo). Run by `server/sim1/isanngri_parent.sh` (unit `sim1-isanngri-parent`) into
+  `/opt/ofb/isann/parent_arc22`. Its labels are skel43 chemistry; the online pairs are the ARC's.
+- **Library** `openfoam/userChemStepArc` (libuserChemStepArc): userChemStep built with
+  `-DUSERCHEMSTEP_ARC`, so every DI call (DI phase, OOD and untrusted cells, shadow check) goes to
+  the ARC kernel (`../userChemStep/arcDI.H`, same algorithm as arcChemStep) instead of
+  `ode<ChemistryModel>::solve`. libuserChemStep (GA18) is unchanged; a case loads one of the two.
+- **Daemon**: with a `state_species` parent its Cantera references (relabel_dt, rollout segments,
+  gate rollouts) lift the 22-species state into skel43 (QSS radicals at 0) and project back; the
+  parent's replay pairs and segments are projected like stage 5 does.
+- **Run**: `ISANN_ARC=1 BASE=/opt/ofb/runs/arc22/v2/base_flame SOLVER=rhoReactingBuoyantLeFoam
+  bash server/run_isann.sh isann_arc22 /opt/ofb/isann/parent_arc22 8 openfoam/isann/isann_arc22.yaml`
+  (setup_isann.sh then sets `libs (userChemStepArc)`, copies the base's arcChemStepCoeffs into
+  `userChemStepCoeffs/arc` and adds an unused odeCoeffs for the ode base class).

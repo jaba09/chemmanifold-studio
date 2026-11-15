@@ -1,0 +1,7 @@
+src/makeUserChemStep.C
+src/chemmanifold_core.c
+src/chemmanifold_ensemble.c
+src/arc_gri30_nox22.c
+src/arc_kernel_original.C
+
+LIB = $(FOAM_USER_LIBBIN)/libuserChemStepArc

@@ -11,7 +11,7 @@ Writes 08_fluent/<arch>/chemmanifold_model.txt, chemmanifold_tests.txt, export_r
 
 import numpy as np
 
-from chemmanifold.chemistry import make_gas
+from chemmanifold.chemistry import make_state_gas
 from chemmanifold.fluent import advance, build_ood_tables, ood, write_model_file, write_test_vectors
 from chemmanifold.io import base_parser, load_config, load_npz, save_json, stage_dir
 from chemmanifold.loading import latent_dim, load_surrogate, model_dir_name
@@ -39,7 +39,7 @@ def main(cfg, arch, n_landmarks, quantile, tag=None):
         from chemmanifold.ensemble import subset_dataset
         ds, keep, _ = subset_dataset(cfg, ds, scalers["species"], cfg["training"]["subset"])
         print(f"  expert subset: OOD tables and test vectors from {int(keep.sum())} of {len(keep)} pairs")
-    gas = make_gas(cfg)
+    gas = make_state_gas(cfg)
     dt_range = (float(ds["dt"].min()), float(ds["dt"].max()))
     tables = build_ood_tables(gas, cfg, scalers, ds, vq_K=int(cfg["manifold"]["n_clusters"]),
                               vq_d=latent_dim(cfg), n_landmarks=n_landmarks, quantile=quantile,

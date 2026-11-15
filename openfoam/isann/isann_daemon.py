@@ -42,6 +42,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(REPO))
+from chemmanifold.chemistry import StateMap  # noqa: E402
 from isann_lib import (Archive, enthalpy, features, landmark_threshold, one_step_errors, pairs_arrays,  # noqa: E402
                        radius_dedup, read_run_pairs, read_status, save_json)
 
@@ -74,7 +75,14 @@ class Daemon:
         self.r = float(self.cfg["dedup"]["radius"]) * landmark_threshold(p["model_file"])
         self.archive = Archive(self.dir / "archive.npz")
         import cantera as ct
-        self.gas = ct.Solution(str(REPO / self.parent_cfg["chemistry"]["mechanism"]))
+        kin = ct.Solution(str(REPO / self.parent_cfg["chemistry"]["mechanism"]))
+        # chemistry.state_species (e.g. the 22 ARC_GRI30_NOx22 species over the 43-species skeletal
+        # GRI): the run's pairs are on the state species; Cantera references are lifted into the full
+        # mechanism and projected back, and enthalpies use the state species' thermo
+        names = self.parent_cfg["chemistry"].get("state_species")
+        self.smap = StateMap(kin, names) if names else None
+        self.gas = self.smap.sgas if self.smap else kin
+        self.kin = kin
         self.rng = np.random.default_rng(int(self.cfg.get("seed", 0)))
         dt = np.load(self.parent_dir / "04_prep" / "dataset.npz")["dt"]   # the trained dt range (stage 12)
         self.dt_range = (float(dt.min()), float(dt.max()))
@@ -163,6 +171,8 @@ class Daemon:
         c = self.cfg["training"]
         n_rep = int(np.clip(c["replay_factor"] * n_on, c["replay_min"], c["replay_max"]))
         prior = [np.load(p) for p in sorted((self.parent_dir / "03_samples").glob("pairs_*.npz"))]
+        if self.smap:   # a priori pairs are on the full mechanism: onto the state species, as stage 5
+            prior = [self.smap.project_pairs(dict(q), report=False) for q in prior]
         keys = list(online)
         allp = {key: np.concatenate([q[key] for q in prior]) for key in keys}
         sel = self.rng.choice(len(allp["dt"]), size=min(n_rep, len(allp["dt"])), replace=False)
@@ -188,6 +198,23 @@ class Daemon:
             yaml.safe_dump(cfg, f, sort_keys=False)
         return rd, n_on, len(sel)
 
+    def reference(self, Y, T, P, times):
+        """Cantera (the parent's mechanism) from one network state to each of `times` [s]: (Y[n], T[n]).
+        Raises ct.CanteraError on failure."""
+        if self.smap:
+            return self.smap.advance(Y, T, P, times)
+        import cantera as ct
+        self.kin.TPY = T, P, Y
+        r = ct.IdealGasConstPressureReactor(self.kin, clone=True)
+        net = ct.ReactorNet([r])
+        net.rtol, net.atol = 1e-8, 1e-14
+        Ys, Ts = [], []
+        for t in times:
+            net.advance(t)
+            Ys.append(r.thermo.Y)
+            Ts.append(r.T)
+        return np.array(Ys), np.array(Ts)
+
     def relabel_dt(self, online):
         """Pairs whose dt is above the trained dt range (local time stepping gives each cell its own
         dt, up to ~10x the range) are re-integrated with Cantera (GA18) over the first sub-step that
@@ -199,12 +226,8 @@ class Daemon:
         for i in long_:
             dts = online["dt"][i] / np.ceil(online["dt"][i] / dt_max * (1 - 1e-12))
             try:
-                self.gas.TPY = online["T_in"][i], online["P_in"][i], online["Y_in"][i]
-                r = ct.IdealGasConstPressureReactor(self.gas, clone=True)
-                net = ct.ReactorNet([r])
-                net.rtol, net.atol = 1e-8, 1e-14
-                net.advance(dts)
-                online["Y_out"][i], online["T_out"][i], online["dt"][i] = r.thermo.Y, r.T, dts
+                Yo, To = self.reference(online["Y_in"][i], online["T_in"][i], online["P_in"][i], [dts])
+                online["Y_out"][i], online["T_out"][i], online["dt"][i] = Yo[0], To[0], dts
             except ct.CanteraError:
                 online["dt"][i] = np.nan
         ok = np.isfinite(online["dt"])
@@ -219,7 +242,9 @@ class Daemon:
         not teach the network to stay stable along that chain (round 1 drifted -60 to -110 K in 2 ms
         in cooled lean gas while its one-step error was 18x lower than the parent's)."""
         import cantera as ct
-        parent = np.load(self.parent_dir / "03_samples" / "segments.npz")
+        parent = dict(np.load(self.parent_dir / "03_samples" / "segments.npz"))
+        if self.smap:
+            parent = self.smap.project_segments(parent)
         K = parent["Y"].shape[1] - 1
         n = min(int(c.get("online_segments", 4000)), len(online["dt"]))
         sel = self.rng.choice(len(online["dt"]), size=n, replace=False)
@@ -227,14 +252,9 @@ class Daemon:
         ok = np.ones(n, bool)
         for j, i in enumerate(sel):
             try:
-                self.gas.TPY = online["T_in"][i], online["P_in"][i], online["Y_in"][i]
-                r = ct.IdealGasConstPressureReactor(self.gas, clone=True)
-                net = ct.ReactorNet([r])
-                net.rtol, net.atol = 1e-8, 1e-14
-                Ys[j, 0], Ts[j, 0] = r.thermo.Y, r.T
-                for k in range(1, K + 1):
-                    net.advance(k * online["dt"][i])
-                    Ys[j, k], Ts[j, k] = r.thermo.Y, r.T
+                Ys[j, 0], Ts[j, 0] = online["Y_in"][i], online["T_in"][i]
+                Ys[j, 1:], Ts[j, 1:] = self.reference(online["Y_in"][i], online["T_in"][i], online["P_in"][i],
+                                                      [k * online["dt"][i] for k in range(1, K + 1)])
             except ct.CanteraError:
                 ok[j] = False
         seg = dict(Y=np.concatenate([parent["Y"], Ys[ok]]), T=np.concatenate([parent["T"], Ts[ok]]),
@@ -309,12 +329,10 @@ class Daemon:
         import cantera as ct
         ref_T = np.empty(n)
         for i in range(n):
-            self.gas.TPY = T[i], P[i], Y[i]
-            r = ct.IdealGasConstPressureReactor(self.gas, clone=True)
-            net = ct.ReactorNet([r])
-            net.rtol, net.atol = 1e-8, 1e-14
-            net.advance(g["roll_steps"] * dt[i])
-            ref_T[i] = r.T
+            try:
+                ref_T[i] = self.reference(Y[i], T[i], P[i], [g["roll_steps"] * dt[i]])[1][0]
+            except ct.CanteraError:
+                ref_T[i] = np.nan
         for _ in range(int(g["roll_steps"])):
             Y, T, *_ = advance(model, Y, T, P, dt, *dt_range)
         e = np.abs(T - ref_T)

@@ -58,6 +58,7 @@ import pandas as pd
 import torch
 import yaml
 
+from chemmanifold.chemistry import state_map
 from chemmanifold.io import base_parser, load_config, load_npz, save_json, stage_dir
 from chemmanifold.loading import latent_dim, load_prep, model_dir_name
 from chemmanifold.models import build_surrogate, resolve_device
@@ -228,6 +229,9 @@ def main(cfg, arch, seed=None, tag=None, resume=False):
     seg = None
     if rl and rl.get("weight", 0) > 0:
         seg_np = load_npz(stage_dir(cfg, "samples") / "segments.npz")
+        sm = state_map(cfg)
+        if sm:      # chemistry.state_species: segments onto the network's state species, as stage 5 does the pairs
+            seg_np = sm.project_segments(seg_np)
         if gate_tab is not None:
             _, c0 = gate_vars(gate_tab, seg_np["Y"][:, 0])
             ks = box_weight(seg_np["T"][:, 0], c0, tc["subset"]) > 0

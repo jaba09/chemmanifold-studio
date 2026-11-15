@@ -101,6 +101,9 @@ SourceFiles
 #include "chemmanifold_ensemble.h"
 #include "isannStore.H"
 #include <memory>
+#ifdef USERCHEMSTEP_ARC
+#include "arcDI.H"       // libuserChemStepArc: DI with the ARC_GRI30_NOx22 kernel
+#endif
 
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
@@ -246,6 +249,14 @@ class userChemStep
 
             //- Mass fractions in model order from concentrations
             void massFractions(const scalarField& c, double* Y) const;
+
+        //- Direct integration of one cell (DI phase, OOD/untrusted cells, shadow check): the
+        //  case's reactions (GA18) with OpenFOAM's ODE solver, or, in libuserChemStepArc, the
+        //  ARC_GRI30_NOx22 kernel (arcDI.H; the case then has 22 species and no reactions)
+        void diSolve(scalarField& c, scalar& T, scalar& p, scalar& deltaT, scalar& subDeltaT) const;
+#ifdef USERCHEMSTEP_ARC
+        std::unique_ptr<arcDI> arc_;
+#endif
 
         //- Run the shadow check on this cell if its bin still has room
         void shadow

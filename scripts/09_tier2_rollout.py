@@ -10,7 +10,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from chemmanifold.chemistry import make_gas
+from chemmanifold import rollout as _rollout
+from chemmanifold.chemistry import make_gas, state_map
 from chemmanifold.flame import case_label, make_initializer
 from chemmanifold.io import base_parser, load_config, save_json, save_npz, stage_dir
 from chemmanifold.loading import load_surrogate
@@ -22,6 +23,7 @@ def main(cfg, arch):
     r = cfg["evaluation"]["rollout"]
     model, scalers, _ = load_surrogate(cfg, arch)
     gas = make_gas(cfg)
+    _rollout.STATE_MAP = state_map(cfg, gas)   # references on the network's state species
     dt = r["stride"] * cfg["autoignition"]["dt_base"]
     case = eval_case(cfg, r)
     P0 = case["P0"]

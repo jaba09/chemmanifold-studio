@@ -1,0 +1,22 @@
+# ISANN parent for ARC_GRI30_NOx22 (server/sim1/isanngri_parent.sh). Prepared, NOT started.
+# Install and start (user unit; the script is resumable, so restarting it continues where it stopped):
+#   cp server/sim1/sim1-isanngri-parent.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user start sim1-isanngri-parent
+#   tail -f /opt/ofb/runs/isanngri/parent.log
+# Nice 19 + idle scheduling: it only gets CPU the other sim1 runs leave free (none while they saturate
+# the 16 cores), so it cannot slow them down.
+[Unit]
+Description=sim1 ISANN parent ARC_GRI30_NOx22 (configs/ch4_arc22.yaml, stages 0-12)
+# a crash or a killed process restarts it (resumable); a stage that keeps failing stops after 4 tries a day
+StartLimitIntervalSec=1d
+StartLimitBurst=4
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ofb/isann-gri-src
+ExecStart=/bin/bash -lc /opt/ofb/isann-gri-src/server/sim1/isanngri_parent.sh
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+Restart=on-failure
+RestartSec=300

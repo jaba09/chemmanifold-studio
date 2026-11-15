@@ -24,7 +24,12 @@ def grid_cases(cfg):
     return keys, [eval_case(cfg, dict(zip(keys, vals))) for vals in itertools.product(*g.values())]
 
 
-def cantera_trajectory(gas, init, case, dt, n_steps):
+# chemistry.StateMap of the config (state_species), set by the evaluation stages: Cantera references
+# are then projected onto the network's state species (and h0 is that of the projected start).
+STATE_MAP = None
+
+
+def cantera_trajectory(gas, init, case, dt, n_steps, smap=None):
     init(case)
     Y, T = [gas.Y.copy()], [gas.T]
     h0 = gas.enthalpy_mass
@@ -33,7 +38,12 @@ def cantera_trajectory(gas, init, case, dt, n_steps):
         net.advance(k * dt)
         Y.append(gas.Y.copy())
         T.append(gas.T)
-    return np.array(Y), np.array(T), h0
+    Y, T = np.array(Y), np.array(T)
+    smap = smap or STATE_MAP
+    if smap is not None:
+        Y = smap.project(Y)
+        h0 = float(smap.enthalpy(Y[:1], T[:1], np.array([gas.P]))[0])
+    return Y, T, h0
 
 
 @torch.no_grad()

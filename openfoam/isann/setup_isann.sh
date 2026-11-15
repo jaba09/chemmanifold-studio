@@ -5,6 +5,9 @@
 #   ./setup_isann.sh <base case> <new run dir> <parent model dir with chemmanifold_model.txt> [nProcs]
 # then: cd <run dir> && mpirun -np <nProcs> rhoReactingBuoyantFoam -parallel > log.run 2>&1 &
 #       python3 isann_daemon.py --run <run dir> --config isann.yaml > <run dir>/isann/daemon.out 2>&1 &
+# ISANN_ARC=1: the base is an ARC_GRI30_NOx22 case (server/sim1/arc_case.sh: 22 species, no reactions,
+# arcChemStep) and the DI is the ARC kernel through libuserChemStepArc (openfoam/userChemStepArc), with
+# the base's arcChemStepCoeffs settings; the parent must be a 22-species model (configs/ch4_arc22.yaml).
 set -e
 BASE=${1:?base case}; RUN=${2:?run dir}; MODEL=${3:?parent model dir}; NP=${4:-2}
 [ -e "$RUN" ] && { echo "$RUN exists"; exit 1; }
@@ -13,7 +16,20 @@ cp "$MODEL/chemmanifold_model.txt" "$RUN/"
 [ -f "$MODEL/chemmanifold_tests.txt" ] && cp "$MODEL/chemmanifold_tests.txt" "$RUN/"
 cd "$RUN"
 mkdir -p isann
-grep -q userChemStep system/controlDict || sed -i 's/^application .*/&\n\nlibs                (userChemStep);/' system/controlDict
+ARCDICT=""
+if [ "${ISANN_ARC:-0}" = 1 ]; then
+    # one library only: libuserChemStepArc registers the solver name userChemStep too
+    foamDictionary -entry libs -set "(userChemStepArc)" system/controlDict > /dev/null
+    get() { foamDictionary -entry arcChemStepCoeffs/$1 -value constant/chemistryProperties 2>/dev/null || echo "$2"; }
+    ARCDICT="arc { kernel $(get kernel original); solver $(get solver Rosenbrock34); absTol $(get absTol 1e-9); relTol $(get relTol 1e-4); project $(get project true); }"
+    # the base class (ode) needs odeCoeffs; with no reactions in the case it is never used
+    foamDictionary -entry odeCoeffs -value constant/chemistryProperties > /dev/null 2>&1 || cat >> constant/chemistryProperties <<'EOD'
+
+odeCoeffs { solver seulex; absTol 1e-12; relTol 1e-4; }   // unused: DI is the ARC kernel (userChemStepCoeffs/arc)
+EOD
+else
+    grep -q userChemStep system/controlDict || sed -i 's/^application .*/&\n\nlibs                (userChemStep);/' system/controlDict
+fi
 foamDictionary -entry chemistryType/solver -set userChemStep constant/chemistryProperties > /dev/null
 TESTS=""
 [ -f chemmanifold_tests.txt ] && TESTS='tests "chemmanifold_tests.txt";'
@@ -29,6 +45,7 @@ userChemStepCoeffs
     checkOOD     true;
     oodFallback  false;
     reportCalls  0;
+    $ARCDICT
     shadowEvery  10;         // every 10 steps a few cells per (T, Z, inside/OOD) bin are also run on GA18:
     shadowPerBin 2;          //  shadowDI.csv, a training pair, and the trust of the network in that bin
     isann

@@ -5,6 +5,9 @@
 #
 #   bash server/run_isann.sh <run name> [parent model dir] [nProcs] [config yaml]
 #   bash server/run_isann.sh isann1                       # parent /opt/ofb/isann/parent_ood7, 2 ranks
+#   ISANN_ARC=1 BASE=/opt/ofb/runs/arc22/v2/base_flame SOLVER=rhoReactingBuoyantLeFoam \
+#     bash server/run_isann.sh isann_arc22 /opt/ofb/isann/parent_arc22 8 openfoam/isann/isann_arc22.yaml
+#       ARC_GRI30_NOx22: 22-species ARC case, DI on the ARC kernel (libuserChemStepArc), 22-species parent
 #
 # The run lives in /opt/ofb/run/<run name>. Stop it cleanly with Ctrl+C (CFD) or
 #   touch /opt/ofb/run/<run name>/isann/STOP      (daemon)
@@ -12,13 +15,14 @@ set -e
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 NAME=${1:?run name}; PARENT=${2:-/opt/ofb/isann/parent_ood7}; NP=${3:-2}
 CONF=${4:-$REPO/openfoam/isann/isann.yaml}
+BASE=${BASE:-/opt/ofb/base/base}; SOLVER=${SOLVER:-rhoReactingBuoyantFoam}; export ISANN_ARC=${ISANN_ARC:-0}
 R=/opt/ofb/run/$NAME
 . /opt/ofb/ofenv.sh
 spain() { TZ=Europe/Madrid date '+%Y-%m-%d %H:%M %Z'; }
 
 if [ ! -d "$R" ]; then
     mkdir -p /opt/ofb/run
-    "$REPO/openfoam/isann/setup_isann.sh" /opt/ofb/base/base "$R" "$PARENT" "$NP"
+    "$REPO/openfoam/isann/setup_isann.sh" "$BASE" "$R" "$PARENT" "$NP"
     cp "$CONF" "$R/isann/isann.yaml"
     echo "[$(spain)] created $R (parent $PARENT, $NP ranks)" >> "$R/server.log"
 fi
@@ -33,7 +37,7 @@ if [ -f t_end ]; then echo "this run has already finished ($(cat t_end))"; exit 
 n=$(ls log.run* 2>/dev/null | wc -l)
 echo "[$(spain)] CFD leg $n started; progress: tail -f $R/log.run.$n" | tee -a server.log
 set +e
-mpirun -np "$NP" rhoReactingBuoyantFoam -parallel > log.run.$n 2>&1
+mpirun -np "$NP" "$SOLVER" -parallel > log.run.$n 2>&1
 if grep -q "^End" log.run.$n; then
     spain > t_end; touch isann/STOP
     echo "[$(spain)] finished" | tee -a server.log

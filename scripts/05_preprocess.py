@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from chemmanifold.boxcox import boxcox
-from chemmanifold.chemistry import make_gas, thermo_tables
+from chemmanifold.chemistry import make_state_gas, state_map, thermo_tables
 from chemmanifold.io import base_parser, load_config, load_json, load_npz, save_json, save_npz, stage_dir
 
 
@@ -35,7 +35,12 @@ def main(cfg):
         parts.append(load_npz(extra))
     for extra in sorted(samples.glob("pairs_committee*.npz")):  # stage 23 committee rounds (regime 21)
         parts.append(load_npz(extra))
+    sm = state_map(cfg)
+    if sm:      # chemistry.state_species: the network state is a subset of the mechanism's species
+        parts = [sm.project_pairs(p) for p in parts]    # (no-op on parts already projected)
     data = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
+    if sm:
+        print(f"  state: {len(sm.names)} of {sm.gas.n_species} mechanism species ({' '.join(sm.names)})")
     N = len(data["dt"])
 
     rng = np.random.default_rng(cfg["seed"] + 2)
@@ -74,7 +79,7 @@ def main(cfg):
         sigma_dYp = np.maximum((data["Y_out"] - data["Y_in"])[tr].std(0), pp.get("sigma_dYp_min", 1e-9))
         sigma_dTp = max(float((data["T_out"] - data["T_in"])[tr].std()), 1.0)
 
-    gas = make_gas(cfg)
+    gas = make_state_gas(cfg)
     thermo = thermo_tables(gas)
     scalers = dict(
         boxcox_lambda=lam, mu_y=mu_y, sigma_y=sigma_y, ctx_mu=ctx_mu, ctx_sigma=ctx_sigma,
