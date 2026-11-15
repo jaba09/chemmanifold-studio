@@ -16,7 +16,7 @@ inline void Foam::arcODE::derivatives
     double yy[ARC_N_ODE + 1], dd[ARC_N_ODE + 1];
     for (int k = 0; k <= ARC_N_ODE; k++) yy[k] = y[k];
     if (yy[ARC_N_ODE] < 200) yy[ARC_N_ODE] = 200;
-    arc_rhs(p_, yy, dd);
+    rhs_(p_, yy, dd);
     for (int k = 0; k <= ARC_N_ODE; k++) dydx[k] = dd[k];
 }
 
@@ -33,7 +33,7 @@ inline void Foam::arcODE::jacobian
     double yy[ARC_N_ODE + 1], f0[ARC_N_ODE + 1], f1[ARC_N_ODE + 1];
     for (int k = 0; k < n; k++) yy[k] = y[k];
     if (yy[ARC_N_ODE] < 200) yy[ARC_N_ODE] = 200;
-    arc_rhs(p_, yy, f0);
+    rhs_(p_, yy, f0);
     for (label j = 0; j < n; j++)
     {
         const double y0 = yy[j];
@@ -41,7 +41,7 @@ inline void Foam::arcODE::jacobian
             ? 1e-6*max(y0, 300.0)
             : 1e-7*max(fabs(y0), 1e-9);
         yy[j] = y0 + h;
-        arc_rhs(p_, yy, f1);
+        rhs_(p_, yy, f1);
         yy[j] = y0;
         for (label i = 0; i < n; i++) dfdy(i, j) = (f1[i] - f0[i])/h;
     }
@@ -68,6 +68,12 @@ Foam::arcChemStep<ChemistryModel>::arcChemStep
     reportCalls_(coeffsDict_.getOrDefault<label>("reportCalls", 0)),
     nCalls_(0), nAdvanced_(0), maxElemFix_(0)
 {
+    const word kernel(coeffsDict_.getOrDefault<word>("kernel", "original"));
+    if (kernel == "rebuilt") ode_.rhs_ = arc_rhs;
+    else if (kernel != "original")
+    {
+        FatalErrorInFunction << "kernel " << kernel << ": original or rebuilt" << exit(FatalError);
+    }
     dictionary odeDict(coeffsDict_);
     if (!odeDict.found("solver")) odeDict.add("solver", "seulex");
     if (!odeDict.found("absTol")) odeDict.add("absTol", 1e-12);
@@ -102,7 +108,7 @@ Foam::arcChemStep<ChemistryModel>::arcChemStep
         }
     }
     Info<< "arcChemStep: ARC_GRI30_NOx22, " << ARC_N_ODE << " ODE + "
-        << ARC_N_QSS << " QSS species, ODE solver "
+        << ARC_N_QSS << " QSS species, kernel " << kernel << ", ODE solver "
         << odeDict.get<word>("solver") << ", T_freeze " << Tfreeze_
         << ", element projection " << project_ << endl;
 }

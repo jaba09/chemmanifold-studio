@@ -1,3 +1,4 @@
 arcBench.C
 arc_gri30_nox22.c
+arc_kernel_original.C
 EXE = $(FOAM_USER_APPBIN)/arcBench

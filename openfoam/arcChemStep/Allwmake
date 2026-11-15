@@ -4,4 +4,5 @@
 cd "${0%/*}" || exit 1
 M=../../mechanisms/arc_gri30_nox22
 cp $M/arc_gri30_nox22.c $M/arc_gri30_nox22.h $M/arc_gri30_nox22_data.h .
+cp $M/arc_kernel_original.cpp arc_kernel_original.C; mkdir -p original; cp $M/original/arc_gri30_nox22.hpp original/
 wmake libso

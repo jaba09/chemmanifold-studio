@@ -48,6 +48,9 @@ void arc_rhs_many(double p, int n, const double* y, double* dydt);
 void arc_rhs_skeletal(double p, const double* y, double* dydt);
 void arc_rhs_skeletal_many(double p, int n, const double* y, double* dydt);
 
+/* arc_rhs on the original unrolled kernel (arc_kernel_original.cpp, C++17). */
+void arc_rhs_original(double p, const double* y, double* dydt);
+
 #ifdef __cplusplus
 }
 #endif

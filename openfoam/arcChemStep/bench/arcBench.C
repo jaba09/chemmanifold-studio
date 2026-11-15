@@ -9,28 +9,30 @@
 using namespace Foam;
 static long nRhs = 0, nJac = 0;
 static double hFloor = 1e-9, hRel = 1e-7;
+static void (*rhs)(double, const double*, double*) = arc_rhs_original;
 class B : public ODESystem {
 public:
     mutable scalar p_ = 1e5;
     label nEqns() const { return ARC_N_ODE + 1; }
     void derivatives(const scalar, const scalarField& y, scalarField& d) const {
         double yy[23], dd[23]; for (int k = 0; k < 23; k++) yy[k] = y[k]; if (yy[22] < 200) yy[22] = 200;
-        arc_rhs(p_, yy, dd); nRhs++; for (int k = 0; k < 23; k++) d[k] = dd[k]; }
+        rhs(p_, yy, dd); nRhs++; for (int k = 0; k < 23; k++) d[k] = dd[k]; }
     void jacobian(const scalar, const scalarField& y, scalarField& dfdx, scalarSquareMatrix& J) const {
         nJac++; double yy[23], f0[23], f1[23]; for (int k = 0; k < 23; k++) yy[k] = y[k]; if (yy[22] < 200) yy[22] = 200;
-        arc_rhs(p_, yy, f0); nRhs++;
+        rhs(p_, yy, f0); nRhs++;
         for (int j = 0; j < 23; j++) { double y0 = yy[j];
             double h = (j == 22) ? 1e-6*max(y0, 300.0) : hRel*max(fabs(y0), hFloor);
-            yy[j] = y0 + h; arc_rhs(p_, yy, f1); nRhs++; yy[j] = y0;
+            yy[j] = y0 + h; rhs(p_, yy, f1); nRhs++; yy[j] = y0;
             for (int i = 0; i < 23; i++) J(i, j) = (f1[i] - f0[i])/h; }
         for (int i = 0; i < 23; i++) dfdx[i] = 0; }
 };
 int main(int argc, char* argv[]) {
     argList::noParallel(); argList::addArgument("states"); argList::addOption("relTol","1e-5");
     argList::addOption("absTol","1e-12"); argList::addOption("hFloor","1e-9"); argList::addOption("dt","2e-5");
-    argList::addOption("solver","seulex"); argList::addOption("out","file");
+    argList::addOption("solver","seulex"); argList::addOption("out","file"); argList::addOption("kernel","original|rebuilt");
     argList args(argc, argv, false, false, false);
     hFloor = args.getOrDefault<scalar>("hFloor", 1e-9);
+    if (args.getOrDefault<word>("kernel", "original") == "rebuilt") rhs = arc_rhs;
     scalar dt = args.getOrDefault<scalar>("dt", 2e-5);
     dictionary d; d.add("solver", args.getOrDefault<word>("solver","seulex"));
     d.add("absTol", args.getOrDefault<scalar>("absTol", 1e-12)); d.add("relTol", args.getOrDefault<scalar>("relTol", 1e-5));

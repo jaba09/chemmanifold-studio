@@ -27,6 +27,8 @@ cat >> constant/chemistryProperties <<'X'
 // 21 radicals from the linearized QSSA, element projection after each step
 arcChemStepCoeffs
 {
+    kernel          original;       // mechanisms/arc_gri30_nox22/original (unrolled, 3x faster per call than
+                                    // the rebuilt tables; rates agree to 2e-8, states after a step to 4e-5)
     // GA18 DI used seulex 1e-10 / 1e-5 (on concentrations). For the ARC rhs (15-26 us, FD Jacobian of 24 calls)
     // seulex 1e-5/1e-12 costs 10.5 ms per hot cell and step; Rosenbrock34 1e-4/1e-9 about 2 ms (222 instead of
     // 873 rhs calls), with per-step errors against seulex 1e-9/1e-16 of at most 1.2e-4 (OH), 6e-5 (HCN, N2O),

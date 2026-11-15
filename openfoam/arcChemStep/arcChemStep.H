@@ -23,6 +23,7 @@ Usage
         chemistryType { solver arcChemStep; method standard; }
         arcChemStepCoeffs
         {
+            kernel      original; // original (unrolled header, 3x faster) | rebuilt (same rates to 2e-8)
             solver      seulex;   // any OpenFOAM ODE solver
             absTol      1e-12;
             relTol      1e-4;
@@ -58,7 +59,10 @@ public:
 
     mutable scalar p_;
 
-    arcODE() : p_(1e5) {}
+    //- right-hand side: arc_rhs_original (default, unrolled kernel) or arc_rhs (table-driven rebuild)
+    void (*rhs_)(double, const double*, double*);
+
+    arcODE() : p_(1e5), rhs_(arc_rhs_original) {}
 
     virtual label nEqns() const { return ARC_N_ODE + 1; }
 

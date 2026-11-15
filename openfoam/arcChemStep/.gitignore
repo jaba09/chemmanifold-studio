@@ -3,3 +3,5 @@ arc_gri30_nox22.h
 arc_gri30_nox22_data.h
 lnInclude
 Make/linux*
+arc_kernel_original.C
+original
