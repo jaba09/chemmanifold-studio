@@ -3,8 +3,11 @@
 the GA18 burner case: Le_k = kappa/(rho cp D_k,mix) in a Cantera counterflow CH4/air
 flame (mixture-averaged, 1 atm, strain ~35 1/s), weighted by |dY_k/dx| where T > 600 K.
 Mechanism: GRI-Mech 3.0 (transport of the ODE species)."""
+import sys
 import numpy as np, cantera as ct
 ODE = "H2 H O O2 OH H2O HO2 H2O2 CH4 CH3 CO CO2 CH2O CH3OH C2H2 C2H4 C2H6 N2 NO NO2 N2O HCN".split()
+if "--all" in sys.argv:  # every GRI-Mech 3.0 species (for the OpenFOAM GRI case)
+    ODE = [s for s in ct.Solution("gri30.yaml").species_names if s != "AR"]
 g = ct.Solution("gri30.yaml"); g.transport_model = "mixture-averaged"
 f = ct.CounterflowDiffusionFlame(g, width=0.03)
 f.P = ct.one_atm
@@ -28,5 +31,5 @@ for k in ODE:
         D = g.mix_diff_coeffs[i]
         lek.append(g.thermal_conductivity / (g.density * g.cp_mass * D))
     dY = np.abs(np.gradient(f.Y[i], x)); m = T > 600
-    Le[k] = np.sum(np.array(lek)[m] * dY[m]) / np.sum(dY[m])
+    Le[k] = np.sum(np.array(lek)[m] * dY[m]) / max(np.sum(dY[m]), 1e-300) if np.sum(dY[m]) > 0 else np.mean(np.array(lek)[m])
     print("    %-7s %.3f;" % (k, Le[k]))
