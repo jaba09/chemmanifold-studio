@@ -11,6 +11,22 @@ constant-pressure ODE of Y[22] + T, element projection onto CO2/H2O/O2/N2 after 
   GA18-only species CH2, CH2(S), HCO, CH3O (QSS in the ARC) dropped; the 8 new species start at 0 (Ydefault).
 - ignition leg: DI ARC 0-25 ms from the lean start (protocol v2 ignition phase), vs A2r.
 
+## Benchmark: Fluent DI with full GRI-Mech 3.0
+
+Javier supplied a Fluent DI solution of the same corrected burner with full GRI-Mech 3.0 (53 species). It is the main
+benchmark for this run. Its `.cas.h5` is on sim1 (`~/inputs/sim1-extra/fluent-gri/`); the mesh is identical to the GA18
+case (all 38 mesh datasets equal), species order h2 ... c3h8 ch2cho ch3cho n2 (53). The `.dat.h5` is in the cloud thread,
+so **the cell-by-cell GRI comparison is done in the cloud**, from the per-cell files in `fields/` (row i = OpenFOAM cell
+i = Fluent cell i+1; float32, `np.savez_compressed`; `server/sim1/arc_fields.py`):
+
+- `arc22_mean_0.15-0.2.npz`: time mean of the 0.15-0.2 s snapshots: T, Ux, Ur, Y of the 22 ARC species, x, r, V
+- `arc22_t0.2.npz`: the same at 0.2 s
+- `a1r_mean_0.1-0.1875.npz`: A1r (GA18 DI) mean 0.1-0.1875 s, T, Ux, Ur, 18 GA18 Y (pushed 15 Nov)
+- provisional, as soon as 0.15 s exists: `arc22_t0.15.npz`, `arc22_mean_0.125-0.15.npz`
+
+On sim1, `arc_meanfield.py` also takes the GRI solution (`--fluent Fluent_GRI <dat> <cas>`) whenever its `.dat.h5` is
+placed next to the `.cas.h5`.
+
 ## Mechanism file
 
 An ARC_GRI30_NOx22 mechanism already existed on sim1: `~/arc_gri30/arc_gri30_nox22.hpp` (Javier's deliverable:
