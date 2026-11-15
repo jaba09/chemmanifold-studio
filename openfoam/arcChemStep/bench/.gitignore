@@ -5,3 +5,4 @@ lnInclude
 Make/linux*
 arc_kernel_original.C
 original
+log.wmake
