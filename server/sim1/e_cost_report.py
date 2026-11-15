@@ -54,7 +54,7 @@ L = ["# Phase E: chemistry cost at matched accuracy (sim1, 4 ranks per case)\n",
 for c in order:
     if c not in rows: continue
     r = rows[c]
-    L.append(f"| {r['label']} | {f(r['s_step'])} | {f(r.get('chem_s_step'))} | {r.get('cells', '-') if c != 'flow' else '-'} | "
+    L.append(f"| {r['label']} | {f(r['s_step'])} | {f(r.get('chem_s_step'))} | {(f"{int(r['cells']):,}" if c != "flow" else "-")} | "
              f"{f(r.get('us_per_cell'), '{:.0f}')} | {f(r.get('chem_speedup'), '{:.1f}x')} | {f(r.get('absdT_hot_K'), '{:.2f}')} | "
              f"{f(100 * r['L1_oh'] if 'L1_oh' in r else None, '{:.1f} %')} | {f(100 * r['L1_co'] if 'L1_co' in r else None, '{:.1f} %')} | {f(r.get('V1500_ratio'), '{:.3f}')} |")
 open(f"{OUT}/cost.md", "w").write("\n".join(L) + "\n"); print("\n".join(L))
