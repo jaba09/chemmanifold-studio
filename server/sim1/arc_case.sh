@@ -28,10 +28,12 @@ cat >> constant/chemistryProperties <<'X'
 arcChemStepCoeffs
 {
     // GA18 DI used seulex 1e-10 / 1e-5 (on concentrations). For the ARC rhs (15-26 us, FD Jacobian of 24 calls)
-    // seulex 1e-5 costs 10.5 ms per hot cell and step; Rosenbrock34 1e-4 3.1 ms, with per-step errors against
-    // seulex 1e-9 below 1e-4 (OH), 1e-5 (NO, CO, HCN) and 0.01 K (400 hot A1r cells, results/sim1/ARC22)
+    // seulex 1e-5/1e-12 costs 10.5 ms per hot cell and step; Rosenbrock34 1e-4/1e-9 about 2 ms (222 instead of
+    // 873 rhs calls), with per-step errors against seulex 1e-9/1e-16 of at most 1.2e-4 (OH), 6e-5 (HCN, N2O),
+    // 1e-5 (NO, CO) and 0.01 K (400 hot A1r cells, openfoam/arcChemStep/bench). absTol is on Y: GA18's 1e-10
+    // kmol/m3 is about Y 1e-8 in the hot gas
     solver          Rosenbrock34;
-    absTol          1e-12;
+    absTol          1e-9;
     relTol          1e-4;
     T_freeze        0;
     project         true;
