@@ -18,11 +18,18 @@ step committee "$PY scripts/23_committee_sampling.py --config $CFG --round 1 --T
              ${DH}_seeds/s2/08_fluent/resnet_film/chemmanifold_model.txt"
 for s in 5 6; do step stage$s "$PY run_pipeline.py --config $CFG --from $s --to $s --arch resnet_film"; done
 if [ ! -f "$D/.c2_train" ]; then
-    log "training 3 repeats start"
-    ( OMP_NUM_THREADS=3 MKL_NUM_THREADS=3 $PY run_pipeline.py --config $CFG --from 7 --to 15 --arch resnet_film > $LOG/train_s0.log 2>&1; echo $? > $LOG/train_s0.rc ) &
-    ( OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 $PY -u scripts/train_seeds.py --config $CFG --seeds 1 2 --parallel 2 --threads 2 > $LOG/train_s12.log 2>&1; echo $? > $LOG/train_s12.rc ) &
+    # 07_train --resume saves the full training state every epoch (the tmux server crashed at 13:37 on 15 Nov and
+    # took 5 h of training without it); stages 8-15 after. Seed configs written by scripts/train_seeds.py.
+    log "training 3 repeats start (resumable)"
+    CS1=${D}_seeds/burner_openfoam_tix2c_s1.yaml; CS2=${D}_seeds/burner_openfoam_tix2c_s2.yaml
+    ( OMP_NUM_THREADS=3 $PY -u scripts/07_train.py --config $CFG --arch resnet_film --resume > $LOG/train_s0.log 2>&1; echo $? > $LOG/train_s0.rc ) &
+    ( OMP_NUM_THREADS=2 $PY -u scripts/07_train.py --config $CS1 --arch resnet_film --resume > $LOG/train_s1.log 2>&1; echo $? > $LOG/train_s1.rc ) &
+    ( OMP_NUM_THREADS=2 $PY -u scripts/07_train.py --config $CS2 --arch resnet_film --resume > $LOG/train_s2.log 2>&1; echo $? > $LOG/train_s2.rc ) &
     wait
-    log "training rc s0=$(cat $LOG/train_s0.rc) s1,s2=$(cat $LOG/train_s12.rc)"
+    log "training rc s0=$(cat $LOG/train_s0.rc) s1=$(cat $LOG/train_s1.rc) s2=$(cat $LOG/train_s2.rc)"
+    for c in $CFG $CS1 $CS2; do
+        OMP_NUM_THREADS=4 $PY run_pipeline.py --config $c --from 8 --to 15 --arch resnet_film >> $LOG/certify.log 2>&1 || log "stages 8-15 FAILED for $c"
+    done
     for m in $D/08_fluent/resnet_film ${D}_seeds/s1/08_fluent/resnet_film ${D}_seeds/s2/08_fluent/resnet_film; do
         [ -f $m/chemmanifold_model.txt ] || { log "missing export $m"; echo failed > $LOG/status; exit 1; }; done
     touch "$D/.c2_train"; log "training done"
