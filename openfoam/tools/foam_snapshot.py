@@ -82,6 +82,28 @@ def bilger(Y):
     return (beta(Y) - bo) / (bf - bo)
 
 
+def case_species(case):
+    """Species list of constant/reactions (foamChemistryFile), [] if absent."""
+    p = case / "constant" / "reactions"
+    if not p.exists():
+        return []
+    lines = p.read_text().split("\n")
+    i = next((k for k, l in enumerate(lines) if l.split()[:1] == ["species"]), None)
+    if i is None:
+        return []
+    out, inside = [], False
+    for l in lines[i:]:
+        t = l.strip()
+        if not inside:
+            if t.endswith("("):
+                inside = True
+            continue
+        if t.startswith(")"):
+            break
+        out += t.split()
+    return out
+
+
 def write_scalar(path, name, values):
     n = len(values)
     with open(path, "w") as f:
@@ -141,6 +163,9 @@ def export(case, pp, tname, out_csv):
     U = read_field(dst / "U", n)
     Y = {s: read_field(dst / s, n) if (dst / s).exists() else np.zeros(n) for s in ELEMENTS}
     extra = [s for s in EXTRA if (dst / s).exists()]
+    # any further species of the case (e.g. full GRI-Mech 3.0): columns after the ARC ones, Y only (not in Bilger Z)
+    more = [s for s in case_species(case) if s not in ELEMENTS and s not in EXTRA and (dst / s).exists()]
+    extra += more
     Y.update({s: read_field(dst / s, n) for s in extra})
     G = read_field(dst / "grad(U)", n) if (dst / "grad(U)").exists() else None
     Z = bilger(Y)
@@ -166,7 +191,7 @@ def export(case, pp, tname, out_csv):
     D = 2.2e-5 * (np.maximum(T, 200) / 300.0) ** 1.7
     cols["scalar-dissipation"] = 2 * D * (gZ ** 2).sum(1)
     for s in extra:
-        cols[s.lower()] = Y[s]
+        cols[s.lower().replace("(", "<").replace(")", ">")] = Y[s]
     names = list(cols)
     np.savetxt(out_csv, np.column_stack([cols[k] for k in names]), delimiter=",", header=",".join(names),
                comments="", fmt="%.8g")

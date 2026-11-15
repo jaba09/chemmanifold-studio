@@ -18,6 +18,9 @@ import pandas as pd
 
 GA18 = "h2 h o o2 oh h2o ho2 h2o2 ch2 ch2<s> ch3 ch4 co co2 hco ch2o ch3o n2".split()
 EXTRA = "ch3oh c2h2 c2h4 c2h6 no no2 n2o hcn".split()
+NON_SPECIES = {"cellnumber", "x-coordinate", "y-coordinate", "cell-volume", "temperature", "absolute-pressure",
+               "x-velocity", "radial-velocity", "velocity-magnitude", "strain-rate-mag", "mixture-fraction",
+               "scalar-dissipation"}
 ARC = "h2 h o o2 oh h2o ho2 h2o2 ch4 ch3 co co2 ch2o ch3oh c2h2 c2h4 c2h6 n2 no no2 n2o hcn".split()
 
 
@@ -33,8 +36,14 @@ def main():
     acc = None
     for t, p in S:
         df = pd.read_csv(p).sort_values("cellnumber")
-        has_extra = all(s in df for s in EXTRA)
-        sp = ARC if has_extra else GA18              # ARC run: its 22 species; GA18 run: the 18
+        known = set(GA18) | set(EXTRA)
+        others = [c for c in df.columns if c not in NON_SPECIES and c not in known]
+        if others:                                   # e.g. GRI-Mech 3.0: every species column of the table
+            sp = [c for c in df.columns if c not in NON_SPECIES]
+        elif all(s in df for s in EXTRA):
+            sp = ARC                                 # ARC run: its 22 species
+        else:
+            sp = GA18                                # GA18 run: the 18
         cols = ["temperature", "x-velocity", "radial-velocity"] + sp
         v = df[cols].to_numpy(np.float64)
         if acc is None:
