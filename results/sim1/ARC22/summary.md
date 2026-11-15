@@ -66,6 +66,22 @@ flow step agree to 4e-5 between the two kernels (ODE tolerance level).
 - Result: **11.2 s/step** on 8 ranks (machine load ~19 on 16 cores: C2 training, E2 on 4 ranks), first step 46 s.
   Early flame: Tmax 2121.4 / 2119.4 K at 0.1002 / 0.1004 s vs A1r 2123.0 / 2123.0 K.
 
+## GRI-Mech 3.0 in OpenFOAM (queued)
+
+Same burner, full GRI-Mech 3.0 (53 species, 325 reactions, the mechanism of the Fluent GRI DI case), standard
+OpenFOAM DI (ode/seulex 1e-10/1e-5), from the A1r state at 0.1 s (`server/sim1/gri_case.sh`); queue unit `sim1-gri`
+(`server/sim1/gri_queue.sh`, started by Javier 15 Nov 20:33 CET): ARC flame leg -> GRI flame leg 0.1-0.15 s -> ARC
+ignition leg + scoring. Fixes: Tlow 200 K for all 53 species; 13 header lines of the Fluent-extracted therm.foam.dat
+re-padded to 80 columns (chemkinToFoam refused them; values unchanged).
+
+Cost per step (CPU seconds of the master rank, machine load ~20 on 16 cores):
+
+| Mechanism | species / reactions | s/step, 8 ranks |
+|---|---|---|
+| GA18 (A1r) | 18 / 92 | 7.6 |
+| ARC_GRI30_NOx22 (this run) | 22 transported + 21 QSS / 262 | 12.4 (13.1 wall) |
+| GRI-Mech 3.0 | 53 / 325 | ~23-28 (smoke: 93 s/step on 2 ranks, steps 2-6) |
+
 ## Outputs
 
 - snapshots: `/opt/ofb/runs/arc22/{flame,ign}/snap/arc22_{flame,ign}_t*.csv` (foam_snapshot.py now adds the ARC species
