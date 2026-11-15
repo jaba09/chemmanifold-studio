@@ -10,7 +10,6 @@ inline void Foam::arcODE::derivatives
 (
     const scalar x,
     const scalarField& y,
-    const label li,
     scalarField& dydx
 ) const
 {
@@ -26,7 +25,6 @@ inline void Foam::arcODE::jacobian
 (
     const scalar x,
     const scalarField& y,
-    const label li,
     scalarField& dfdx,
     scalarSquareMatrix& dfdy
 ) const
@@ -141,7 +139,7 @@ void Foam::arcChemStep<ChemistryModel>::solve
     ode_.p_ = p;
     scalar dt = subDeltaT;
     if (!(dt > 0) || dt > deltaT) dt = deltaT;
-    odeSolver_->solve(0, deltaT, y_, 0, dt);
+    odeSolver_->solve(0, deltaT, y_, dt);
     subDeltaT = dt;
     nAdvanced_++;
 

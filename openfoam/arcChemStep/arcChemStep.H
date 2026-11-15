@@ -66,7 +66,6 @@ public:
     (
         const scalar x,
         const scalarField& y,
-        const label li,
         scalarField& dydx
     ) const;
 
@@ -74,7 +73,6 @@ public:
     (
         const scalar x,
         const scalarField& y,
-        const label li,
         scalarField& dfdx,
         scalarSquareMatrix& dfdy
     ) const;
