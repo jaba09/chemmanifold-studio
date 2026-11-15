@@ -33,8 +33,16 @@ ELEMENTS = {
     "CH4": (1, 4, 0), "CO": (1, 0, 1), "CO2": (1, 0, 2), "HCO": (1, 1, 1), "CH2O": (1, 2, 1),
     "CH3O": (1, 3, 1), "N2": (0, 0, 0),
 }
+# species of other mechanisms (ARC_GRI30_NOx22): (C, H, O, N); written as extra columns at the end of the
+# table only when the run has the field, so GA18 tables are unchanged. They enter Bilger Z via C, H, O.
+EXTRA = {
+    "CH3OH": (1, 4, 1, 0), "C2H2": (2, 2, 0, 0), "C2H4": (2, 4, 0, 0), "C2H6": (2, 6, 0, 0),
+    "NO": (0, 0, 1, 1), "NO2": (0, 0, 2, 1), "N2O": (0, 0, 1, 2), "HCN": (1, 1, 0, 1),
+}
 W_EL = np.array([12.011, 1.008, 15.999])
 W_SP = {s: float(np.dot(e, W_EL)) + (28.014 if s == "N2" else 0.0) for s, e in ELEMENTS.items()}
+W_SP.update({s: float(np.dot(e[:3], W_EL)) + 14.007 * e[3] for s, e in EXTRA.items()})
+CHO = {**ELEMENTS, **{s: e[:3] for s, e in EXTRA.items()}}
 FUEL = {"CH4": 1.0}
 AIR = {"O2": 0.233, "N2": 0.767}
 
@@ -66,9 +74,9 @@ def read_field(path, n):
 def bilger(Y):
     """Bilger Z from a dict of mass-fraction arrays."""
     def beta(comp):
-        zc = sum(comp.get(s, 0) * ELEMENTS[s][0] * W_EL[0] / W_SP[s] for s in ELEMENTS)
-        zh = sum(comp.get(s, 0) * ELEMENTS[s][1] * W_EL[1] / W_SP[s] for s in ELEMENTS)
-        zo = sum(comp.get(s, 0) * ELEMENTS[s][2] * W_EL[2] / W_SP[s] for s in ELEMENTS)
+        zc = sum(comp.get(s, 0) * CHO[s][0] * W_EL[0] / W_SP[s] for s in CHO)
+        zh = sum(comp.get(s, 0) * CHO[s][1] * W_EL[1] / W_SP[s] for s in CHO)
+        zo = sum(comp.get(s, 0) * CHO[s][2] * W_EL[2] / W_SP[s] for s in CHO)
         return 2 * zc / W_EL[0] + 0.5 * zh / W_EL[1] - zo / W_EL[2]
     bf, bo = beta(FUEL), beta(AIR)
     return (beta(Y) - bo) / (bf - bo)
@@ -132,6 +140,8 @@ def export(case, pp, tname, out_csv):
     p = read_field(dst / "p", n)
     U = read_field(dst / "U", n)
     Y = {s: read_field(dst / s, n) if (dst / s).exists() else np.zeros(n) for s in ELEMENTS}
+    extra = [s for s in EXTRA if (dst / s).exists()]
+    Y.update({s: read_field(dst / s, n) for s in extra})
     G = read_field(dst / "grad(U)", n) if (dst / "grad(U)").exists() else None
     Z = bilger(Y)
     write_scalar(dst / "Zmix", "Zmix", Z)
@@ -155,6 +165,8 @@ def export(case, pp, tname, out_csv):
     cols["mixture-fraction"] = Z
     D = 2.2e-5 * (np.maximum(T, 200) / 300.0) ** 1.7
     cols["scalar-dissipation"] = 2 * D * (gZ ** 2).sum(1)
+    for s in extra:
+        cols[s.lower()] = Y[s]
     names = list(cols)
     np.savetxt(out_csv, np.column_stack([cols[k] for k in names]), delimiter=",", header=",".join(names),
                comments="", fmt="%.8g")

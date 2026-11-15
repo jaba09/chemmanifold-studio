@@ -36,13 +36,15 @@ with open(os.path.join(out, "thermo.compressibleGas"), "w") as f:
         a, b = np.polyfit(1.0 / T, np.sqrt(T) / mu, 1)
         As, Ts = 1.0 / b, a / b
         err = np.max(np.abs(As * np.sqrt(T) / (1 + Ts / T) / mu - 1))
+        # Tlow 200 K for every species (GRI N2 says 300 K; the GA18 case uses 200 K with the same polynomials):
+        # cold wall-side cells sit at 299.99 K and janafThermo warns for every cell and call below Tlow
         els = " ".join("%s %d;" % (e, sp.composition[e]) for e in ("C", "H", "O", "N") if sp.composition.get(e, 0))
         f.write('"%s"\n{\n    specie { molWeight %.6f; }\n    thermodynamics\n    {\n'
                 '        Tlow %g;\n        Thigh %g;\n        Tcommon %g;\n'
                 '        highCpCoeffs ( %s );\n        lowCpCoeffs ( %s );\n    }\n'
                 '    transport { As %.6e; Ts %.4f; }   // max fit error %.2f %%\n'
                 '    elements { %s }\n}\n\n'
-                % (s, g.molecular_weights[g.species_index(s)], sp.thermo.min_temp, sp.thermo.max_temp, c[0],
+                % (s, g.molecular_weights[g.species_index(s)], min(sp.thermo.min_temp, 200.0), sp.thermo.max_temp, c[0],
                    " ".join("%.9e" % v for v in c[1:8]), " ".join("%.9e" % v for v in c[8:15]),
                    As, Ts, 100 * err, els))
 with open(os.path.join(out, "speciesDiffusion"), "w") as f:

@@ -27,9 +27,12 @@ cat >> constant/chemistryProperties <<'X'
 // 21 radicals from the linearized QSSA, element projection after each step
 arcChemStepCoeffs
 {
-    solver          seulex;
+    // GA18 DI used seulex 1e-10 / 1e-5 (on concentrations). For the ARC rhs (15-26 us, FD Jacobian of 24 calls)
+    // seulex 1e-5 costs 10.5 ms per hot cell and step; Rosenbrock34 1e-4 3.1 ms, with per-step errors against
+    // seulex 1e-9 below 1e-4 (OH), 1e-5 (NO, CO, HCN) and 0.01 K (400 hot A1r cells, results/sim1/ARC22)
+    solver          Rosenbrock34;
     absTol          1e-12;
-    relTol          1e-5;           // GA18 DI used seulex 1e-10 / 1e-5 (on concentrations)
+    relTol          1e-4;
     T_freeze        0;
     project         true;
     reportCalls     0;
@@ -37,6 +40,53 @@ arcChemStepCoeffs
 X
 grep -q 'arcChemStep' system/controlDict || \
     sed -i 's/^application .*/&\n\nlibs                (arcChemStep);/' system/controlDict
+# outlet NOx: phi-weighted averages on the two outlets every 10 steps (postProcessing/outletNOx_*)
+python3 - system/controlDict <<'PYX'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+fo = ""
+for patch in ("outlet-lab", "wall-fff-fluid-exhaust"):
+    fo += '''
+    outletNOx_%s
+    {
+        type            surfaceFieldValue;
+        libs            ( "libfieldFunctionObjects.so" );
+        writeControl    timeStep;
+        writeInterval   10;
+        writeFields     false;
+        log             false;
+        regionType      patch;
+        name            %s;
+        operation       weightedAverage;
+        weightField     phi;
+        fields          ( T NO NO2 N2O HCN CO CO2 C2H2 );
+    }
+''' % (patch, patch)
+if "outletNOx_" not in s:
+    i = s.index("functions")
+    j = s.index("{", i)
+    s = s[: j + 1] + fo + s[j + 1 :]
+    open(p, "w").write(s)
+PYX
+# decomposition weight of the hot cells (cellWeight: 25 where T > 800 K, written for GA18). ARC costs about
+# 3.1 ms per hot and 0.6 ms per cold cell and step (+ 0.08 ms flow), so hot cells get ARC_WEIGHT (default 5):
+# with 25 the ranks holding cold gas got ~37k cells and set the pace
+[ -f "$T0/cellWeight" ] && python3 - "$T0/cellWeight" "${ARC_WEIGHT:-5}" <<'PYX'
+import re, struct, sys
+p, w = sys.argv[1], float(sys.argv[2]); b = open(p, "rb").read()
+m = re.search(rb"internalField\s+nonuniform\s+List<scalar>\s*(\d+)\s*\(", b)
+if m and b"format      binary" in b:
+    n = int(m.group(1)); i = m.end()
+    v = struct.unpack("<%dd" % n, b[i:i + 8 * n])
+    v = [w if x > 1.5 else x for x in v]
+    b = b[:i] + struct.pack("<%dd" % n, *v) + b[i + 8 * n:]
+    open(p, "wb").write(b); print("cellWeight: %d hot cells weighted %g" % (sum(x > 1.5 for x in v), w))
+elif m:
+    t = b.decode(); h, rest = t[:m.end()], t[m.end():]
+    body, tail = rest.split(")", 1)
+    open(p, "w").write(h + "\n".join(str(w) if float(x) > 1.5 else x for x in body.split()) + "\n)" + tail)
+    print("cellWeight (ascii) reweighted to %g" % w)
+PYX
 # fields of the time dir
 for s in CH2 'CH2(S)' HCO CH3O; do rm -f "$T0/$s" "$T0/$s.gz"; done
 sed -e 's/^\(    object *\).*;/\1Ydefault;/' "$REPO/openfoam/quemadorUnico/0.orig/Ydefault" > "$T0/Ydefault"

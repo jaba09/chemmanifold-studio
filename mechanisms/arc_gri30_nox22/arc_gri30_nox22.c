@@ -44,28 +44,56 @@ static void g_RT(double T, double* g)
     }
 }
 
-/* forward / reverse rate constants (third-body and falloff included) */
-static void rate_constants(double T, const double* c43, double* kf, double* kr)
+/* forward / reverse rate constants (third-body and falloff included).
+ * The parts that depend on T only (Arrhenius k, k0, Troe log10 Fc, equilibrium factor kr/kf) are cached
+ * for the last T: the finite-difference Jacobian evaluates 22 of its 24 right-hand sides at the same T.
+ * The values are computed by the same expressions as without the cache (bit-identical rates). */
+static struct {
+    double T;
+    double k[ARC_NR], k0[ARC_NR], lFc[ARC_NR], rev[ARC_NR];
+} kc = { -1.0 };
+
+static void rate_constants_T(double T)
 {
     double g[ARC_NSP];
     g_RT(T, g);
     double lnT = log(T), RT = RU * T, lnP0RT = log(P0 / RT);
     for (int r = 0; r < ARC_NR; r++) {
-        double k = arc_A[r] * exp(arc_b[r] * lnT - arc_E[r] / RT);
+        kc.k[r] = arc_A[r] * exp(arc_b[r] * lnT - arc_E[r] / RT);
+        int ty = arc_rtype[r];
+        if (ty >= 2 || ty == 3) kc.k0[r] = arc_A0[r] * exp(arc_b0[r] * lnT - arc_E0[r] / RT);
+        if (ty == 2) {
+            const double* t = arc_troe[r];
+            double Fc = (1 - t[0]) * exp(-T / t[1]) + t[0] * exp(-T / t[2]);
+            if (arc_ntroe[r] == 4) Fc += exp(-t[3] / T);
+            kc.lFc[r] = log10(Fc > 1e-300 ? Fc : 1e-300);
+        }
+        if (arc_rev[r]) {
+            double dG = 0, dn = 0;
+            for (int i = 0; i < arc_np[r]; i++) { dG += arc_pn[r][i] * g[arc_pi[r][i]]; dn += arc_pn[r][i]; }
+            for (int i = 0; i < arc_nr[r]; i++) { dG -= arc_rn[r][i] * g[arc_ri[r][i]]; dn -= arc_rn[r][i]; }
+            /* Kc = exp(-dG) (P0/RT)^dn */
+            kc.rev[r] = exp(dG - dn * lnP0RT);
+        } else kc.rev[r] = 0;
+    }
+    kc.T = T;
+}
+
+static void rate_constants(double T, const double* c43, double* kf, double* kr)
+{
+    if (T != kc.T) rate_constants_T(T);
+    for (int r = 0; r < ARC_NR; r++) {
+        double k = kc.k[r];
         int ty = arc_rtype[r];
         if (ty >= 1) {
             double M = 0;
             for (int s = 0; s < ARC_NSP; s++) M += arc_eff[r][s] * c43[s];
             if (ty == 1) k *= M;
             else {
-                double k0 = arc_A0[r] * exp(arc_b0[r] * lnT - arc_E0[r] / RT);
-                double Pr = k0 * M / k;
+                double Pr = kc.k0[r] * M / k;
                 double F = 1.0;
                 if (ty == 2 && Pr > 1e-300) {
-                    const double* t = arc_troe[r];
-                    double Fc = (1 - t[0]) * exp(-T / t[1]) + t[0] * exp(-T / t[2]);
-                    if (arc_ntroe[r] == 4) Fc += exp(-t[3] / T);
-                    double lFc = log10(Fc > 1e-300 ? Fc : 1e-300);
+                    double lFc = kc.lFc[r];
                     double cc = -0.4 - 0.67 * lFc, n = 0.75 - 1.27 * lFc;
                     double x = log10(Pr) + cc;
                     double f1 = x / (n - 0.14 * x);
@@ -75,13 +103,7 @@ static void rate_constants(double T, const double* c43, double* kf, double* kr)
             }
         }
         kf[r] = k;
-        if (arc_rev[r]) {
-            double dG = 0, dn = 0;
-            for (int i = 0; i < arc_np[r]; i++) { dG += arc_pn[r][i] * g[arc_pi[r][i]]; dn += arc_pn[r][i]; }
-            for (int i = 0; i < arc_nr[r]; i++) { dG -= arc_rn[r][i] * g[arc_ri[r][i]]; dn -= arc_rn[r][i]; }
-            /* Kc = exp(-dG) (P0/RT)^dn */
-            kr[r] = k * exp(dG - dn * lnP0RT);
-        } else kr[r] = 0;
+        kr[r] = arc_rev[r] ? k * kc.rev[r] : 0;
     }
 }
 

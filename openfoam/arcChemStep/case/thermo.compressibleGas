@@ -261,7 +261,7 @@
     specie { molWeight 28.014000; }
     thermodynamics
     {
-        Tlow 300;
+        Tlow 200;
         Thigh 5000;
         Tcommon 1000;
         highCpCoeffs ( 2.926640000e+00 1.487976800e-03 -5.684760000e-07 1.009703800e-10 -6.753351000e-15 -9.227977000e+02 5.980528000e+00 );
