@@ -1,0 +1,36 @@
+// ARC_GRI30_NOx22 burner case, written by openfoam/arcChemStep/make_case_files.py
+// The 21 quasi-steady radicals are not transported; arcChemStep computes all rates.
+elements 4 ( C H O N );
+
+species 22
+(
+    H2
+    H
+    O
+    O2
+    OH
+    H2O
+    HO2
+    H2O2
+    CH4
+    CH3
+    CO
+    CO2
+    CH2O
+    CH3OH
+    C2H2
+    C2H4
+    C2H6
+    N2
+    NO
+    NO2
+    N2O
+    HCN
+);
+
+reactions
+{
+}
+
+Tlow 200;
+Thigh 3500;

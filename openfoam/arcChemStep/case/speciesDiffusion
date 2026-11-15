@@ -1,0 +1,41 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      speciesDiffusion;
+}
+// ARC_GRI30_NOx22 burner case, written by openfoam/arcChemStep/make_case_files.py
+// Le of the GA18 species kept from the GA18 case; new species from a Cantera GRI
+// counterflow flame by the same method (validation/lewis.py)
+
+model           constantLewis;
+Sct             0.7;
+
+Le
+{
+    H2      0.309;
+    H       0.185;
+    O       0.712;
+    O2      1.084;
+    OH      0.729;
+    H2O     0.816;
+    HO2     1.086;
+    H2O2    1.081;
+    CH4     0.870;
+    CH3     1.014;
+    CO      1.120;
+    CO2     1.370;
+    CH2O    1.290;
+    CH3OH   1.332;
+    C2H2    1.338;
+    C2H4    1.346;
+    C2H6    1.454;
+    N2      1.151;
+    NO      1.126;
+    NO2     1.221;
+    N2O     1.367;
+    HCN     1.298;
+    default 1;
+}

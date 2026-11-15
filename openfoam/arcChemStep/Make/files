@@ -1,0 +1,4 @@
+makeArcChemStep.C
+arc_gri30_nox22.c
+
+LIB = $(FOAM_USER_LIBBIN)/libarcChemStep
