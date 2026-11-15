@@ -4,7 +4,7 @@
 # Resumable: finished runs are skipped by run_protocol_v2.sh; scored candidates are skipped here.
 #   phaseB.sh [candidates file]   (lines: label model_dir)
 REPO=$(cd "$(dirname "$0")/../.." && pwd); P=$REPO/openfoam/protocol; PY=/opt/ofb/ml/bin/python
-B=/opt/ofb/runs/B; OUT=$REPO/results/sim1/B; mkdir -p $B $OUT
+B=${PB_RUNS:-/opt/ofb/runs/B}; OUT=${PB_OUT:-$REPO/results/sim1/B}; mkdir -p $B $OUT   # C3 sets PB_RUNS/PB_OUT
 LIST=${1:-$B/candidates.txt}
 one() {
     lab=$1; m=$2; . /opt/ofb/ofenv.sh
