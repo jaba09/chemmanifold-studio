@@ -33,24 +33,33 @@ def main():
             S.append((t, p))
     if not S:
         raise SystemExit(f"no snapshots of {label} in {d} for {t0}-{t1} s")
-    acc = None
-    for t, p in S:
-        df = pd.read_csv(p).sort_values("cellnumber")
+    def species_of(df):
         known = set(GA18) | set(EXTRA)
         others = [c for c in df.columns if c not in NON_SPECIES and c not in known]
         if others:                                   # e.g. GRI-Mech 3.0: every species column of the table
-            sp = [c for c in df.columns if c not in NON_SPECIES]
-        elif all(s in df for s in EXTRA):
-            sp = ARC                                 # ARC run: its 22 species
-        else:
-            sp = GA18                                # GA18 run: the 18
-        cols = ["temperature", "x-velocity", "radial-velocity"] + sp
+            return [c for c in df.columns if c not in NON_SPECIES]
+        if all(c in df for c in EXTRA):
+            return ARC                               # ARC run: its 22 species
+        return GA18                                  # GA18 run: the 18
+
+    # the species set is the newest snapshot's; a snapshot without some of them (the GA18 start state at 0.1 s of a
+    # leg run with another mechanism) is left out of the mean, and the window string says which times were used
+    sp = species_of(pd.read_csv(S[-1][1], nrows=1))
+    cols = ["temperature", "x-velocity", "radial-velocity"] + sp
+    acc, used = None, []
+    for t, p in S:
+        df = pd.read_csv(p).sort_values("cellnumber")
+        if any(c not in df for c in sp):
+            print(f"skipped {p.name}: lacks species of the newest snapshot")
+            continue
         v = df[cols].to_numpy(np.float64)
         if acc is None:
             acc, geo = v.copy(), df[["x-coordinate", "y-coordinate", "cell-volume"]].to_numpy(np.float64)
             assert np.array_equal(df["cellnumber"].to_numpy(), np.arange(len(df))), "cell numbers not 0..n-1"
         else:
             acc += v
+        used.append((t, p))
+    S = used
     M = acc / len(S)
     f32 = lambda a: a.astype(np.float32)
     data = {"T": f32(M[:, 0]), "Ux": f32(M[:, 1]), "Ur": f32(M[:, 2]),

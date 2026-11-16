@@ -47,6 +47,28 @@ inside the domain (maxima, hot-cell L1 against Fluent GRI in the cloud).
 Field files for the cloud comparison: `fields/arc22_mean_0.15-0.185.npz`, `fields/arc22_t0.185.npz` (plus the
 provisional `arc22_t0.15.npz`, `arc22_mean_0.125-0.15.npz` and `a1r_mean_0.1-0.1875.npz`).
 
+## ARC22 vs GRI-Mech 3.0, same code (first window, 16 Nov 20:40)
+
+OpenFOAM, same case, both from the A1r state at 0.1 s, per-cell mean of the snapshots 0.1025-0.125 s
+(`fields/arc22_mean_0.1025-0.125.npz` vs `fields/gri53_mean_0.1025-0.125.npz`; hot = T > 1000 K in either,
+volume-weighted over the full revolution):
+
+| Metric | ARC22 | GRI-Mech 3.0 |
+|---|---|---|
+| V(T > 1500 K) [cm3] | 19.58 | 19.53 |
+| Tmax [K] | 2112 | 2111 |
+| x(OH max) [mm] | 20.4 | 20.1 |
+| OH / CO max | 0.00347 / 0.0544 | 0.00349 / 0.0566 |
+| NO / NO2 / N2O / HCN max | 1.67e-4 / 1.45e-5 / 9.6e-7 / 8.1e-5 | 1.67e-4 / 1.30e-5 / 9.7e-7 / 6.8e-5 |
+| C2H2 / CH3OH max | 0.0122 / 7.1e-5 | 0.0114 / 7.3e-5 |
+
+Hot cells: mean abs(dT) 1.5 K (volume-weighted), bias +0.4 K, max abs(dT) 11 K. L1 ARC vs GRI (total ARC/GRI):
+OH 0.9 % (0.994), CO 2.0 % (0.982), H 2.7 % (0.974), CH4 0.3 % (1.000), NO 7.7 % (1.064), NO2 3.1 % (1.001),
+N2O 12.4 % (1.091), HCN 18.2 % (1.182), C2H2 7.4 % (1.073).
+
+So the ARC flame is the GRI flame to within 1.5 K: the -33 K offset of both from GA18 (A1r) is GA18 vs GRI chemistry.
+NOx: NO within 6 % in total; HCN (+18 %) and N2O (+9 %) are the weakest species.
+
 ## Benchmark: Fluent DI with full GRI-Mech 3.0
 
 Javier supplied a Fluent DI solution of the same corrected burner with full GRI-Mech 3.0 (53 species). It is the main
