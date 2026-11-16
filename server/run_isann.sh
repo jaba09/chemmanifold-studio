@@ -8,6 +8,7 @@
 #   ISANN_ARC=1 BASE=/opt/ofb/runs/arc22/v2/base_flame SOLVER=rhoReactingBuoyantLeFoam \
 #     bash server/run_isann.sh isann_arc22 /opt/ofb/isann/parent_arc22 8 openfoam/isann/isann_arc22.yaml
 #       ARC_GRI30_NOx22: 22-species ARC case, DI on the ARC kernel (libuserChemStepArc), 22-species parent
+#   Optional env: ENDTIME, WRITEINTERVAL (set at creation), DAEMON_NICE (nice of the trainer daemon)
 #
 # The run lives in /opt/ofb/run/<run name>. Stop it cleanly with Ctrl+C (CFD) or
 #   touch /opt/ofb/run/<run name>/isann/STOP      (daemon)
@@ -26,11 +27,14 @@ if [ ! -d "$R" ]; then
     mkdir -p /opt/ofb/run
     "$REPO/openfoam/isann/setup_isann.sh" "$BASE" "$R" "$PARENT" "$NP"
     cp "$CONF" "$R/isann/isann.yaml"
+    # optional run length / write interval (the ARC bases carry the protocol's endTime 0.2, writeInterval 125)
+    [ -n "$ENDTIME" ] && foamDictionary -entry endTime -set "$ENDTIME" "$R/system/controlDict" > /dev/null
+    [ -n "$WRITEINTERVAL" ] && foamDictionary -entry writeInterval -set "$WRITEINTERVAL" "$R/system/controlDict" > /dev/null
     echo "[$(spain)] created $R (parent $PARENT, $NP ranks)" >> "$R/server.log"
 fi
 cd "$REPO"
 pgrep -f "[i]sann_daemon.py --run $R " > /dev/null || {
-    nohup /opt/ofb/ml/bin/python openfoam/isann/isann_daemon.py --run "$R" --config "$R/isann/isann.yaml" --poll 30 \
+    nohup nice -n ${DAEMON_NICE:-0} /opt/ofb/ml/bin/python openfoam/isann/isann_daemon.py --run "$R" --config "$R/isann/isann.yaml" --poll 30 \
         >> "$R/isann/daemon.out" 2>&1 &
     echo "[$(spain)] daemon started" >> "$R/server.log"
 }
@@ -45,4 +49,5 @@ if grep -q "^End" log.run.$n; then
     echo "[$(spain)] finished" | tee -a server.log
 else
     echo "[$(spain)] CFD stopped before the end (see log.run.$n); run this command again to resume" | tee -a server.log
+    exit 1      # non-zero: a systemd unit with Restart=on-failure resumes it
 fi

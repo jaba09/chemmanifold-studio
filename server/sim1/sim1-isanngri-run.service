@@ -1,0 +1,23 @@
+# ISANN run of the burner with ARC_GRI30_NOx22 (openfoam/isann/README.md, "ARC_GRI30_NOx22"):
+# protocol v2 flame base (A1r state at 0.1 s, LeFoam + wall radiation) run 50 ms to 0.15 s on 8 ranks, DI phase
+# on the ARC kernel (libuserChemStepArc), networks trained online from the 22-species parent
+# /opt/ofb/isann/parent_arc22 by isann_daemon.py (nice 5, 2 threads while it trains).
+# Install and start:
+#   cp server/sim1/sim1-isanngri-run.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user start sim1-isanngri-run
+# Progress: tail /opt/ofb/run/isann_arc22/server.log /opt/ofb/run/isann_arc22/isann/daemon.log
+# Resumable: the CFD continues from its latest write (every 2.5 ms) and the daemon from isann/state.json;
+# a crash restarts it (at most 3 times a day). systemctl --user restart sim1-isanngri-run also resumes.
+[Unit]
+Description=sim1 ISANN ARC_GRI30_NOx22 run (8 ranks, 0.1-0.15 s)
+StartLimitIntervalSec=1d
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ofb/isann-gri-src
+Environment=ISANN_ARC=1 BASE=/opt/ofb/runs/arc22/v2/base_flame SOLVER=rhoReactingBuoyantLeFoam ENDTIME=0.15 WRITEINTERVAL=0.0025 DAEMON_NICE=5
+ExecStart=/bin/bash -lc "/opt/ofb/isann-gri-src/server/run_isann.sh isann_arc22 /opt/ofb/isann/parent_arc22 8 /opt/ofb/isann-gri-src/openfoam/isann/isann_arc22.yaml"
+KillMode=control-group
+Restart=on-failure
+RestartSec=120

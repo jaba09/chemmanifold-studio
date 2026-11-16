@@ -123,13 +123,19 @@ class Daemon:
             return None, {}
         if self.state["version"] == 0 and not self.cfg["di"].get("skip", False):
             c = self.cfg["di"]
+            # DI steps are counted from the run's first step (a run restarted from a later time, e.g.
+            # the protocol v2 flame base at 0.1 s, starts at time index ~5000, not 0)
+            if "first_step" not in self.state:
+                self.state["first_step"] = int(st["step"].min()) - 1
+                self.save_state()
+            n_di = step - self.state["first_step"]
             w = st[st["step"] > step - c["window"]]
             boxes = st["boxes"].to_numpy()
             sat = (boxes[-1] - boxes[max(0, len(boxes) - 1 - c["window"])]) / max(boxes[-1], 1)
             why = None
-            if step >= c["max_steps"] and n_kept >= c["min_pairs_forced"]:
-                why = f"step {step} >= max_steps"
-            elif step >= c["min_steps"] and n_kept >= c["min_pairs"] and sat < c["saturation"]:
+            if n_di >= c["max_steps"] and n_kept >= c["min_pairs_forced"]:
+                why = f"{n_di} DI steps >= max_steps"
+            elif n_di >= c["min_steps"] and n_kept >= c["min_pairs"] and sat < c["saturation"]:
                 why = f"saturated grid (new boxes {100 * sat:.2f}% over {c['window']} steps)"
             return why, dict(step=step, kept=n_kept, new=n_new, saturation=float(sat), hot=int(w["hot"].mean()))
         c = self.cfg["retrain"]
