@@ -47,8 +47,12 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     isannDict_(coeffsDict_.subOrEmptyDict("isann")),
     isannControl_(isannDict_.getOrDefault<fileName>("control", "isann/control")),
     isannWriteEvery_(isannDict_.getOrDefault<label>("writeEvery", 25)),
-    isannActive_(false), isannVersion_(0), isannStep_(-1),
+    isannActive_(isannDict_.getOrDefault<bool>("startActive", false)), isannVersion_(0), isannStep_(-1),
     iHot_(0), iDI_(0), iOOD_(0), iUntrusted_(0), iANN_(0), iShadow_(0), iShadowBad_(0),
+    sentinel_(isannDict_.getOrDefault<scalarList>("sentinel", scalarList())),
+    sentinelEvery_(isannDict_.getOrDefault<label>("sentinelEvery", 100)),
+    sentinelPerStep_(isannDict_.getOrDefault<label>("sentinelPerStep", 10)),
+    iSentinel_(0), sentinelStep_(-1), sentinelCount_(),
     trustTAbs_(isannDict_.getOrDefault<scalar>("trustTAbs", 1.0)),
     trustRel_(isannDict_.getOrDefault<scalar>("trustRel", 0.3)),
     trustOHAbs_(isannDict_.getOrDefault<scalar>("trustOHAbs", 5e-5)),
@@ -60,6 +64,11 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     {
         if (this->specieThermo()[i].name() == "CH4") iFuel_ = i;
         if (this->specieThermo()[i].name() == "O2") iO2_ = i;
+    }
+    if (sentinel_.size() && (sentinel_.size() % 4 != 0 || iFuel_ < 0 || iO2_ < 0))
+    {
+        FatalErrorInFunction
+            << "isann.sentinel needs (T_lo T_hi Y_CH4 Y_O2) per range and species CH4, O2" << exit(FatalError);
     }
     if (odeInduction_.size() && (odeInduction_.size() != 4 || iFuel_ < 0 || iO2_ < 0))
     {
@@ -169,8 +178,10 @@ Foam::userChemStep<ChemistryModel>::userChemStep
         trustN_.setSize(nShadowT*nShadowZ, 0);
         trustBad_.setSize(nShadowT*nShadowZ, 0);
         if (shadowEvery_ <= 0) shadowEvery_ = 10;
-        Info<< "userChemStep: ISANN, DI phase (every cell on the ODE solver) until "
-            << isannControl_ << " names a model; dedup grid of " << st.keySpecies.size() + 3
+        Info<< "userChemStep: ISANN, "
+            << (isannActive_ ? "the parent network in use from the start (no DI phase)"
+                             : "DI phase (every cell on the ODE solver)")
+            << " until " << isannControl_ << " names a model; dedup grid of " << st.keySpecies.size() + 3
             << " coordinates, " << st.cap << " pairs per box" << endl;
     }
 
@@ -510,7 +521,7 @@ void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
             if (!exists)
             {
                 isannStatus_() << "step,version,hot,di_phase,ood,untrusted,ann,shadow,shadow_bad,"
-                    "candidates,stored,boxes,replaced,untrusted_bins" << nl;
+                    "candidates,stored,boxes,replaced,untrusted_bins,sentinel,new_boxes" << nl;
             }
         }
         label nUntrusted = 0;
@@ -521,7 +532,8 @@ void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
         isannStatus_() << isannStep_ << ',' << isannVersion_ << ',' << iHot_ << ',' << iDI_ << ','
             << iOOD_ << ',' << iUntrusted_ << ',' << iANN_ << ',' << iShadow_ << ',' << iShadowBad_ << ','
             << store_->nCandidates << ',' << store_->nStored() << ',' << store_->nBoxes() << ','
-            << store_->nReplaced << ',' << nUntrusted << endl;
+            << store_->nReplaced << ',' << nUntrusted << ',' << iSentinel_ << ','
+            << store_->nNewBoxes << endl;
         if (isannWriteEvery_ > 0 && isannStep_ % isannWriteEvery_ == 0)
         {
             std::vector<std::string> names;
@@ -529,7 +541,7 @@ void Foam::userChemStep<ChemistryModel>::isannBeginStep() const
             store_->write(this->mesh().time().path()/"isannPairs.csv", names);
         }
     }
-    iHot_ = iDI_ = iOOD_ = iUntrusted_ = iANN_ = iShadow_ = iShadowBad_ = 0;
+    iHot_ = iDI_ = iOOD_ = iUntrusted_ = iANN_ = iShadow_ = iShadowBad_ = iSentinel_ = 0;
     isannStep_ = timeIndex;
     isannPoll(timeIndex);
 }
@@ -595,6 +607,36 @@ void Foam::userChemStep<ChemistryModel>::solve
             ode<ChemistryModel>::solve(c, T, p, deltaT, subDeltaT);
             return;
         }
+        if
+        (
+            reason < 0 && isannActive_ && sentinel_.size()
+         && sentinelEvery_ > 0 && this->mesh().time().timeIndex() % sentinelEvery_ == 0
+        )
+        {
+            // ranges of 4 values (T_lo T_hi Y_CH4 Y_O2), each with its own quota per step
+            const label nR = sentinel_.size()/4;
+            if (sentinelCount_.size() != nR) sentinelCount_.setSize(nR, 0);
+            if (sentinelStep_ != this->mesh().time().timeIndex())
+            {
+                sentinelStep_ = this->mesh().time().timeIndex();
+                sentinelCount_ = 0;
+            }
+            for (label r=0; r<nR; r++)
+            {
+                const scalar* s = &sentinel_[4*r];
+                if
+                (
+                    sentinelCount_[r] < sentinelPerStep_ && T >= s[0] && T < s[1]
+                 && Y_[iFuel_] > s[2] && Y_[iO2_] > s[3]
+                )
+                {
+                    reason = 4;
+                    sentinelCount_[r]++;
+                    iSentinel_++;
+                    break;
+                }
+            }
+        }
         if (reason < 0 && isannActive_ && shadowEvery_ > 0 && T >= options_.T_freeze)
         {
             shadow(c, T, p, deltaT);
@@ -608,7 +650,7 @@ void Foam::userChemStep<ChemistryModel>::solve
             isannKeep(Y0, T0, p, deltaT, info.Z, Y1, T, reason);
             if (reason == 0) iDI_++;
             else if (reason == 1) iOOD_++;
-            else iUntrusted_++;
+            else if (reason == 2) iUntrusted_++;
             return;
         }
         if (T >= options_.T_freeze) iANN_++;
