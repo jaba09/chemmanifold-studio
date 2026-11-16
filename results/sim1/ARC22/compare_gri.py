@@ -56,7 +56,7 @@ def main():
     gri_fn, ga_fn, fdir = sys.argv[1:4]; out = sys.argv[4] if len(sys.argv) > 4 else os.path.dirname(os.path.abspath(__file__))
     F = {"Fluent GRI": fluent(gri_fn, GRI), "Fluent GA18": fluent(ga_fn, GA)}
     x = r = V = None
-    for lab, fn in [("OF GA18 A1r mean", "a1r_mean_0.1-0.1875.npz"), ("OF ARC22 mean", "arc22_mean_0.15-0.2.npz"),
+    for lab, fn in [("OF GA18 A1r mean", "a1r_mean_0.1-0.1875.npz"), ("OF ARC22 mean", "arc22_mean_0.15-0.185.npz"),
                     ("OF ARC22 early mean", "arc22_mean_0.125-0.15.npz")]:
         p = os.path.join(fdir, fn)
         if os.path.exists(p):
