@@ -111,14 +111,14 @@ def main():
             series.append({"t": t, "V1500": 1e6 * w[hot].sum(), "Tmax": float(df["temperature"].max()),
                            **{f"{s} max": float(df[s].max()) for s in NOX if s in df}})
             v = df[cols]
-            acc = v.copy() if acc is None else acc + v
+            acc = v.copy() if acc is None else acc.add(v, fill_value=0)   # a snapshot without a column counts as 0
         M = {k: (acc[k] / len(S)).to_numpy() for k in acc}
         x, r, w = geo
         m = metrics(M, x, r, w)
         for s in NOX:
             if s in M:
                 m[f"{s.upper()} max (mean field)"] = float(M[s].max())
-                m[f"{s.upper()} max (instantaneous, over window)"] = max(q[f"{s} max"] for q in series)
+                m[f"{s.upper()} max (instantaneous, over window)"] = max(q.get(f"{s} max", 0.0) for q in series)
         for fn, Fl in FL.items():
             dT = M["temperature"] - Fl["temperature"]
             h = (Fl["temperature"] > 1000) | (M["temperature"] > 1000)

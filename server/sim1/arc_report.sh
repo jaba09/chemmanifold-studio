@@ -14,10 +14,13 @@ FL="--fluent Fluent_GA18 $DAT"
 [ -f "$GRI.dat.h5" ] && FL="$FL --fluent Fluent_GRI $GRI.dat.h5 $GRI.cas.h5"
 . /opt/ofb/ofenv.sh
 if [ "$WHAT" != ign ] && [ -d "$W/flame/snap" ]; then
+    # last snapshot time of the leg (the leg may stop before 0.2 s: 15 Nov run stopped at 0.1874 s by the near-axis
+    # fvDOM runaway that also ended A1r at 0.18754 s; last clean write 0.185 s)
+    TE=$(ls "$W/flame/snap" | sed -n 's/^arc22_flame_t0*\([0-9.]*\)ms\.csv$/\1/p' | sort -g | tail -1 | awk '{printf "%g", $1 / 1000}')
     $PY $P/score_protocol.py --protocol $P/protocol_v2_flame.yaml --di /opt/ofb/runs/A1r_R2rad/snap --di-label A1r \
         --run "$W/flame/snap" --label arc22_flame --run-dir "$W/flame" --out "$OUT/flame" > "$OUT/score_flame.log" 2>&1
     $PY "$REPO/server/sim1/arc_meanfield.py" \
-        --set ARC22_0.15-0.2 "$W/flame/snap" arc22_flame 0.15 0.2 \
+        --set ARC22_0.15-$TE "$W/flame/snap" arc22_flame 0.15 $TE \
         --set ARC22_0.1-0.1875 "$W/flame/snap" arc22_flame 0.1 0.1875 \
         --set A1r_0.1-0.1875 /opt/ofb/runs/A1r_R2rad/snap A1r 0.1 0.1875 \
         $FL --out "$OUT/meanfield.json" > "$OUT/meanfield.txt" 2>&1
@@ -29,14 +32,14 @@ if [ "$WHAT" != ign ] && [ -d "$W/flame/snap" ]; then
 import sys, pandas as pd
 d = pd.read_csv(sys.stdin, sep=r"\s+")
 d.columns = [c.replace("weightedAverage(", "").rstrip(")") for c in d.columns]
-w = d[(d.Time >= 0.15) & (d.Time <= 0.2 + 1e-9)]
-print("mean 0.15-0.2 s (%d samples):" % len(w)); print(w.drop(columns="Time").mean().to_string(float_format="%.4g"))
-print("last (t = %.5f s):" % d.Time.iloc[-1]); print(d.iloc[-1].drop("Time").to_string(float_format="%.4g"))'
+te = float(sys.argv[1]); w = d[(d.Time >= 0.15) & (d.Time <= te + 1e-9)]
+print("mean 0.15-%g s (%d samples):" % (te, len(w))); print(w.drop(columns="Time").mean().to_string(float_format="%.4g"))
+print("last (t = %.5f s):" % d.Time.iloc[-1]); print(d.iloc[-1].drop("Time").to_string(float_format="%.4g"))' "$TE"
     done > "$OUT/outlet_nox.txt" 2>&1
     # compact per-cell fields (Fluent cell order) for the cell-by-cell GRI-Mech 3.0 comparison in the cloud
     mkdir -p "$OUT/fields"
-    $PY "$REPO/server/sim1/arc_fields.py" "$W/flame/snap" arc22_flame 0.15 0.2 "$OUT/fields/arc22_mean_0.15-0.2.npz"
-    $PY "$REPO/server/sim1/arc_fields.py" "$W/flame/snap" arc22_flame 0.2 0.2 "$OUT/fields/arc22_t0.2.npz"
+    $PY "$REPO/server/sim1/arc_fields.py" "$W/flame/snap" arc22_flame 0.15 $TE "$OUT/fields/arc22_mean_0.15-$TE.npz"
+    $PY "$REPO/server/sim1/arc_fields.py" "$W/flame/snap" arc22_flame $TE $TE "$OUT/fields/arc22_t$TE.npz"
     [ -f "$OUT/fields/a1r_mean_0.1-0.1875.npz" ] || \
         $PY "$REPO/server/sim1/arc_fields.py" /opt/ofb/runs/A1r_R2rad/snap A1r 0.1 0.1875 "$OUT/fields/a1r_mean_0.1-0.1875.npz"
     echo "flame: $(tail -1 "$OUT/score_flame.log")"

@@ -1,7 +1,6 @@
 # ARC22: OpenFOAM DI burner flame with ARC_GRI30_NOx22 (22 transported + 21 QSS species)
 
-15 Nov 2026, sim1, 8 ranks, systemd user unit `sim1-arc` (`server/sim1/arc_run.sh`). Status: **running** (results below are
-filled in when the legs finish).
+15 Nov 2026, sim1, 8 ranks, systemd user unit `sim1-arc` (`server/sim1/arc_run.sh`). Status: flame leg done (stopped at 0.1874 s, see below); GRI-Mech 3.0 OpenFOAM leg running; ARC ignition leg queued.
 
 Case: the usual corrected-outlets burner, rhoReactingBuoyantLeFoam + constantLewis (Sct 0.7) + fvDOM wall radiation,
 Euler dt 2e-5 s, protocol v2 bases. Chemistry: `openfoam/arcChemStep` (22 species, empty reaction list; per-cell
@@ -11,6 +10,43 @@ constant-pressure ODE of Y[22] + T, element projection onto CO2/H2O/O2/N2 after 
   GA18-only species CH2, CH2(S), HCO, CH3O (QSS in the ARC) dropped; the 8 new species start at 0 (Ydefault).
 - ignition leg: DI ARC 0-25 ms from the lean start (protocol v2 ignition phase), vs A2r.
 
+## Flame leg results (16 Nov)
+
+**The leg stopped at 0.1874 s (step 4375 of 5000), not because of the chemistry.** An axis gas cell under the pot bottom
+(x = 50 mm, r = 0.4 mm) went from 299.7 K to negative T in one step: the same cell and almost the same time as the
+near-axis fvDOM/axis runaway that ended A1r at 0.18754 s (results/sim1/A1r/G1.md). Domain Tmin was a smooth 299.7 K
+and Tmax steady at 2106 K until then. Last clean write 0.185 s: the statistics window is **0.15-0.185 s** (15 snapshots).
+Extending to 0.2 s would need that cell fixed first (e.g. radiation every step, or a restart from 0.185 s with a floor).
+
+Protocol v2 flame report vs A1r (GA18 DI, 0.1-0.15 s; `flame/arc22_flame/protocol_report.md`): flame cells (T > 1600 K)
+are **33 K cooler** on average (abs dT 33.3 K, bias -33.0 K; 36 K in the last 10 ms, drifting +2 K per 10 ms), hot-cell
+p95 abs dT 61 K, V(T>1500) x0.97, OH L1 13 % (total x1.05), CO L1 7 % (x0.93), H L1 28 % (x1.20), GA18 heat release
+evaluated on the state x0.93. Cost 11.15 s/step on 8 ranks.
+
+Mean field (`meanfield.txt`; per-cell mean of the snapshots; V for the full revolution):
+
+| Metric | ARC22 0.15-0.185 s | A1r 0.1-0.1875 s | Fluent GA18 |
+|---|---|---|---|
+| V(T > 1500 K) [cm3] | 18.79 (snapshots 18.33-19.36) | 19.94 | 18.25 |
+| Tmax [K] | 2104.4 | 2121.4 | 2087.5 |
+| Flame base x(T > 1500 K) [mm] | 1.39 | 1.39 | 1.15 |
+| x(OH max) [mm] | 17.6 | 15.9 | 15.1 |
+| OH max | 0.00346 | 0.00333 | 0.00328 |
+| CO max | 0.0510 | 0.0599 | 0.0532 |
+| Axis Tmax [K] | 1398 | 1472 | 1437 |
+| Mean hot abs(dT) vs Fluent GA18, volume-weighted [K] | 45.9 | 51.6 | - |
+| L1 OH / CO vs Fluent GA18 (hot) | 20 % / 8 % | 26 % / 13 % | - |
+
+NOx and C2 species (max mass fraction, mean field 0.15-0.185 s): NO 2.48e-4, NO2 4.0e-5, N2O 6.1e-6, HCN 1.46e-4,
+C2H2 0.0155, C2H4 0.0025, C2H6 0.0014, CH3OH 8.7e-5. NO is still rising slowly (mean field 0.1-0.185 s: 2.09e-4).
+
+**Outlet NOx is not meaningful in this run:** both outlets still carry the initial gas after 87 ms (exhaust CO2 constant
+at 0.0175, NO ~1e-41; `outlet_nox.txt`), so the outlet residence time is far longer than the leg. NOx is compared
+inside the domain (maxima, hot-cell L1 against Fluent GRI in the cloud).
+
+Field files for the cloud comparison: `fields/arc22_mean_0.15-0.185.npz`, `fields/arc22_t0.185.npz` (plus the
+provisional `arc22_t0.15.npz`, `arc22_mean_0.125-0.15.npz` and `a1r_mean_0.1-0.1875.npz`).
+
 ## Benchmark: Fluent DI with full GRI-Mech 3.0
 
 Javier supplied a Fluent DI solution of the same corrected burner with full GRI-Mech 3.0 (53 species). It is the main
@@ -19,8 +55,8 @@ case (all 38 mesh datasets equal), species order h2 ... c3h8 ch2cho ch3cho n2 (5
 so **the cell-by-cell GRI comparison is done in the cloud**, from the per-cell files in `fields/` (row i = OpenFOAM cell
 i = Fluent cell i+1; float32, `np.savez_compressed`; `server/sim1/arc_fields.py`):
 
-- `arc22_mean_0.15-0.2.npz`: time mean of the 0.15-0.2 s snapshots: T, Ux, Ur, Y of the 22 ARC species, x, r, V
-- `arc22_t0.2.npz`: the same at 0.2 s
+- `arc22_mean_0.15-0.185.npz`: time mean of the 0.15-0.185 s snapshots: T, Ux, Ur, Y of the 22 ARC species, x, r, V
+- `arc22_t0.185.npz`: the same at 0.185 s (last clean write)
 - `a1r_mean_0.1-0.1875.npz`: A1r (GA18 DI) mean 0.1-0.1875 s, T, Ux, Ur, 18 GA18 Y (pushed 15 Nov)
 - provisional, as soon as 0.15 s exists: `arc22_t0.15.npz`, `arc22_mean_0.125-0.15.npz`
 
