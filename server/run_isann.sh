@@ -17,6 +17,8 @@ NAME=${1:?run name}; PARENT=${2:-/opt/ofb/isann/parent_ood7}; NP=${3:-2}
 CONF=${4:-$REPO/openfoam/isann/isann.yaml}
 BASE=${BASE:-/opt/ofb/base/base}; SOLVER=${SOLVER:-rhoReactingBuoyantFoam}; export ISANN_ARC=${ISANN_ARC:-0}
 R=/opt/ofb/run/$NAME
+# the ml env has chemmanifold installed from ~/chemmanifold-studio (editable): load this repo's package first
+export PYTHONPATH=$REPO${PYTHONPATH:+:$PYTHONPATH}
 . /opt/ofb/ofenv.sh
 spain() { TZ=Europe/Madrid date '+%Y-%m-%d %H:%M %Z'; }
 

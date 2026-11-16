@@ -12,6 +12,8 @@
 REPO=$(cd "$(dirname "$0")/../.." && pwd); PY=${PY:-/opt/ofb/ml/bin/python}; LOG=${LOG:-/opt/ofb/runs/isanngri}
 CFG=configs/ch4_arc22.yaml; D=/opt/ofb/isann/parent_arc22
 mkdir -p "$LOG" "$D"; cd "$REPO"
+# the ml env has chemmanifold installed from ~/chemmanifold-studio (editable): load this worktree's package first
+export PYTHONPATH=$REPO${PYTHONPATH:+:$PYTHONPATH}
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 log() { echo "$(date '+%F %T %Z') $*" >> "$LOG/parent.log"; }
 step() { [ -f "$D/.done_$1" ] && return 0; log "$1 start"; bash -c "$2" >> "$LOG/$1.log" 2>&1 \
