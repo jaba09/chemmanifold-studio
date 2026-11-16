@@ -9,21 +9,24 @@
 # Accept if ensemble S < best S x (1 - accept_margin). Stop at S <= 1, 2 rejections in a row, or 6 iterations.
 # Collection/seeds/seeded/gate settings unchanged from iterml_auto.yaml.
 
-base_config: ../burner_openfoam_tix2h.yaml
+# 16 Nov 2026 15:25 CET, before the start: C2's P_tix2c (S 2.00) beat P_tix2h (2.97), so iteration 0 = P_tix2c
+# (tix2c s0-s2, base_config burner_openfoam_tix2c.yaml), as stated above. Nothing else changed.
+
+base_config: ../burner_openfoam_tix2c.yaml
 label_prefix: C3
 results_dir: /home/ubuntu/chemmanifold-studio/results/sim1/C3
 iter0:
-  label: P_tix2h (tix2h s0-s2 mean ensemble)
-  data: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h
+  label: P_tix2c (tix2c s0-s2 mean ensemble; tix2h family + C2 ignition-focused data)
+  data: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c
   members:
-  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h/08_fluent/resnet_film
-  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s1/08_fluent/resnet_film
-  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s2/08_fluent/resnet_film
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c/08_fluent/resnet_film
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s1/08_fluent/resnet_film
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s2/08_fluent/resnet_film
   members_pt:
-  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h/06_models/resnet_film/model.pt
-  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s1/06_models/resnet_film/model.pt
-  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s2/06_models/resnet_film/model.pt
-  score: /home/ubuntu/chemmanifold-studio/results/sim1/B/P_tix2h/score_v2.json
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c/06_models/resnet_film/model.pt
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s1/06_models/resnet_film/model.pt
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s2/06_models/resnet_film/model.pt
+  score: /home/ubuntu/chemmanifold-studio/results/sim1/B/P_tix2c/score_v2.json
 collect_bases:
   ign:
     case: /opt/ofb/protocol_v2/base_ign
