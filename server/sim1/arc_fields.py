@@ -47,7 +47,7 @@ def main():
         cols = ["temperature", "x-velocity", "radial-velocity"] + sp
         v = df[cols].to_numpy(np.float64)
         if acc is None:
-            acc, geo = v, df[["x-coordinate", "y-coordinate", "cell-volume"]].to_numpy(np.float64)
+            acc, geo = v.copy(), df[["x-coordinate", "y-coordinate", "cell-volume"]].to_numpy(np.float64)
             assert np.array_equal(df["cellnumber"].to_numpy(), np.arange(len(df))), "cell numbers not 0..n-1"
         else:
             acc += v
