@@ -31,6 +31,12 @@ STATE_MAP = None
 
 def cantera_trajectory(gas, init, case, dt, n_steps, smap=None):
     init(case)
+    smap = smap or STATE_MAP
+    if smap is not None and smap.reference == "arc":    # the ARC kernel from the projected start state
+        Y0 = smap.project(gas.Y)
+        h0 = float(smap.enthalpy(Y0[None], np.array([gas.T]), np.array([gas.P]))[0])
+        Yk, Tk = smap.advance(Y0, gas.T, gas.P, [k * dt for k in range(1, n_steps + 1)])
+        return np.vstack([Y0[None], Yk]), np.r_[gas.T, Tk], h0
     Y, T = [gas.Y.copy()], [gas.T]
     h0 = gas.enthalpy_mass
     _, net = const_p_reactor(gas)
@@ -39,7 +45,6 @@ def cantera_trajectory(gas, init, case, dt, n_steps, smap=None):
         Y.append(gas.Y.copy())
         T.append(gas.T)
     Y, T = np.array(Y), np.array(T)
-    smap = smap or STATE_MAP
     if smap is not None:
         Y = smap.project(Y)
         h0 = float(smap.enthalpy(Y[:1], T[:1], np.array([gas.P]))[0])

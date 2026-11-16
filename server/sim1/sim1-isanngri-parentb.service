@@ -1,0 +1,19 @@
+# ISANN parent ARC_GRI30_NOx22 with ARC labels (server/sim1/isanngri_parentb.sh, configs/ch4_arc22b.yaml).
+# Queued behind sim1-gri: ExecStartPre waits (checking every 5 min) until sim1-gri is no longer active, then the
+# driver runs at normal priority on 8 cores. Install and queue:
+#   cp server/sim1/sim1-isanngri-parentb.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user start --no-block sim1-isanngri-parentb
+# (start --no-block: the unit sits in "activating" while it waits). Progress: tail /opt/ofb/runs/isanngri/parentb/parent.log
+[Unit]
+Description=sim1 ISANN parent ARC_GRI30_NOx22, ARC labels (after sim1-gri)
+StartLimitIntervalSec=1d
+StartLimitBurst=4
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ofb/isann-gri-src
+ExecStartPre=/bin/bash -c 'while systemctl --user is-active -q sim1-gri; do sleep 300; done'
+TimeoutStartSec=infinity
+ExecStart=/bin/bash -lc /opt/ofb/isann-gri-src/server/sim1/isanngri_parentb.sh
+Restart=on-failure
+RestartSec=300

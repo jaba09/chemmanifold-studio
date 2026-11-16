@@ -80,7 +80,7 @@ class Daemon:
         # GRI): the run's pairs are on the state species; Cantera references are lifted into the full
         # mechanism and projected back, and enthalpies use the state species' thermo
         names = self.parent_cfg["chemistry"].get("state_species")
-        self.smap = StateMap(kin, names) if names else None
+        self.smap = StateMap(kin, names, self.parent_cfg["chemistry"].get("reference", "mechanism")) if names else None
         self.gas = self.smap.sgas if self.smap else kin
         self.kin = kin
         self.rng = np.random.default_rng(int(self.cfg.get("seed", 0)))

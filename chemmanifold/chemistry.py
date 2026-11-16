@@ -101,7 +101,7 @@ class StateMap:
     sgas:    a thermo-only ideal gas of the state species with the same NASA-7 data: the
              thermodynamics of the network's physics layers and of the CFD case (arcChemStep)."""
 
-    def __init__(self, gas, names):
+    def __init__(self, gas, names, reference="mechanism"):
         bad = [n for n in names if not isinstance(n, str)]
         if bad:
             raise ValueError(f"state species must be quoted strings (YAML reads a bare NO as false): {bad}")
@@ -109,6 +109,11 @@ class StateMap:
         if missing:
             raise ValueError(f"state species not in the mechanism: {missing}")
         self.gas, self.names = gas, list(names)
+        # reference chemistry of advance(): "mechanism" = Cantera on `gas`, lifted and projected;
+        # "arc" = the ARC_GRI30_NOx22 kernel itself (chemmanifold/arc.py, as arcChemStep in the CFD)
+        if reference not in ("mechanism", "arc"):
+            raise ValueError(f"chemistry.reference {reference}: mechanism or arc")
+        self.reference = reference
         self.idx = np.array([gas.species_index(n) for n in names])
         self.sgas = ct.Solution(thermo="ideal-gas", species=[gas.species(n) for n in names])
         self.A = element_mass_matrix(self.sgas)
@@ -189,8 +194,17 @@ class StateMap:
         return s
 
     def advance(self, Ys, T, P, times, rtol=1e-8, atol=1e-14):
-        """Cantera constant-pressure reference from a state composition: lifted into the full
-        mechanism, advanced to each of `times` [s], projected back. Returns (Ys[len(times)], T[...])."""
+        """Constant-pressure reference from a state composition to each of `times` [s]: Cantera on the
+        full mechanism (lifted, projected back) or the ARC kernel (reference "arc"); T at the input's
+        enthalpy in the state thermo. Returns (Ys[len(times)], T[...])."""
+        if self.reference == "arc":
+            from . import arc
+            Ys = np.asarray(Ys, float)
+            if self.names != arc.NAMES:
+                raise ValueError("reference arc needs state_species in the ARC order")
+            Yo, _ = arc.advance(Ys, T, P, times, rtol=rtol, atol=atol)
+            h0 = self.enthalpy(Ys[None], np.array([T]), np.array([P]))[0]
+            return Yo, self.temperature(Yo, np.full(len(Yo), h0), np.full(len(Yo), P))
         self.gas.TPY = T, P, self.lift(Ys)
         r = ct.IdealGasConstPressureReactor(self.gas, clone=True)
         net = ct.ReactorNet([r])
@@ -210,7 +224,9 @@ class StateMap:
 def state_map(cfg, gas=None):
     """StateMap of the config's state species, or None when the network state is the whole mechanism."""
     names = state_species(cfg)
-    return StateMap(gas if gas is not None else make_gas(cfg), names) if names else None
+    if not names:
+        return None
+    return StateMap(gas if gas is not None else make_gas(cfg), names, cfg["chemistry"].get("reference", "mechanism"))
 
 
 def make_state_gas(cfg):
