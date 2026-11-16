@@ -79,19 +79,28 @@ def main():
     open(os.path.join(out, "compare_gri.md"), "w").write("\n".join(L) + "\n")
     print("\n".join(L))
     try:
-        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
+        import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt, matplotlib.patches
         from matplotlib.tri import Triangulation
-        tri = Triangulation(1e3 * x, 1e3 * r); m = (1e3 * x < 120) & (1e3 * r < 80)
-        keep = m[tri.triangles].all(1); tri.set_mask(~keep)
+        X, R = 1e3 * x, 1e3 * r
+        tri = Triangulation(X, R)
+        t = tri.triangles
+        edge = np.max([np.hypot(X[t[:, i]] - X[t[:, (i + 1) % 3]], R[t[:, i]] - R[t[:, (i + 1) % 3]]) for i in range(3)], axis=0)
+        inside = ((X[t] < 125) & (R[t] < 85)).all(1)
+        tri.set_mask(~inside | (edge > 3.0))   # no triangles across the pot / outside the zoom
         for fld, lim in [("T", (300, 2150)), ("NO", None), ("OH", None), ("CO", None)]:
             show = [l for l in labs if fld in F[l]]
-            fig, axs = plt.subplots(len(show), 1, figsize=(8, 2.4 * len(show)), sharex=True)
+            fig, axs = plt.subplots(len(show), 1, figsize=(7, 2.3 * len(show)), sharex=True, constrained_layout=True)
             axs = np.atleast_1d(axs)
-            vmax = lim[1] if lim else max(F[l][fld][m].max() for l in show)
+            zoom = (X < 125) & (R < 85)
+            vmax = lim[1] if lim else max(F[l][fld][zoom].max() for l in show)
             for a, l in zip(axs, show):
-                c = a.tricontourf(tri, F[l][fld], levels=np.linspace(lim[0] if lim else 0, vmax, 41), cmap="inferno")
-                a.set_title(l, fontsize=9); a.set_ylabel("r [mm]"); a.set_aspect("equal")
-            axs[-1].set_xlabel("x [mm] (axis, up)"); fig.colorbar(c, ax=axs, shrink=0.8, label=fld)
+                c = a.tricontourf(tri, np.clip(F[l][fld], lim[0] if lim else 0, vmax),
+                                  levels=np.linspace(lim[0] if lim else 0, vmax, 41), cmap="inferno")
+                a.add_patch(matplotlib.patches.Rectangle((50, 0), 75, 50, color="0.75"))   # pot
+                a.set_xlim(0, 120); a.set_ylim(0, 80); a.set_aspect("equal")
+                a.set_title(l, fontsize=9); a.set_ylabel("r [mm]")
+            axs[-1].set_xlabel("x [mm] (axis, up)")
+            fig.colorbar(c, ax=axs, shrink=0.8, label=fld + (" [K]" if fld == "T" else " mass fraction"))
             fig.savefig(os.path.join(out, "compare_gri_%s.png" % fld), dpi=130); plt.close(fig)
     except Exception as e:
         print("plots skipped:", e)
