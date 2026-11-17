@@ -56,18 +56,19 @@ def nox_scores(run_snap, di_snap, t0=100.05, t1=150.0):
 
 def outlet_nox(case, t0=0.1, t1=0.15):
     """Mean of the outletNOx function objects (weighted averages) over [t0, t1] s, per patch."""
-    out = {}
-    for f in glob.glob(f"{case}/postProcessing/outletNOx_*/*/surfaceFieldValue.dat"):
+    frames = {}
+    for f in sorted(glob.glob(f"{case}/postProcessing/outletNOx_*/*/surfaceFieldValue.dat")):  # one dir per restart
         name = Path(f).parents[1].name.replace("outletNOx_", "")
         lines = [l for l in open(f) if not l.startswith("#") or l.startswith("# Time")]
         cols = lines[0].lstrip("# ").split()
         d = pd.DataFrame([l.split() for l in lines[1:]], columns=cols).apply(pd.to_numeric, errors="coerce")
         d.columns = [c.replace("weightedAverage(", "").rstrip(")") for c in d.columns]
+        frames.setdefault(name, []).append(d)
+    out = {}
+    for name, fs in frames.items():
+        d = pd.concat(fs).drop_duplicates("Time", keep="last").sort_values("Time")
         w = d[(d.Time >= t0) & (d.Time <= t1 + 1e-9)]
-        out.setdefault(name, {})
-        for c in w.columns:
-            if c != "Time":
-                out[name][c] = float(w[c].mean())
+        out[name] = {c: float(w[c].mean()) for c in w.columns if c != "Time"}
         out[name]["_n"] = len(w)
     return out
 

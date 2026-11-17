@@ -9,7 +9,7 @@ RUN=${RUN:-/opt/ofb/run/isann_arc22}; DI=${DI:-/opt/ofb/runs/arc22/flame}; OUT=$
 export PYTHONPATH=$REPO OMP_NUM_THREADS=1
 mkdir -p "$OUT"; LOG=$OUT/score.log; : > "$LOG"
 say() { echo "$(date '+%F %T %Z') $*" | tee -a "$LOG"; }
-. /opt/ofb/ofenv.sh > /dev/null 2>&1
+set +u; . /opt/ofb/ofenv.sh > /dev/null 2>&1; set -u      # OpenFOAM's etc/bashrc reads unset variables
 [ -f "$RUN/t_end" ] || say "WARNING: $RUN has no t_end (run not finished); scoring what is there"
 cd "$RUN" || exit 1
 # score_protocol.py reads the solver log as log.run; run_isann.sh writes one log.run.<leg> per (re)start
@@ -20,7 +20,7 @@ $PY "$P/../tools/foam_snapshot.py" . snap --label isann_arc22 --skip-existing > 
 [ "$(ls snap 2>/dev/null | wc -l)" -gt 0 ] && find . -maxdepth 1 -type d -regex '\./[0-9.e+-]+' ! -name 0.1 -exec rm -rf {} +
 cd "$REPO"
 say "protocol v2 flame vs ARC22 DI"
-$PY $P/score_protocol.py --protocol $P/protocol_v2_flame.yaml --di "$DI/snap" --di-label arc22_DI \
+$PY $P/score_protocol.py --protocol $P/protocol_v2_flame.yaml --di "$DI/snap" --di-label arc22_flame \
     --run "$RUN/snap" --label isann_arc22 --run-dir "$RUN" --out "$OUT/vs_arc22_di" >> "$LOG" 2>&1 || say "score vs ARC22 returned $?"
 say "protocol v2 flame vs GA18 DI (A1r)"
 $PY $P/score_protocol.py --protocol $P/protocol_v2_flame.yaml --di /opt/ofb/runs/A1r_R2rad/snap --di-label A1r \
