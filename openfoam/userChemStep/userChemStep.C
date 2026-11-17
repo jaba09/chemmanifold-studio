@@ -63,7 +63,10 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     trustRel_(isannDict_.getOrDefault<scalar>("trustRel", 0.3)),
     trustOHAbs_(isannDict_.getOrDefault<scalar>("trustOHAbs", 5e-5)),
     trustMin_(isannDict_.getOrDefault<label>("trustMin", 2)),
-    iOHmodel_(-1)
+    iOHmodel_(-1),
+    trustSpeciesNames_(isannDict_.getOrDefault<wordList>("trustSpecies", wordList(1, word("OH")))),
+    trustAbsList_(isannDict_.getOrDefault<scalarList>("trustAbs", scalarList(1, trustOHAbs_))),
+    trustIdx_()
 {
 #ifdef USERCHEMSTEP_ARC
     {
@@ -213,6 +216,26 @@ Foam::userChemStep<ChemistryModel>::userChemStep
         {
             if (thermos[i].name() == "OH") iOHmodel_ = map_[i];
         }
+        if (trustAbsList_.size() != trustSpeciesNames_.size())
+        {
+            FatalErrorInFunction
+                << "isann trustAbs needs one floor per trustSpecies entry" << exit(FatalError);
+        }
+        trustIdx_.setSize(trustSpeciesNames_.size(), -1);
+        forAll(trustSpeciesNames_, j)
+        {
+            forAll(thermos, i)
+            {
+                if (thermos[i].name() == trustSpeciesNames_[j]) trustIdx_[j] = map_[i];
+            }
+            if (trustIdx_[j] < 0)
+            {
+                FatalErrorInFunction
+                    << "isann trustSpecies: " << trustSpeciesNames_[j] << " is not in the case" << exit(FatalError);
+            }
+        }
+        Info<< "userChemStep: shadow check on T and " << trustSpeciesNames_ << " (floors " << trustAbsList_
+            << ", relative " << trustRel_ << ")" << endl;
         trustN_.setSize(nShadowT*nShadowZ, 0);
         trustBad_.setSize(nShadowT*nShadowZ, 0);
         if (shadowEvery_ <= 0) shadowEvery_ = 10;
@@ -453,9 +476,12 @@ void Foam::userChemStep<ChemistryModel>::shadow
         iShadow_++;
         if (!ood)
         {
-            const bool bad = mag(si.T_out - Td) > max(trustTAbs_, trustRel_*mag(Td - T))
-                || (iOHmodel_ >= 0 && mag(Ys[iOHmodel_] - Yd[iOHmodel_])
-                    > max(trustOHAbs_, trustRel_*mag(Yd[iOHmodel_] - Y0[iOHmodel_])));
+            bool bad = mag(si.T_out - Td) > max(trustTAbs_, trustRel_*mag(Td - T));
+            forAll(trustIdx_, j)
+            {
+                const label k = trustIdx_[j];
+                bad = bad || mag(Ys[k] - Yd[k]) > max(trustAbsList_[j], trustRel_*mag(Yd[k] - Y0[k]));
+            }
             const label b = trustBin(T, oi.Z);
             trustN_[b] = 0.9*trustN_[b] + 1;
             trustBad_[b] = 0.9*trustBad_[b] + (bad ? 1 : 0);

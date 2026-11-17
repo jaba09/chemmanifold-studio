@@ -76,6 +76,8 @@ Usage
             trustTAbs    1;      // K: shadow check fails if |T_ann - T_DI| > max(trustTAbs,
             trustRel     0.3;    //  trustRel |T_DI - T0|), or the same for OH with trustOHAbs
             trustOHAbs   5e-5;
+            trustSpecies (OH NO NO2 N2O HCN); // optional: species checked like OH (replaces OH alone),
+            trustAbs     (5e-5 3e-6 2e-7 5e-8 2e-6); //  each with its own absolute floor
             trustMin     2;      // failed checks before a bin is untrusted (and > half of them)
             sentinel     ();     // (T_lo T_hi Y_CH4 Y_O2 ...), one or more ranges, ITERML: cells in
             sentinelEvery 100;   //  this range, sentinelPerStep per rank every sentinelEvery steps,
@@ -227,6 +229,11 @@ class userChemStep
             mutable autoPtr<OFstream> isannStatus_;
             scalar trustTAbs_, trustRel_, trustOHAbs_;
             label trustMin_, iOHmodel_;
+            //- Species of the shadow check (model indices) and their absolute floors
+            //  (default: OH with trustOHAbs)
+            wordList trustSpeciesNames_;
+            scalarList trustAbsList_;
+            labelList trustIdx_;
             //- Shadow-check statistics per inside (T, Z) bin: checks and failures
             //  (decayed by 0.9 per check), reset when a new model is loaded
             mutable scalarField trustN_, trustBad_;

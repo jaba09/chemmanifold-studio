@@ -191,8 +191,13 @@ def enthalpy(gas, Y, T, P):
     return h
 
 
+NOX = ("NO", "NO2", "N2O", "HCN")
+
+
 def one_step_errors(model, scalers, arrays, dt_range):
-    """Errors of the model's step on GA18 pairs: |dT| [K], relative T increment, OH and CO errors."""
+    """Errors of the model's step on DI pairs: |dT| [K], relative T increment, and the median relative
+    error of OH, CO, H and (when the model has them, e.g. ARC_GRI30_NOx22) NO, NO2, N2O, HCN: |error| over
+    the true increment + 1e-3 of the value + 1e-9."""
     from chemmanifold.fluent import advance
     sp = list(scalers["species"])
     Yn, Tn, flags, _, _ = advance(model, arrays["Y_in"], arrays["T_in"], arrays["P_in"], arrays["dt"], *dt_range)
@@ -200,7 +205,7 @@ def one_step_errors(model, scalers, arrays, dt_range):
     eT = np.abs(Tn - arrays["T_out"])
     out = dict(T_mae=float(eT.mean()), T_p95=float(np.quantile(eT, 0.95)),
                T_rel=float(np.median(eT / (np.abs(dT_true) + 1.0))))
-    for s in ("OH", "CO", "H"):
+    for s in ("OH", "CO", "H") + tuple(s for s in NOX if s in sp):
         k = sp.index(s)
         dY = arrays["Y_out"][:, k] - arrays["Y_in"][:, k]
         e = np.abs(Yn[:, k] - arrays["Y_out"][:, k])

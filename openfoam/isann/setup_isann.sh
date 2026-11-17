@@ -32,6 +32,9 @@ else
 fi
 foamDictionary -entry chemistryType/solver -set userChemStep constant/chemistryProperties > /dev/null
 TESTS=""
+# TRUST_SPECIES / TRUST_ABS (e.g. "OH NO NO2 N2O HCN" / "5e-5 3e-6 2e-7 5e-8 2e-6"): species of the shadow check
+TRUST=""
+[ -n "${TRUST_SPECIES:-}" ] && TRUST="trustSpecies ($TRUST_SPECIES); trustAbs ($TRUST_ABS);"
 [ -f chemmanifold_tests.txt ] && TESTS='tests "chemmanifold_tests.txt";'
 cat >> constant/chemistryProperties <<EOD
 
@@ -58,6 +61,7 @@ userChemStepCoeffs
         trustTAbs    1;
         trustRel     0.3;
         trustOHAbs   5e-5;
+        $TRUST
         trustMin     2;
     }
 }

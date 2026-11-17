@@ -1,0 +1,20 @@
+# ISANN ARC22 run 2 (server/sim1/isanngri_run2.sh): ARC-labelled parent b + NOx-aware checks, then scoring vs ARC22 DI
+# and run 1. Queued behind sim1-isanngri-parentb: ExecStartPre waits (every 5 min) until parent b's status is "done";
+# it gives up only if parent b has failed for good (its unit in the failed state, past its restarts). 8 ranks, normal priority.
+#   cp server/sim1/sim1-isanngri-run2.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user start --no-block sim1-isanngri-run2
+# Progress: tail /opt/ofb/run/isann_arc22b/server.log /opt/ofb/run/isann_arc22b/isann/daemon.log
+[Unit]
+Description=sim1 ISANN ARC22 run 2 (parent b, NOx-aware checks) + scoring
+StartLimitIntervalSec=1d
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/ofb/isann-gri-src
+ExecStartPre=/bin/bash -c 'S=/opt/ofb/runs/isanngri/parentb/status; while [ "$(cat $S 2>/dev/null)" != done ]; do if [ "$(cat $S 2>/dev/null)" = failed ] && systemctl --user is-failed -q sim1-isanngri-parentb; then exit 1; fi; sleep 300; done'
+TimeoutStartSec=infinity
+ExecStart=/bin/bash -lc /opt/ofb/isann-gri-src/server/sim1/isanngri_run2.sh
+KillMode=control-group
+Restart=on-failure
+RestartSec=120

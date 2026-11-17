@@ -89,16 +89,24 @@ def main():
     ap.add_argument("--run", required=True)
     ap.add_argument("--di-arc", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--label", default="isann_arc22")
+    ap.add_argument("--compare", default=None, help="results dir of an earlier ISANN run (its summary.json): extra column")
     a = ap.parse_args()
     out = Path(a.out)
-    vs_arc = llama(out / "vs_arc22_di" / "isann_arc22" / "protocol_report.json")
-    vs_a1r = llama(out / "vs_ga18_di" / "isann_arc22" / "protocol_report.json")
+    vs_arc = llama(out / "vs_arc22_di" / a.label / "protocol_report.json")
+    vs_a1r = llama(out / "vs_ga18_di" / a.label / "protocol_report.json")
+    prev = json.load(open(Path(a.compare) / "summary.json")) if a.compare else None
+    try:
+        import yaml
+        parent = yaml.safe_load(open(Path(a.run) / "isann" / "isann.yaml"))["parent"]["data_dir"]
+    except Exception:   # noqa: BLE001
+        parent = "?"
     arc_vs_a1r = llama(REPO / "results/sim1/ARC22/flame/arc22_flame/protocol_report.json") or \
         llama("/opt/ofb/arc22-src/results/sim1/ARC22/flame/arc22_flame/protocol_report.json")
     v6 = llama(REPO / "results/sim1/B/flame/isann_v6/protocol_report.json")
     nox = nox_scores(Path(a.run) / "snap", Path(a.di_arc) / "snap")
     onox_run, onox_di = outlet_nox(a.run), outlet_nox(a.di_arc)
-    isj = out / "isann" / "isann_isann_arc22.json"
+    isj = out / "isann" / f"isann_{a.label}.json"
     isann = json.load(open(isj)) if isj.exists() else {}
     state = json.load(open(Path(a.run) / "isann" / "state.json"))
     rounds = state.get("rounds", [])
@@ -113,13 +121,16 @@ def main():
             ("HRR_ratio", "HRR ratio (GA18 rates on each state)", "{:.2f}"),
             ("GA18_share", "DI (ODE) share reported by the solver", "{:.1%}"),
             ("s_per_step", "s per step", "{:.2f}")]
-    cols = [("ISANN ARC22 vs ARC22 DI", vs_arc), ("ISANN ARC22 vs GA18 DI (A1r)", vs_a1r),
+    cols = [(f"{a.label} vs ARC22 DI", vs_arc)]
+    if prev:
+        cols.append((f"earlier run ({Path(a.compare).name}) vs ARC22 DI", (prev.get("vs_arc") or {}, {}) if prev.get("vs_arc") else None))
+    cols += [(f"{a.label} vs GA18 DI (A1r)", vs_a1r),
             ("ARC22 DI vs GA18 DI (A1r)", arc_vs_a1r), ("GA18 isann_v6 (pure) vs GA18 DI", v6)]
-    L = ["# ISANN with ARC_GRI30_NOx22 (sim1, 17 Nov 2026)", "",
-         "Run `/opt/ofb/run/isann_arc22`: protocol v2 flame base (A1r state at 0.1 s, LeFoam + wall radiation), "
+    L = [f"# ISANN with ARC_GRI30_NOx22: {a.label}", "",
+         f"Run `{a.run}`: protocol v2 flame base (A1r state at 0.1 s, LeFoam + wall radiation), "
          "0.1-0.15 s on 8 ranks; DI on the ARC kernel (libuserChemStepArc) until the daemon publishes a network, "
-         "then the network in the cells it does not flag OOD or untrusted. Parent: `/opt/ofb/isann/parent_arc22` "
-         "(configs/ch4_arc22.yaml, physics only, skel43 labels projected to 22 species). Reference: the ARC22 DI "
+         "then the network in the cells it does not flag OOD or untrusted. Parent: `" + parent + "` "
+         "(physics only; parent_arc22 = skel43 labels projected to 22 species, parent_arc22b = ARC labels). Reference: the ARC22 DI "
          "flame (`/opt/ofb/runs/arc22/flame`, same base; it crashed at 0.185 s, so 0.1-0.15 s is complete). "
          "Protocol v2 flame scores (`openfoam/protocol/score_protocol.py`, window 100.05-150 ms; ranks differ: "
          "the protocol's s/step are on 4 ranks, this run 8). Every CFD state is a diagnostic, never training data "
@@ -131,12 +142,19 @@ def main():
         L.append(f"| {label} | " + " | ".join(vals) + " |")
     L += ["", "## NOx in the hot cells, ISANN ARC22 vs ARC22 DI (volume-weighted, T > 600 K in either)", ""]
     if len(nox):
-        L += ["| species | total ratio mean (min-max) | L1 mean | L1 last 10 ms |", "|---|---|---|---|"]
+        pn = pd.DataFrame(prev["nox"]) if prev and prev.get("nox") else None
+        extra = " earlier run: ratio / L1 mean / L1 last 10 ms |" if pn is not None else ""
+        L += ["| species | total ratio mean (min-max) | L1 mean | L1 last 10 ms |" + extra,
+              "|---|---|---|---|" + ("---|" if pn is not None else "")]
         last = nox[nox.t_ms > 140]
         for s in NOX:
             if f"ratio_{s}" in nox:
-                L.append(f"| {s.upper()} | {nox[f'ratio_{s}'].mean():.3f} ({nox[f'ratio_{s}'].min():.3f}-"
-                         f"{nox[f'ratio_{s}'].max():.3f}) | {nox[f'L1_{s}'].mean():.1%} | {last[f'L1_{s}'].mean():.1%} |")
+                row = (f"| {s.upper()} | {nox[f'ratio_{s}'].mean():.3f} ({nox[f'ratio_{s}'].min():.3f}-"
+                       f"{nox[f'ratio_{s}'].max():.3f}) | {nox[f'L1_{s}'].mean():.1%} | {last[f'L1_{s}'].mean():.1%} |")
+                if pn is not None and f"ratio_{s}" in pn:
+                    pl = pn[pn.t_ms > 140]
+                    row += f" {pn[f'ratio_{s}'].mean():.3f} / {pn[f'L1_{s}'].mean():.1%} / {pl[f'L1_{s}'].mean():.1%} |"
+                L.append(row)
         L.append(f"\n{len(nox)} common snapshots.")
     else:
         L.append("no common snapshots")

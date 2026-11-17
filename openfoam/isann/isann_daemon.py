@@ -196,6 +196,9 @@ class Daemon:
         t.update(init_from=str(cur), epochs=int(c["epochs"]), lr_max=float(c["lr_max"]),
                  noise_amp=float(c["noise_amp"]), noise_end_frac=float(c["noise_end_frac"]),
                  patience=int(c["patience"]), pct_start=float(c.get("pct_start", 0.2)), threads=int(c["threads"]))
+        if c.get("radical_loss"):   # 07_train L_rad: relative error of these species (e.g. NOx), pseudo-Huber
+            t["radical_loss"] = dict(c["radical_loss"])
+            t.setdefault("loss_weights", {})["rad"] = float(c.get("radical_weight", 0.1))
         if not c.get("rollout_loss", True):
             cfg.pop("rollout_loss", None)
         else:   # warm start: from the first epoch, weighted by training.rollout_weight
@@ -275,9 +278,12 @@ class Daemon:
         return self.dir / f"round{self.state['rounds'][-1]['round']}" / "06_models" / "resnet_film" / "model.pt"
 
     def current_cfg_path(self):
+        """Config of the network the run uses: the last ACCEPTED round (a rejected round's candidate is not
+        the current network; before this fix the gate after a rejection compared against that candidate)."""
         if self.state["version"] == 0:
             return None
-        return self.dir / f"round{self.state['rounds'][-1]['round']}" / "config.yaml"
+        acc = [r for r in self.state["rounds"] if r.get("gate", {}).get("accepted")]
+        return self.dir / f"round{acc[-1]['round']}" / "config.yaml"
 
     def stage(self, script, cfg_path, *extra):
         py = sys.executable
@@ -318,6 +324,16 @@ class Daemon:
         # states (|dT| > roll_fail_K after roll_steps) and a median not worse than max_ratio
         ok = c["T_mae"] < n["T_mae"] and c["roll_fail"] <= n["roll_fail"] and \
             c["roll_T_p50"] <= g["max_ratio"] * n["roll_T_p50"] + 0.1
+        # gate.no_worse: species whose one-step error (<s>_rel) and rollout error (roll_<s>) must not exceed
+        # gate.species_ratio x the current network's (NOx with ARC_GRI30_NOx22: the T/OH gate let NO drift)
+        worse = []
+        for s in g.get("no_worse") or []:
+            for key in (f"{s}_rel", f"roll_{s}"):
+                if key in c and key in n and c[key] > float(g.get("species_ratio", 1.1)) * n[key] + 1e-12:
+                    worse.append(key)
+        if worse:
+            res["worse"] = worse
+            ok = False
         if self.state["version"] == 0 and not self.cfg["di"].get("skip", False):
             # the first network after a DI phase must also be usable in absolute terms
             ok = ok and c["T_mae"] < g["first_T_mae"]
@@ -334,17 +350,27 @@ class Daemon:
         Y, T, P, dt = arrays["Y_in"][idx].copy(), arrays["T_in"][idx].copy(), arrays["P_in"][idx], arrays["dt"][idx]
         import cantera as ct
         ref_T = np.empty(n)
+        ref_Y = np.full_like(Y, np.nan)
         for i in range(n):
             try:
-                ref_T[i] = self.reference(Y[i], T[i], P[i], [g["roll_steps"] * dt[i]])[1][0]
-            except ct.CanteraError:
+                yr, tr = self.reference(Y[i], T[i], P[i], [g["roll_steps"] * dt[i]])
+                ref_Y[i], ref_T[i] = yr[0], tr[0]
+            except (ct.CanteraError, RuntimeError):
                 ref_T[i] = np.nan
         for _ in range(int(g["roll_steps"])):
             Y, T, *_ = advance(model, Y, T, P, dt, *dt_range)
         e = np.abs(T - ref_T)
         e[~np.isfinite(e)] = 1e4
-        return dict(roll_T=float(e.mean()), roll_T_p50=float(np.median(e)), roll_T_p95=float(np.quantile(e, 0.95)),
-                    roll_fail=int((e > float(g["roll_fail_K"])).sum()))
+        out = dict(roll_T=float(e.mean()), roll_T_p50=float(np.median(e)), roll_T_p95=float(np.quantile(e, 0.95)),
+                   roll_fail=int((e > float(g["roll_fail_K"])).sum()))
+        # species after the rollout (gate.roll_species, with absolute floors): median relative error
+        ok = np.isfinite(ref_T)
+        for s, floor in (g.get("roll_species") or {}).items():
+            if s in self.species and ok.any():
+                k = self.species.index(s)
+                r = np.abs(Y[ok, k] - ref_Y[ok, k]) / (np.abs(ref_Y[ok, k]) + float(floor))
+                out[f"roll_{s}"] = float(np.median(r))
+        return out
 
     def train_round(self, why, info):
         k = len(self.state["rounds"]) + 1

@@ -1,0 +1,64 @@
+# ISANN criteria (openfoam/isann/README.md). Steps are flow steps (dt 2e-5 s: 50 steps = 1 ms).
+# ARC_GRI30_NOx22 run 2: = isann_arc22.yaml with the ARC-labelled parent of configs/ch4_arc22b.yaml and NOx in
+# the checks (run 1, 17 Nov: T/OH/CO tracked ARC DI, flame |dT| 7.3 K, but hot-cell NO drifted to x1.6, HCN x9):
+#   - shadow check / trust bins on T, OH, NO, NO2, N2O, HCN (setup: TRUST_SPECIES / TRUST_ABS; floors = 1.5 % of
+#     the ARC22 DI hot-cell p99, the ratio of the OH floor 5e-5)
+#   - gate: NOx one-step errors and 0D-rollout errors reported; NO and HCN may not get worse (x1.1)
+#   - online rounds: 07_train's relative species term (radical_loss) with the NOx species
+# "GA18" below means the DI chemistry, here the ARC kernel.
+seed: 0
+parent:                       # a priori model the run starts from (tables for Z/OOD, first warm start)
+  data_dir: /opt/ofb/isann/parent_arc22b       # its 03_samples (replay), 04_prep, 06_models
+  model_file: /opt/ofb/isann/parent_arc22b/chemmanifold_model.txt   # copied from 08_fluent/resnet_film by server/sim1/isanngri_parent.sh
+dedup:
+  radius: 0.05                # radius of novelty, in units of the parent's landmark threshold
+di:                           # DI phase -> first network
+  skip: false                 # true: no DI phase (userChemStep isann.startActive true), the parent
+                              #  runs from step 1 and the retrain criteria apply from the start
+  min_steps: 100              # 2 ms at least on GA18
+  min_pairs: 3000             # deduplicated training pairs
+  window: 25                  # steps over which the grid saturation is measured
+  saturation: 0.02            # new grid boxes over the window < 2% of all boxes
+  max_steps: 400              # 8 ms: train anyway
+  min_pairs_forced: 1000
+retrain:                      # network phase -> next network
+  min_gap: 100                # steps between a published model and the next training
+  window: 25
+  new_pairs: 1500             # new deduplicated GA18 pairs
+  ga18_share: 0.05            # or GA18 share of hot cells above 5% ...
+  min_new_pairs: 300          #   ... with at least this many new pairs (also for untrusted bins)
+  max_rounds: 12
+training:                     # warm-started fine-tuning (07_train.py init_from)
+  latent_dim: 15                # = the parent's (ch4_arc22b; run 1 kept run-1 GA18's 12)
+  epochs: 20
+  lr_max: 2.0e-4
+  noise_amp: 0.005
+  noise_end_frac: 0.4
+  pct_start: 0.2
+  patience: 5
+  threads: 2
+  replay_factor: 3            # a priori pairs = 3 x online pairs, clipped to [min, max]
+  replay_min: 20000
+  replay_max: 60000
+  rollout_loss: true
+  rollout_weight: 0.5
+  radical_loss:               # 07_train L_rad: pseudo-Huber of the relative error of these species per step
+    species: [OH, H, O, HO2, "NO", NO2, N2O, HCN]
+    rel_floor: 0.01
+    abs_floor: 1.0e-10
+  radical_weight: 0.1
+  online_segments: 4000       # Cantera continuations (8 steps) of online states for the rollout loss
+  relabel_dt: false           # true with local time stepping (LTS): pairs whose dt is above the
+                              #  trained range are re-integrated (Cantera) over their first sub-step
+gate:
+  holdout_frac: 0.15          # online pairs never trained on, to accept or reject a candidate
+  max_ratio: 1.1              # accept: one-step error below the current one, no more failed
+  roll_fail_K: 20             #  rollouts (|dT| > 20 K) and a median rollout error <= 1.1 x
+  first_T_mae: 2.0            # K per step: the first network must also be below this
+  n_roll: 120
+  roll_steps: 100             # 0D rollouts of 2 ms from held-out states vs the reference (ARC for this parent)
+  roll_species: {OH: 5.0e-5, "NO": 3.0e-6, NO2: 2.0e-7, N2O: 5.0e-8, HCN: 2.0e-6}   # median rel. error, floors
+  no_worse: ["NO", HCN]       # one-step <s>_rel and roll_<s> of the candidate <= species_ratio x current's
+  species_ratio: 1.1
+publish:
+  steps_ahead: 5              # the control file names a step this far ahead
