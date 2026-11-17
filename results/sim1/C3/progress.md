@@ -8,8 +8,7 @@ row, or 6 iterations. CFD states are only seeds of Cantera exploration (never tr
 |---|---|---|---|---|---|---|---|---|---|---|
 | 0 (P_tix2c) | - | - | - | - | 662,188 | - | 2.00 (1.60, 2.00, 0.15) | 8.0 K | -0.6 ms | baseline |
 | 1 | 0 | 10.6 ms (15k-state cap) / 18 ms (model lost: OOD > 10 %) | 11,440 | 405,184 | 1,018,750 | s0 45.3 K FAIL, s1 25.5, s2 25.5 | 2.22 (2.22, 1.33, 0.14) | 11.1 K | +0.4 ms | rejected |
-
-| 2 | 0 | 10.6 ms (15k-state cap) / 18 ms (model lost: OOD > 10 %) | 11,296 | 405184 | 1018750 | s0 32.1 K, s1 55.3 K FAIL, s2 33.1 K | 2.15 (2.15, 0.67, 0.15) | 10.7 K | +0.2 ms | rejected |
+| 2 | 0 | 10.6 ms (15k-state cap) / 18 ms (model lost: OOD > 10 %) | 11,296 | 405,184 | 1,018,750 | s0 32.1 K, s1 55.3 K FAIL, s2 33.1 K | 2.15 (2.15, 0.67, 0.15) | 10.7 K | +0.2 ms | rejected |
 
 Iteration 1: ignition improved from -0.6 to +0.4 ms, but the flame got worse (8.0 -> 11.1 K, drift +1.3 K/10 ms), and
 one repeat (s0) failed the offline gate. Iteration 2 restarted from iteration 0 (17 Nov 03:27 CET).
