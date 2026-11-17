@@ -1,0 +1,301 @@
+data_dir: .
+seed: 0
+chemistry:
+  mechanism: /opt/ofb/isann-gri-src/mechanisms/arc_gri30_nox22/gri30_skel43.yaml
+  state_species:
+  - H2
+  - H
+  - O
+  - O2
+  - OH
+  - H2O
+  - HO2
+  - H2O2
+  - CH4
+  - CH3
+  - CO
+  - CO2
+  - CH2O
+  - CH3OH
+  - C2H2
+  - C2H4
+  - C2H6
+  - N2
+  - 'NO'
+  - NO2
+  - N2O
+  - HCN
+  fuel: CH4:1.0
+  fuel_T: 300.0
+  oxidizer: O2:0.232909, N2:0.767091
+  oxidizer_T: 300.0
+  P_atm: 1.0
+flame:
+  transport: unity-Lewis-number
+  width: 0.15
+  mdot_fuel_min: 0.004
+  radiation_mdot_fuel_min: 0.02
+  strain_factor: 1.5
+  max_flamelets: 26
+  extinction_T: 1000.0
+  holdout_every: 3
+  radiation:
+  - false
+  - true
+envelope:
+  mode: flame
+  n_traj: 160
+  f_pasr: 0.35
+  z_knots:
+  - 0.0
+  - 0.0275
+  - 0.055
+  - 0.11
+  - 0.22
+  - 1.0
+  u_knots:
+  - 0.0
+  - 0.22
+  - 0.4
+  - 0.62
+  - 0.8
+  - 1.0
+  alpha:
+  - 0.0
+  - 1.0
+  heat_loss: fraction
+  psi_max: 0.85
+  T_wall: 300.0
+  f_cool: 0.35
+  tau_q_range:
+  - 0.001
+  - 1.0
+  burnt_seeds:
+    n: 64
+    Z_range:
+    - 0.01
+    - 0.3
+    alpha:
+    - 0.85
+    - 1.0
+    psi_max: 0.2
+autoignition:
+  dt_base: 1.0e-05
+  t_max: 0.02
+  min_steps: 10
+  dT_rise: 400.0
+  rise_frac: 0.9
+  dT_flat: 0.02
+  n_consecutive: 25
+  cooling_records: 2000
+  equilibrium_tail:
+    t_end: 0.03
+    n_records: 40
+    T_min: 1200.0
+arclength:
+  boxcox_lambda: 0.1
+  n_pick: 220
+  n_seed: 15
+  strides:
+  - 1
+  - 2
+  - 4
+  floor_frac: 0.05
+pasr:
+  n_particles: 400
+  beta_a: 0.7
+  beta_b: 0.7
+  loss_fraction_range:
+  - 0.0
+  - 0.85
+  vitiated_ignition:
+    n: 160
+    Z_p_lean:
+    - 0.02
+    - 0.055
+    Z_p_rich:
+    - 0.055
+    - 0.3
+    psi_max: 0.15
+    stream_share:
+    - 0.003
+    - 0.5
+    t_max: 0.02
+    n_pick: 300
+    time_share: 0.5
+  burnt_relaxation:
+    n: 240
+    Z_range:
+    - 0.005
+    - 0.3
+    psi_max: 0.5
+    radical_decades: 1.5
+    T_min: 800
+    t_max: 0.02
+    n_pick: 60
+  recirculation:
+    n_ensembles: 24
+    n_particles: 300
+    psi_range:
+    - 0.0
+    - 0.85
+    beta_a: 0.7
+    beta_b: 0.7
+    f_aged: 0.5
+    age_range:
+    - 1.0e-05
+    - 0.005
+  strides:
+  - 1
+  - 2
+  - 4
+unsteady_flamelets:
+  n_z: 61
+  workers: 8
+  t_end_chi: 3.0
+  t_max: 0.2
+  dt_bounds:
+  - 1.0e-05
+  - 0.001
+  max_steps: 2000
+  n_snapshots: 30
+  points_per_snapshot: 15
+  T_min_pair: 350.0
+  extinction:
+    n: 10
+    factor:
+    - 1.2
+    - 4.0
+  reignition:
+    n: 8
+    T_range:
+    - 1100.0
+    - 1700.0
+    strain_factor:
+    - 0.005
+    - 0.3
+  cooling:
+    n: 12
+    tau_q_range:
+    - 0.001
+    - 0.1
+  strain_jump:
+    n: 8
+    factor:
+    - 0.1
+    - 10.0
+preprocess:
+  boxcox_lambda: 0.1
+  val_frac: 0.12
+  sigma_y_min: 0.001
+  sigma_dy_min: 0.01
+  scalers_from: /opt/ofb/isann/parent_arc22/04_prep/scalers.json
+manifold:
+  n_clusters: 4
+  candidate_dims:
+  - 2
+  - 3
+  - 4
+  - 6
+  - 8
+  variance_target: 0.995
+  max_samples: 40000
+coverage:
+  radius: 0.5
+rollout_loss:
+  weight: 0.5
+  steps: 8
+  stride: 4
+  batch_size: 128
+  segments_per_traj: 150
+  start_frac: 0.0
+model:
+  hidden: 192
+  n_blocks: 3
+  node_hidden: 128
+  node_substeps: 2
+  latent_dim: 12
+training:
+  epochs: 20
+  batch_size: 512
+  lr_max: 0.0002
+  weight_decay: 1.0e-05
+  noise_amp: 0.005
+  noise_end_frac: 0.4
+  loss_weights:
+    inc: 1.0
+    mass: 1.0
+    T: 1.0
+    equil: 0.1
+    ae: 1.0
+    rad: 0.1
+  equil_threshold: 0.05
+  threads: 3
+  device: auto
+  init_from: /opt/ofb/run/isann_arc22/isann/round7/06_models/resnet_film/model.pt
+  patience: 5
+  pct_start: 0.2
+  radical_loss:
+    species:
+    - OH
+    - H
+    - O
+    - HO2
+    - 'NO'
+    - NO2
+    - N2O
+    - HCN
+    rel_floor: 0.01
+    abs_floor: 1.0e-10
+evaluation:
+  rollout:
+    Z: 0.055
+    alpha: 0.6
+    n_steps: 500
+    stride: 1
+  envelope_grid:
+    Z:
+    - 0.033
+    - 0.055
+    - 0.088
+    alpha:
+    - 0.6
+    - 0.7
+    - 0.8
+  cooled_grid:
+    Z:
+    - 0.033
+    - 0.055
+    - 0.088
+    psi:
+    - 0.2
+    - 0.4
+    - 0.6
+  cooled_rollout:
+    stride: 4
+    n_steps: 250
+  mixing_cases:
+  - Z_p: 0.088
+    psi: 0.0
+    stream: air
+    beta: 0.5
+  - Z_p: 0.15
+    psi: 0.2
+    stream: air
+    beta: 0.3
+  - Z_p: 0.088
+    psi: 0.4
+    stream: air
+    beta: 0.7
+  - Z_p: 0.033
+    psi: 0.4
+    stream: air
+    beta: 0.5
+  - Z_p: 0.055
+    psi: 0.0
+    stream: fuel
+    beta: 0.5
+  - Z_p: 0.055
+    psi: 0.4
+    stream: fuel
+    beta: 0.8
