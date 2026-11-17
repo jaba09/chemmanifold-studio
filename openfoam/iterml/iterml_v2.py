@@ -51,9 +51,32 @@ class LoopV2(Loop):
     def parent_model_pt(self, k):
         return self.members(k)[0][1]
 
+    # --- reuse of an earlier loop's collection + seeds (settings `reuse: {k: <iterK dir>}`) -------------
+    def reuse_src(self, k):
+        """Source iteration dir whose collection legs and seeds iteration k may reuse: only when k starts from
+        iteration 0 (the source iterations also started from iteration 0 with the same members, so their
+        collection model, member 0, and their seed lineage, none, are the same)."""
+        r = (self.s.get("reuse") or {}).get(k) or (self.s.get("reuse") or {}).get(str(k))
+        if not r or self.parent_of(k) != 0:
+            return None
+        src = Path(r)
+        if json.load(open(src / "state.json")).get("parent", {}).get("iter") != 0:
+            return None
+        return src
+
     # --- [A] collection: ignition leg + flame leg ---------------------------------------------------
     def collect(self, k):
         c, st = self.s["collect"], self.s["collect"]["stop"]
+        src = self.reuse_src(k)
+        if src:
+            sst = json.load(open(src / "state.json"))
+            for leg in self.s["collect_bases"]:
+                if not (self.it(k) / f"collect_{leg}").exists():
+                    (self.it(k) / f"collect_{leg}").symlink_to(src / f"collect_{leg}")
+                self.done(k, f"collect_{leg}", reused_from=str(src), **{a: b for a, b in sst[f"collect_{leg}"].items() if a != "done"})
+            self.done(k, "collect", reused_from=str(src), **{a: b for a, b in sst["collect"].items() if a != "done"})
+            log(self.it(k), f"collection legs reused from {src} (same parent member, iteration 0)")
+            return
         info_all = {}
         for leg, base in self.s["collect_bases"].items():
             run = self.it(k) / f"collect_{leg}"
@@ -101,6 +124,15 @@ class LoopV2(Loop):
         self.write_config(k)
         self.link_data(k)
         runs = " ".join(str(self.it(k) / f"collect_{leg}") for leg in self.s["collect_bases"])
+        src = self.reuse_src(k)
+        if src:
+            import shutil
+            if not (self.it(k) / "seeds").exists():
+                shutil.copytree(src / "seeds", self.it(k) / "seeds")
+            n = len(np.load(self.it(k) / "seeds" / "seeds.npz")["T"])
+            self.done(k, "seeds", n_seeds=n, reused_from=str(src))
+            log(self.it(k), f"{n} seeds reused from {src}")
+            return
         md = self.parent_model_dir(k)
         sh(f"{PY} {REPO}/scripts/19_iterml_seeds.py --config {cfg_p} --runs {runs} "
            f"--model {md / 'chemmanifold_model.txt'} --scalers {self.parent_data(k) / '04_prep' / 'scalers.json'} "
@@ -117,18 +149,25 @@ class LoopV2(Loop):
         cfg = yaml.safe_load(open(c))
         seed0 = int(cfg.get("seed", 0))
         threads = list(self.s["train"].get("threads_per_repeat", [3, 3, 2]))
+        scratch = bool(self.s["train"].get("from_scratch"))
         procs = []
         for i, (tag, (md, pt)) in enumerate(zip(self.tags(), self.members(k))):
             ci = cfg.copy()
-            ci["training"] = dict(cfg["training"], init_from=str(pt), threads=threads[i % len(threads)])
+            ci["training"] = dict(cfg["training"], threads=threads[i % len(threads)])
+            if scratch:          # base config recipe (write_config: scratch_every 1), no init_from; resumable
+                ci["training"].pop("init_from", None)
+            else:
+                ci["training"]["init_from"] = str(pt)
             cp = self.it(k) / f"iterml_iter{k}_{tag or 's0'}.yaml"
             with open(cp, "w") as f:
-                f.write(f"# ITERML v2 iteration {k}, repeat {tag or 's0'}: warm start from parent member {i} ({pt})\n")
+                f.write(f"# ITERML v2 iteration {k}, repeat {tag or 's0'}: "
+                        + ("from scratch (base recipe)\n" if scratch else f"warm start from parent member {i} ({pt})\n"))
                 yaml.safe_dump(ci, f, sort_keys=False)
-            extra = f" --seed {seed0 + 100 * i}" + (f" --tag {tag}" if tag else "")
+            extra = f" --seed {seed0 + 100 * i}" + (f" --tag {tag}" if tag else "") + (" --resume" if scratch else "")
             cmd = (f"OMP_NUM_THREADS={ci['training']['threads']} {PY} {REPO}/scripts/07_train.py --config {cp}{extra} && "
                    f"{PY} {REPO}/scripts/12_export_fluent.py --config {cp}" + (f" --tag {tag}" if tag else ""))
-            log(self.it(k), f"training repeat {tag or 's0'} (warm start from member {i}, {ci['training']['threads']} threads)")
+            log(self.it(k), f"training repeat {tag or 's0'} ("
+                + ("from scratch" if scratch else f"warm start from member {i}") + f", {ci['training']['threads']} threads)")
             procs.append((tag, subprocess.Popen(["bash", "-c", cmd + f" >> {self.it(k)}/train_{tag or 's0'}.log 2>&1"])))
         info_all = {}
         for tag, p in procs:
