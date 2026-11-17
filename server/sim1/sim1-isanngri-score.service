@@ -1,0 +1,16 @@
+# Scoring of the ISANN ARC22 run (server/sim1/isanngri_score.sh), queued behind sim1-isanngri-run: ExecStartPre waits
+# (every 2 min) until sim1-isanngri-run is no longer active, then the scoring runs at nice 10 (1 thread).
+#   cp server/sim1/sim1-isanngri-score.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user start --no-block sim1-isanngri-score
+# Output: results/sim1/ISANN_ARC22/summary.md (committed and pushed), log results/sim1/ISANN_ARC22/score.log
+[Unit]
+Description=sim1 ISANN ARC22 scoring (after sim1-isanngri-run)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/ofb/isann-gri-src
+ExecStartPre=/bin/bash -c 'while systemctl --user is-active -q sim1-isanngri-run; do sleep 120; done'
+TimeoutStartSec=infinity
+ExecStart=/bin/bash -lc /opt/ofb/isann-gri-src/server/sim1/isanngri_score.sh
+Nice=10
+IOSchedulingClass=idle
