@@ -36,6 +36,25 @@ HCN    8.647e-69
 CO     3.328e-17
 CO2    2.802e-08
 C2H2   1.927e-62
+== outletNOx_outlet-lab
+mean 0.15-0.185 s (0 samples):
+T      NaN
+NO     NaN
+NO2    NaN
+N2O    NaN
+HCN    NaN
+CO     NaN
+CO2    NaN
+C2H2   NaN
+last (t = 0.18720 s):
+T            308
+NO     1.143e-50
+NO2    2.915e-60
+N2O    1.467e-28
+HCN    6.494e-69
+CO     3.293e-17
+CO2    2.797e-08
+C2H2   1.343e-62
 == outletNOx_wall-fff-fluid-exhaust
 mean 0.15-0.185 s (1 samples):
 T          357.9
@@ -74,3 +93,22 @@ HCN    2.462e-59
 CO     1.039e-05
 CO2      0.01751
 C2H2   1.102e-58
+== outletNOx_wall-fff-fluid-exhaust
+mean 0.15-0.185 s (0 samples):
+T      NaN
+NO     NaN
+NO2    NaN
+N2O    NaN
+HCN    NaN
+CO     NaN
+CO2    NaN
+C2H2   NaN
+last (t = 0.18720 s):
+T          357.8
+NO     1.339e-41
+NO2    1.268e-42
+N2O    1.137e-25
+HCN    2.455e-59
+CO     1.039e-05
+CO2      0.01751
+C2H2   1.099e-58

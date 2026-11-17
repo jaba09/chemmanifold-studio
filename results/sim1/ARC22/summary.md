@@ -1,6 +1,6 @@
 # ARC22: OpenFOAM DI burner flame with ARC_GRI30_NOx22 (22 transported + 21 QSS species)
 
-15 Nov 2026, sim1, 8 ranks, systemd user unit `sim1-arc` (`server/sim1/arc_run.sh`). Status: flame leg done (stopped at 0.1874 s, see below); GRI-Mech 3.0 OpenFOAM leg running; ARC ignition leg queued.
+15 Nov 2026, sim1, 8 ranks, systemd user unit `sim1-arc` (`server/sim1/arc_run.sh`). Status (17 Nov 09:03 CET): all legs done. ARC flame leg 0.1-0.185 s (stopped twice at 0.1873-0.1874 s by the near-axis fvDOM runaway, also A1r's), GRI-Mech 3.0 OpenFOAM flame leg 0.1-0.15 s, ARC ignition leg 0-25 ms; all scored.
 
 Case: the usual corrected-outlets burner, rhoReactingBuoyantLeFoam + constantLewis (Sct 0.7) + fvDOM wall radiation,
 Euler dt 2e-5 s, protocol v2 bases. Chemistry: `openfoam/arcChemStep` (22 species, empty reaction list; per-cell
@@ -80,6 +80,19 @@ The ARC-GRI gap grows slowly with time (abs(dT) 1.5 K at 0.1025-0.125 s, 3.2 K a
 N2O (N2O-intermediate route) and HCN (prompt route) are where the reduction is weakest; NO itself stays within 4-6 %.
 
 Cost per step on 8 ranks (same case): GA18 7.6 s, ARC22 11.2 s, GRI-Mech 3.0 30 s (2500 steps in 20.9 h).
+
+## Ignition leg (0-25 ms from the lean start, vs A2r = GA18 DI; `ign/arc22_ign/protocol_report.md`)
+
+| Metric | ARC22 | A2r (GA18) |
+|---|---|---|
+| Ignition time (domain Tmax > 1600 K, 0.2 ms monitor) | 2.8 ms | 2.4 ms |
+| Tmax at 5.2 / 25 ms [K] | 2059 / 2107 | 2102 / 2134 |
+
+At 25 ms: flame cells (T > 1600 K) abs dT 26.6 K, bias -26.5 K (the same GA18-vs-GRI offset as the flame leg), hot cells
+1.6 K, p95 8 K, V(T > 1500 K) x0.97, OH L1 3 % (x1.01), CO 10 % (x0.90), flame tip / base on the axis -0.3 / +0.3 mm.
+Start-up 0-5 ms: the +0.4 ms later ignition gives a worst-snapshot flame bias of -254 K; hot cells 0.5 K. A2r carries
+GA18, not GRI: part of the +0.4 ms may be GA18 vs GRI (0D: ARC vs GRI ignition delay within 0.93 %, mean 0.40 %);
+no GRI ignition leg was run. Cost 10.7 s/step on 8 ranks.
 
 ## Benchmark: Fluent DI with full GRI-Mech 3.0
 
