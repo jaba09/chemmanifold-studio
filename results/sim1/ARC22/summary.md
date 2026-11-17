@@ -1,6 +1,6 @@
 # ARC22: OpenFOAM DI burner flame with ARC_GRI30_NOx22 (22 transported + 21 QSS species)
 
-15 Nov 2026, sim1, 8 ranks, systemd user unit `sim1-arc` (`server/sim1/arc_run.sh`). Status (17 Nov 09:03 CET): all legs done. ARC flame leg 0.1-0.185 s (stopped twice at 0.1873-0.1874 s by the near-axis fvDOM runaway, also A1r's), GRI-Mech 3.0 OpenFOAM flame leg 0.1-0.15 s, ARC ignition leg 0-25 ms; all scored.
+15 Nov 2026, sim1, 8 ranks, systemd user unit `sim1-arc` (`server/sim1/arc_run.sh`). Status (17 Nov 09:03 CET): all legs done. ARC flame leg 0.1-0.185 s (stopped twice at 0.1873-0.1874 s by the near-axis fvDOM runaway, also A1r's), GRI-Mech 3.0 OpenFOAM flame leg 0.1-0.15 s, ARC ignition leg 0-25 ms, GRI-Mech 3.0 ignition leg 0-5 ms; all scored.
 
 Case: the usual corrected-outlets burner, rhoReactingBuoyantLeFoam + constantLewis (Sct 0.7) + fvDOM wall radiation,
 Euler dt 2e-5 s, protocol v2 bases. Chemistry: `openfoam/arcChemStep` (22 species, empty reaction list; per-cell
@@ -93,6 +93,33 @@ At 25 ms: flame cells (T > 1600 K) abs dT 26.6 K, bias -26.5 K (the same GA18-vs
 Start-up 0-5 ms: the +0.4 ms later ignition gives a worst-snapshot flame bias of -254 K; hot cells 0.5 K. A2r carries
 GA18, not GRI: part of the +0.4 ms may be GA18 vs GRI (0D: ARC vs GRI ignition delay within 0.93 %, mean 0.40 %);
 no GRI ignition leg was run. Cost 10.7 s/step on 8 ranks.
+
+## Ignition 0-5 ms: ARC22 vs GRI-Mech 3.0 in OpenFOAM (17 Nov, `ign_gri/`, `server/sim1/gri_ign.sh`)
+
+GRI-Mech 3.0 ignition leg (same lean start, standard DI, 250 steps, ~37 s/step on 8 ranks):
+
+| | GRI-Mech 3.0 | ARC22 | A2r (GA18) |
+|---|---|---|---|
+| Ignition (domain Tmax > 1600 K, 0.2 ms monitor) | 2.8 ms | 2.8 ms | 2.4 ms |
+| Tmax at 5 ms [K] | 2060 | 2060 | 2098 |
+
+**The ARC ignites with GRI; the 0.4 ms earlier ignition of A2r is GA18 chemistry.** GRI vs A2r shows the same
+signature as ARC vs A2r (+0.40 ms, worst-snapshot flame bias -257 K vs -254 K). ARC vs GRI (protocol v2, GRI as
+reference, `ign_gri/arc_vs_gri`): ignition +0.00 ms, Tmax excess +1 K, flame-cell abs dT 12 K (worst bias -20 K,
+at 3 ms while the kernel forms), hot cells 0.3 K, OH L1 1 %.
+
+Cell by cell ARC vs GRI (`ign_gri/compare_arc_gri_ign.md`, hot = T > 1000 K): abs(dT) 0.3-0.4 K at every time
+(max 25-55 K in single cells); V(T > 1500 K) 0.58 vs 0.59 cm3 at 5 ms. Species L1 (total ARC/GRI):
+
+| t | OH | CO | NO | N2O | HCN |
+|---|---|---|---|---|---|
+| 1-2 ms (pre-ignition) | 0.7 % | 1.1 % | 1.2 % (1.01) | 0.9 % | 3 % (1.01) |
+| 3 ms (kernel) | 0.8 % | 7.3 % (0.93) | 25 % (0.75) | 1.8 % | 23 % (0.81) |
+| 4 ms | 0.8 % | 3.9 % | 14 % (1.06) | 2.1 % | 11 % (1.07) |
+| 5 ms | 0.8 % | 3.2 % (0.97) | 13 % (1.09) | 2.5 % | 14 % (1.12) |
+
+At 3 ms the ARC kernel is slightly behind (Tmax 1871 vs 1896 K), so early NO and HCN lag (x0.75 / x0.81); from 4 ms
+they run 6-12 % high, as in the steady flame.
 
 ## Benchmark: Fluent DI with full GRI-Mech 3.0
 
