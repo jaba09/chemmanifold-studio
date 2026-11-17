@@ -69,6 +69,18 @@ N2O 12.4 % (1.091), HCN 18.2 % (1.182), C2H2 7.4 % (1.073).
 So the ARC flame is the GRI flame to within 1.5 K: the -33 K offset of both from GA18 (A1r) is GA18 vs GRI chemistry.
 NOx: NO within 6 % in total; HCN (+18 %) and N2O (+9 %) are the weakest species.
 
+### Final window 0.125-0.15 s (GRI leg completed 17 Nov 05:24)
+
+`compare_of_gri.md` (`fields/arc22_mean_0.125-0.15.npz` vs `fields/gri53_mean_0.125-0.15.npz`, 11 snapshots each):
+V(T > 1500 K) 19.48 vs 19.46 cm3, Tmax 2108 vs 2107 K, hot-cell mean abs(dT) 3.2 K (volume-weighted), bias +1.2 K,
+max 17 K. L1 (total ARC/GRI): OH 1.5 % (0.994), CO 3.4 % (0.971), CO2 0.4 %, H 3.6 %, CH4 0.4 %, CH3OH 3.2 %,
+NO 7.6 % (1.039), NO2 4.0 % (0.981), C2H2 8.9 % (1.088), HCN 20.6 % (1.206), **N2O 34 % (1.27; max 2.6e-6 vs 1.1e-6)**.
+At 0.15 s instantaneous: abs(dT) 4.1 K, NO total 1.026, N2O 1.31, HCN 1.21.
+The ARC-GRI gap grows slowly with time (abs(dT) 1.5 K at 0.1025-0.125 s, 3.2 K at 0.125-0.15 s; N2O L1 12 % -> 34 %):
+N2O (N2O-intermediate route) and HCN (prompt route) are where the reduction is weakest; NO itself stays within 4-6 %.
+
+Cost per step on 8 ranks (same case): GA18 7.6 s, ARC22 11.2 s, GRI-Mech 3.0 30 s (2500 steps in 20.9 h).
+
 ## Benchmark: Fluent DI with full GRI-Mech 3.0
 
 Javier supplied a Fluent DI solution of the same corrected burner with full GRI-Mech 3.0 (53 species). It is the main
