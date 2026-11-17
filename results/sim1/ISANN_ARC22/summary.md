@@ -6,18 +6,18 @@ Run `/opt/ofb/run/isann_arc22`: protocol v2 flame base (A1r state at 0.1 s, LeFo
 
 | metric | ISANN ARC22 vs ARC22 DI | ISANN ARC22 vs GA18 DI (A1r) | ARC22 DI vs GA18 DI (A1r) | GA18 isann_v6 (pure) vs GA18 DI |
 |---|---|---|---|---|
-| flame mean abs dT (T > 1600 K) [K] | – | 34.2 | 33.3 | 5.8 |
-| flame bias dT [K] | – | -33.7 | -33.0 | +3.6 |
-| hot-cell mean abs dT [K] | – | 33.8 | 23.5 | 6.1 |
-| hot-cell p95 abs dT [K] | – | 96 | 61 | 16 |
-| hot volume ratio run/ref | – | 0.957 | 0.967 | 0.995 |
-| OH L1 (hot cells) | – | 17.9% | 12.6% | 11.2% |
-| OH total ratio | – | 1.05 | 1.05 | 0.97 |
-| CO L1 (hot cells) | – | 14.2% | 7.2% | 14.3% |
-| CO total ratio | – | 0.99 | 0.93 | 0.93 |
-| HRR ratio (GA18 rates on each state) | – | 0.93 | 0.93 | 0.88 |
+| flame mean abs dT (T > 1600 K) [K] | 7.3 | 34.2 | 33.3 | 5.8 |
+| flame bias dT [K] | +0.3 | -33.7 | -33.0 | +3.6 |
+| hot-cell mean abs dT [K] | 14.6 | 33.8 | 23.5 | 6.1 |
+| hot-cell p95 abs dT [K] | 53 | 96 | 61 | 16 |
+| hot volume ratio run/ref | 0.990 | 0.957 | 0.967 | 0.995 |
+| OH L1 (hot cells) | 6.5% | 17.9% | 12.6% | 11.2% |
+| OH total ratio | 0.99 | 1.05 | 1.05 | 0.97 |
+| CO L1 (hot cells) | 13.4% | 14.2% | 7.2% | 14.3% |
+| CO total ratio | 1.06 | 0.99 | 0.93 | 0.93 |
+| HRR ratio (GA18 rates on each state) | 1.01 | 0.93 | 0.93 | 0.88 |
 | DI (ODE) share reported by the solver | – | – | – | 0.0% |
-| s per step | – | 5.87 | 11.15 | 2.09 |
+| s per step | 5.87 | 5.87 | 11.15 | 2.09 |
 
 ## NOx in the hot cells, ISANN ARC22 vs ARC22 DI (volume-weighted, T > 600 K in either)
 
@@ -32,31 +32,31 @@ Run `/opt/ofb/run/isann_arc22`: protocol v2 flame base (A1r state at 0.1 s, LeFo
 
 ## Outlet NOx, mean over 0.1-0.15 s (weighted averages of the outletNOx function objects)
 
-**outlet-lab** (250 / 0 samples)
+**outlet-lab** (250 / 250 samples)
 
 | field | ISANN ARC22 | ARC22 DI | ratio |
 |---|---|---|---|
-| C2H2 | 2.026e-65 | – | – |
-| CO | 2.533e-17 | – | – |
-| CO2 | 2.249e-08 | – | – |
-| HCN | 1.596e-70 | – | – |
-| N2O | 5.938e-30 | – | – |
-| NO | 3.345e-52 | – | – |
-| NO2 | 4.505e-63 | – | – |
-| T | 305.6 | – | – |
+| C2H2 | 2.026e-65 | 4.459e-64 | 0.045 |
+| CO | 2.533e-17 | 2.502e-17 | 1.012 |
+| CO2 | 2.249e-08 | 2.233e-08 | 1.007 |
+| HCN | 1.596e-70 | 6.097e-70 | 0.262 |
+| N2O | 5.938e-30 | 2.912e-29 | 0.204 |
+| NO | 3.345e-52 | 1.612e-51 | 0.207 |
+| NO2 | 4.505e-63 | 1.444e-61 | 0.031 |
+| T | 305.6 | 305.5 | 1.000 |
 
-**wall-fff-fluid-exhaust** (250 / 0 samples)
+**wall-fff-fluid-exhaust** (250 / 250 samples)
 
 | field | ISANN ARC22 | ARC22 DI | ratio |
 |---|---|---|---|
-| C2H2 | 6.81e-60 | – | – |
-| CO | 1.037e-05 | – | – |
-| CO2 | 0.01749 | – | – |
-| HCN | 1.493e-60 | – | – |
-| N2O | 7.015e-27 | – | – |
-| NO | 8.778e-43 | – | – |
-| NO2 | 4.394e-45 | – | – |
-| T | 357.9 | – | – |
+| C2H2 | 6.81e-60 | 2.939e-59 | 0.232 |
+| CO | 1.037e-05 | 1.037e-05 | 1.000 |
+| CO2 | 0.01749 | 0.01749 | 1.000 |
+| HCN | 1.493e-60 | 6.195e-60 | 0.241 |
+| N2O | 7.015e-27 | 3.102e-26 | 0.226 |
+| NO | 8.778e-43 | 3.572e-42 | 0.246 |
+| NO2 | 4.394e-45 | 1.183e-43 | 0.037 |
+| T | 357.9 | 357.9 | 1.000 |
 
 ## ISANN rounds
 
