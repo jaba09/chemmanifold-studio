@@ -141,8 +141,11 @@ def main(cfg, src, workers, seg_steps=None):
     root = Path(cfg["_config_path"]).parent / cfg["data_dir"]
     root.mkdir(parents=True, exist_ok=True)
     for sub in ("00_flame", "01_envelope", "02_autoignition"):      # the exploration itself is unchanged
-        if (src / sub).exists() and not (root / sub).exists():
-            (root / sub).symlink_to(src / sub)
+        dst = root / sub
+        if dst.is_dir() and not dst.is_symlink() and not any(dst.iterdir()):
+            dst.rmdir()     # an empty dir left by an earlier stage_dir() call (create=True) would hide the link
+        if (src / sub).exists() and not dst.exists():
+            dst.symlink_to(src / sub)
     out = stage_dir(cfg, "samples")
     report = {}
     with Pool(workers, initializer=_init, initargs=(cfg["_config_path"],)) as pool:
