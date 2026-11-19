@@ -1,0 +1,6 @@
+date,kind,run_dir,core_hours,mean_cores_while_active,peak_cores,first_seen,last_seen
+2026-11-19,python,/home/ubuntu/chemmanifold-studio,134.50,7.84,8.00,00:00,17:10
+2026-11-19,openfoam,/opt/ofb/iterml_v2b/protocol/C3b_iter2/flame,9.66,4.00,4.00,19:35,21:55
+2026-11-19,openfoam,/opt/ofb/iterml_v2b/protocol/C3b_iter2/ign,8.33,4.00,4.00,17:15,19:20
+2026-11-19,python,/home/ubuntu/gri30_top2_moe,0.32,3.81,3.81,16:00,16:00
+2026-11-19,other,(system / other),0.04,0.07,0.09,15:40,19:15
