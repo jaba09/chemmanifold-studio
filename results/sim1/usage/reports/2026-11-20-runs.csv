@@ -1,0 +1,3 @@
+date,kind,run_dir,core_hours,mean_cores_while_active,peak_cores,first_seen,last_seen
+2026-11-20,python,/home/ubuntu/gri30_top2_moe,0.56,3.35,3.36,16:30,17:45
+2026-11-20,other,(system / other),0.04,0.06,0.08,13:10,23:10
