@@ -11,6 +11,10 @@ G.~P. Smith, D.~M. Golden, M.~Frenklach, N.~W. Moriarty, B.~Eiteneer,
   Lissianski, Z.~Qin, {GRI-Mech} 3.0,
   \url{http://combustion.berkeley.edu/gri-mech/} (1999).
 
+\bibitem{ga18}
+\todo{authors}, {GA18}: 18-species methane mechanism \todo{full reference}
+  (\todo{year}).
+
 \bibitem{lu2009review}
 T.~Lu, C.~K. Law, Toward accommodating realistic fuel chemistry in large-scale
   computations, Progress in Energy and Combustion Science 35 (2009) 192--215.
@@ -25,6 +29,11 @@ A.~Felden, L.~Esclapez, E.~Riber, B.~Cuenot, H.~Wang, Including real fuel
 
 \bibitem{openfoam}
 {OpenCFD Ltd}, {OpenFOAM} v2412, \url{https://www.openfoam.com} (2024).
+
+\bibitem{arcreport}
+\todo{authors}, Analytically reduced chemistry for methane--air combustion and
+  full-pathway {NO$_x$} prediction: {ARC\_GRI30\_NOx22}, Technical report,
+  \todo{institution} (2026).
 
 \bibitem{cantera}
 D.~G. Goodwin, R.~L. Speth, H.~K. Moffat, B.~W. Weber, Cantera: An

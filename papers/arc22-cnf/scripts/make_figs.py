@@ -98,11 +98,71 @@ def fig_ign(R):
     fig.savefig(OUT / "fig_ignition.pdf")
 
 
+def fig_domain(F):
+    """Sketch of the burner domain: every cell centre (grey), the flame (mean T of OF GRI-Mech 3.0), labels."""
+    g = np.load(F / "gri53_mean_0.125-0.15.npz")
+    x, r, T = 1e3 * g["x"].astype(float), 1e3 * g["r"].astype(float), g["T"].astype(float)
+    fig, ax = plt.subplots(figsize=(6.8, 2.4))
+    ax.scatter(x, r, s=0.15, c="0.75", lw=0, rasterized=True)
+    hot = T > 600
+    sc = ax.scatter(x[hot], r[hot], s=0.4, c=T[hot], cmap="inferno", vmin=600, vmax=2100, lw=0, rasterized=True)
+    ax.add_patch(plt.Rectangle((50, 0), 150, 50, fc="0.55", ec="k", lw=0.6))
+    ax.plot([85, 220, 370, 519], [75, 75, 20, 20], "k-", lw=1.4)
+    kw = dict(fontsize=7, arrowprops=dict(arrowstyle="->", lw=0.6))
+    ax.text(125, 22, "pot", fontsize=8, color="w", ha="center")
+    ax.annotate("CH$_4$ jet, $r<2.5$ mm", xy=(1, 1.5), xytext=(8, -26), **kw)
+    ax.annotate("air coflow, $50<r<75$ mm", xy=(1, 62), xytext=(8, 128), **kw)
+    ax.annotate("flame", xy=(38, 22), xytext=(100, 108), color="C3", **kw)
+    ax.annotate("hood (baffle) and chimney", xy=(300, 46), xytext=(260, 108), **kw)
+    ax.annotate("outlets", xy=(519, 80), xytext=(440, 128), **kw)
+    ax.text(300, -26, "axis of symmetry, r = 0", fontsize=7, ha="center")
+    ax.set_xlim(-5, 525); ax.set_ylim(-34, 142); ax.set_aspect("equal")
+    ax.set_xlabel("x [mm] (axis, up)"); ax.set_ylabel("r [mm]")
+    cb = fig.colorbar(sc, ax=ax, fraction=0.015, pad=0.01); cb.set_label("T [K]", fontsize=7); cb.ax.tick_params(labelsize=6)
+    fig.savefig(OUT / "fig_domain.pdf", dpi=300)
+
+
+def fig_qss(edges_json):
+    """QSS coupling graph: 21 radicals in three chemical sub-blocks, 90 linear couplings (from arc_gri30_nox22_data.h)."""
+    import json
+    d = json.load(open(edges_json)); names = d["names"]; E = [tuple(e) for e in d["edges"]]
+    blocks = [("C1/C2 hydrocarbon and oxy radicals", ["C", "CH", "CH2", "CH2(S)", "HCO", "CH2OH", "CH3O", "C2H3", "C2H5", "HCCO"]),
+              ("amine, diazenyl, nitroso", ["N", "NH", "NH2", "NNH", "HNO"]),
+              ("cyano, isocyanate", ["CN", "H2CN", "HCNO", "HOCN", "HNCO", "NCO"])]
+    pos, blk = {}, {}
+    centres = [(-1.7, 0.0), (1.7, 1.1), (1.7, -1.1)]
+    radii = [0.95, 0.55, 0.6]
+    for b, ((lab, sp), c, rad) in enumerate(zip(blocks, centres, radii)):
+        for i, n in enumerate(sp):
+            a = np.pi / 2 - 2 * np.pi * i / len(sp)
+            pos[names.index(n)] = (c[0] + rad * np.cos(a), c[1] + rad * np.sin(a)); blk[names.index(n)] = b
+    fig, ax = plt.subplots(figsize=(6.6, 3.9))
+    nin = sum(blk[i] == blk[j] for i, j in E)
+    for i, j in E:
+        (x0, y0), (x1, y1) = pos[i], pos[j]
+        same = blk[i] == blk[j]
+        ax.annotate("", xy=(x1, y1), xytext=(x0, y0),
+                    arrowprops=dict(arrowstyle="-|>", lw=0.5 if same else 0.7, color="0.6" if same else "C0",
+                                    shrinkA=9, shrinkB=9, mutation_scale=6))
+    for k, (x0, y0) in pos.items():
+        lab = names[k].replace("2", "$_2$").replace("3", "$_3$").replace("5", "$_5$")
+        ax.text(x0, y0, lab, ha="center", va="center", fontsize=7,
+                bbox=dict(boxstyle="round,pad=0.25", fc="w", ec=["C3", "C2", "C1"][blk[k]], lw=0.8))
+    for b, ((lab, sp), c, rad) in enumerate(zip(blocks, centres, radii)):
+        yl = c[1] - rad - 0.38 if b == 2 else c[1] + rad + 0.28
+        ax.text(c[0] + (0.55 if b == 2 else 0), yl, lab, ha="center", fontsize=7.5, style="italic")
+    ax.text(-0.1, -1.95, f"{len(E)} linear couplings $k\\to i$ ({nin} within a sub-block, grey; {len(E) - nin} between sub-blocks, blue)",
+            ha="center", fontsize=7)
+    ax.set_xlim(-2.9, 2.6); ax.set_ylim(-2.0, 2.2); ax.set_aspect("equal"); ax.axis("off")
+    fig.savefig(OUT / "fig_qss_graph.pdf")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--fields", default=str(REPO / "results/sim1/ARC22/fields"))
     ap.add_argument("--runs", default="/opt/ofb/runs")
+    ap.add_argument("--qss", default=str(HERE / "qss_edges.json"), help="from scripts/qss_graph.py")
     a = ap.parse_args()
     OUT.mkdir(exist_ok=True)
-    fig_1d(); fig_ign(Path(a.runs)); fig_maps(Path(a.fields))
+    fig_1d(); fig_ign(Path(a.runs)); fig_maps(Path(a.fields)); fig_domain(Path(a.fields)); fig_qss(a.qss)
     print("figures in", OUT)

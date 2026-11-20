@@ -14,7 +14,8 @@
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta}
 \usepackage[hidelinks]{hyperref}
-\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\providecommand{\todo}[1]{}
+\renewcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
 \newcommand{\ce}[1]{\ensuremath{\mathrm{#1}}}
 \linenumbers
 \journal{Combustion and Flame}
@@ -38,11 +39,11 @@ radical--radical directions are dropped from the balances, and an element projec
 \ce{O_{2}} and \ce{N_{2}} restores C/H/O/N conservation. The largest Jacobian eigenvalue falls 140-fold. Two independent
 checks against GRI-Mech~3.0 agree: the original reduction reproduces ignition delays within 0.93\,\% (49 cases,
 1--10\,atm), laminar flame speeds within 1.3\,\% at 1\,atm and 4.7\,\% at 5\,atm, and PSR NO within 3\,\% down to
-near blow-out; an independent rebuild gives the same production rates to $2\times10^{-8}$, ignition delays within
+near blow-out; an independent rebuild gives the same net production rates (maximum relative difference $2\times10^{-8}$), ignition delays within
 1.43\,\% up to $\phi=2$ and 1\,atm flame speeds within 1.3\,\%, and locates the weak point in hot rich gas. As an
 OpenFOAM chemistry library, the ARC was used for direct integration of a laminar, radiating, axisymmetric \ce{CH_{4}}
 jet flame under a pot. In the same code as full GRI-Mech~3.0 it reproduces the flame to 3.2\,K in mean hot-cell
-temperature, with OH, CO and NO within 7\,\% (relative L1), and ignites it at the same time, at 2.7--3.4 times lower
+temperature, with OH, CO and NO within 7\,\% (relative L1: volume-weighted mean absolute difference over the mean of the larger value), and ignites it at the same time, at 2.7--3.4 times lower
 cost per step; HCN and \ce{N_{2}O} are the weakest species (17--23\,\%). The 38.6\,K difference to a Fluent GRI-Mech~3.0
 solution on the same mesh is below the 48.8\,K that separates the two codes with identical chemistry.
 \end{abstract}
@@ -60,19 +61,19 @@ Direct integration of detailed \ce{CH_{4}}/air chemistry is the accuracy referen
 costly. Its cost scales with the number of transported species and with the stiffness of the radical subsystem:
 GRI-Mech~3.0~\cite{gri30} has Jacobian eigenvalues near $5\times10^{8}$\,s$^{-1}$, from short-lived radicals such as
 NNH, CH, C, \ce{CH_{2}(S)}, \ce{H_{2}CN} and CN, so implicit integrators pay $O(N^3)$ linear algebra per cell and step.
-Smaller mechanisms such as GA18 (18 species, 92 reactions), used so far in this project, are cheaper but carry no
+Smaller mechanisms such as GA18~\cite{ga18} (18 species, 92 reactions), used so far in this project, are cheaper but carry no
 nitrogen chemistry, so they cannot predict NO.
 
 Analytically reduced chemistry keeps the elementary reactions of the detailed mechanism and removes only the fast
 radicals from the transported set, solving their quasi-steady balances algebraically at every rate
-evaluation~\cite{lu2009review,felden2018}. Pathways stay explicit, at a cost close to a skeletal mechanism. This work
+evaluation~\cite{lu2009review,felden2018}. Pathways stay explicit, at a cost close to a skeletal mechanism. This work:
 \begin{enumerate}
-\item documents the reduction of GRI-Mech~3.0 to 22 transported species that keep all six NO$_x$ pathways
+\item Documents the reduction of GRI-Mech~3.0 to 22 transported species that keep all six NO$_x$ pathways
 (thermal, prompt, \ce{N_{2}O}-intermediate, NNH, HCCO/HCNO reburning and NO/\ce{NO_{2}} conversion), with at least a
 100-fold stiffness reduction;
-\item validates it against GRI-Mech~3.0 in homogeneous reactors and 1D premixed flames, twice: with the original
+\item Validates it against GRI-Mech~3.0 in homogeneous reactors and 1D premixed flames, twice: with the original
 reduction and with an independent rebuild of it;
-\item validates it in a multidimensional, radiating laminar diffusion flame against direct integration with full
+\item Validates it in a multidimensional, radiating laminar diffusion flame against direct integration with full
 GRI-Mech~3.0, in the same CFD code and against a second code.
 \end{enumerate}
 The available GRI-Mech~3.0 reference was computed in Fluent~\cite{fluent}, while the ARC runs in
@@ -85,8 +86,10 @@ can show.
 \label{sec:reduction}
 
 The reduction runs in five stages, each checked against GRI-Mech~3.0 before the next (Fig.~\ref{fig:pipeline}).
-Numbers marked (report) come from the original reduction; those marked (checked) were reproduced independently,
-from \texttt{gri30.yaml} with Cantera~3.2~\cite{cantera} and a rebuilt implementation (Section~\ref{sec:rebuild}).
+Numbers marked (report) are taken from the technical report of the original reduction~\cite{arcreport}, which
+documents the generation scripts and their acceptance tests. Numbers marked (checked) were recomputed for this paper,
+independently of those scripts, from \texttt{gri30.yaml} with Cantera~3.2~\cite{cantera} and a rebuilt
+implementation of the mechanism (Section~\ref{sec:rebuild}).
 
 \begin{figure}[t]
 \centering
@@ -119,19 +122,27 @@ NO); 6 freely propagating premixed flames ($p=1,5$\,atm, $\phi=0.7,1.0,1.3$, $T_
 \ce{CH_{4}}/air diffusion flamelets at 1\,atm.
 
 \subsection{Skeletal reduction: two-pass DRGEP and PFA}
-For species $A$ in reaction $r$, with net stoichiometric coefficient $\nu_{A,r}$ and rate of progress $\omega_r$,
+For species $A$ in reaction $r$, with net stoichiometric coefficient $\nu_{A,r}$ and net rate of progress $\omega_r$
+(kmol\,m$^{-3}$\,s$^{-1}$), the production rate $P_A$ and consumption rate $C_A$ of $A$ sum the positive and negative
+contributions of all reactions, and the direct interaction coefficient $r_{AB}$ measures the fraction of the larger of
+the two that passes through reactions involving species $B$ ($\delta_{B,r}=1$ if $B$ is a reactant, product or
+explicit third body of reaction $r$, 0 otherwise):
 \begin{gather}
-P_A=\sum_r \max(\nu_{A,r}\omega_r,0),\qquad C_A=\sum_r \max(-\nu_{A,r}\omega_r,0),\\
+P_A=\sum_r \max(\nu_{A,r}\omega_r,0),\qquad C_A=\sum_r \max(-\nu_{A,r}\omega_r,0),\label{eq:pc}\\
 r_{AB}=\frac{\left|\sum_r \nu_{A,r}\,\omega_r\,\delta_{B,r}\right|}{\max(P_A,C_A)},
 \end{gather}
-and the DRGEP importance~\cite{pepiot2008drgep} of $B$ is the strongest path product from a target $T$,
+Here $B$ is any other species of the mechanism. The DRGEP importance~\cite{pepiot2008drgep} of $B$ is the
+strongest product of interaction coefficients along any path $\mathcal{P}$ of species from a target $T$ to $B$, over
+the set $\mathcal{T}$ of target species; a species whose largest importance over all manifold states stays below the
+threshold is removed:
 \begin{equation}
 R_{\mathcal{T}\to B}=\max_{T\in\mathcal{T}}\ \max_{\mathcal{P}:T\leadsto B}\ \prod_{(i,j)\in\mathcal{P}} r_{ij}.
 \end{equation}
 Second-generation path-flux analysis~\cite{sun2010pfa} adds the fluxes through one intermediate species and catches
 multi-step shunts that net cancellation hides, such as \ce{CH_{2}}$\to$\allowbreak CH$\to$\allowbreak HCN$\to$\allowbreak NCO$\to$\allowbreak NO (prompt) and
-\ce{C_{2}H_{2}}$\to$\allowbreak HCCO$\to$\allowbreak HCNO$\to$\allowbreak HCN/NO (reburning). Nitrogen fluxes are $10^{-5}$--$10^{-3}$ of the C/H/O
-heat-release fluxes, so a single pass normalized by fuel oxidation would prune them. The ranking therefore runs in
+\ce{C_{2}H_{2}}$\to$\allowbreak HCCO$\to$\allowbreak HCNO$\to$\allowbreak HCN/NO (reburning). The nitrogen fluxes, i.e.\ the production and consumption rates $P_A$, $C_A$ of
+Eq.~\eqref{eq:pc} for the nitrogen species, are $10^{-5}$--$10^{-3}$ of those of the main C/H/O species that carry the heat
+release, at the same manifold states; a single pass normalized by fuel oxidation would therefore prune them. The ranking therefore runs in
 two decoupled passes: the nitrogen-free C/H/O graph, with targets \ce{CH_{4}}, \ce{O_{2}}, CO, \ce{CO_{2}}, \ce{H_{2}O}, OH, H,
 \ce{HO_{2}} and \ce{C_{2}H_{2}} (protected as the prompt-NO precursor); then the full graph, with targets NO, \ce{NO_{2}},
 \ce{N_{2}O} and HCN. Ten species are removed (Ar, \ce{C_{3}H_{7}}, \ce{C_{3}H_{8}}, \ce{CH_{2}CHO}, \ce{CH_{3}CHO}, HCCOH, \ce{C_{2}H},
@@ -170,7 +181,7 @@ Each reversible reaction is split into forward and reverse directions, with the 
 source term; a direction with one QSS reactant $x_j$ is linear in $x_j$; a direction with two QSS reactants is
 $O(\varepsilon^2)$ and is dropped from the balances~\cite{lu2009review}. The 21 quasi-steady conditions form the
 linear system
-\begin{multline}
+\begin{multline}\label{eq:qssa}
 \left(C_i(T,\mathbf{c})+\varepsilon_{\rm reg}\right)x_i-\sum_{k\neq i}P_{ik}(T,\mathbf{c})\,x_k=P_{i0}(T,\mathbf{c}),\\
 i=1,\dots,21,\qquad \varepsilon_{\rm reg}=10^{-30}\,\mathrm{s^{-1}}.
 \end{multline}
@@ -178,12 +189,24 @@ The dropped directions are exactly 11 (checked): CH\,+\,\ce{CH_{2}}, CH\,+\,HCCO
 \ce{CH_{2}}\,+\,HCCO, 2\,HCCO, N\,+\,NH, N\,+\,NCO and \ce{H_{2}CN}\,+\,N in the forward sense, plus the reverse directions
 of C\,+\,\ce{N_{2}}\,$\rightleftharpoons$\,CN\,+\,N and CH\,+\,NO\,$\rightleftharpoons$\,HCO\,+\,N. They stay in the
 final rates of progress, evaluated with the solved $x$; third-body concentrations use the transported species only.
-The QSS graph has 90 radical-to-radical couplings and forms one strongly connected component, with C1/C2
-hydrocarbon (10), amine/diazenyl (5) and cyano/isocyanate (5\,+\,\ce{H_{2}CN}) sub-blocks. A Markowitz order that
+The QSS graph (Fig.~\ref{fig:qss}) has 90 radical-to-radical couplings $k\to i$, i.e.\ nonzero $P_{ik}$, and forms
+one strongly connected component, with C1/C2 hydrocarbon (10), amine/diazenyl/nitroso (5) and cyano/isocyanate
+(6) sub-blocks that are linked by 40 of the couplings (checked).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.95\linewidth]{figs/fig_qss_graph.pdf}
+\caption{Linear couplings of the 21 quasi-steady radicals: an arrow $k\to i$ means that a reaction direction with $k$
+as its only QSS reactant produces $i$ ($P_{ik}\neq0$ in Eq.~\eqref{eq:qssa}). Grey: within a chemical sub-block; blue: between
+sub-blocks. Every radical can reach every other one, so the system cannot be solved one radical at a time.}
+\label{fig:qss}
+\end{figure}
+ A Markowitz order that
 eliminates leaf radicals first (\ce{C_{2}H_{5}}, NNH, HOCN, \ce{H_{2}CN}), with common-subexpression elimination, compiles the
 solve to 738 floating-point operations, against about 9,300 for a dense $21\times21$ LU (report). The rebuilt
-implementation solves the same system by dense LU; the two give the same net production rates to $2\times10^{-8}$
-on 400 hot burner states (checked).
+implementation solves the same system by dense LU; the two give the same net production rates of the 22 transported species, with a
+maximum relative difference $|\dot\omega_k^{\rm rebuilt}-\dot\omega_k^{\rm original}|/|\dot\omega_k^{\rm original}|$ of
+$2\times10^{-8}$ on 400 hot burner states (species whose $|W_k\dot\omega_k|$ exceeds $10^{-3}$ of the largest; checked).
 
 \subsection{Element projection and code generation}
 Truncated channels and untransported radicals carry mass, so the reduced system does not conserve elements. The
@@ -191,7 +214,11 @@ element deficits are moved into the major products (C into \ce{CO_{2}}, H into \
 into \ce{O_{2}}). Applied twice, the projection holds C/H/O/N to round-off ($3.96\times10^{-16}$ over full ignition
 trajectories, report); without it the drift over a 3\,ms hold reaches $10^{-3}$ relative at $\phi=1$ and
 $2\times10^{-2}$ at $\phi=2$ (checked). The compiler emits a dependency-free C++17 header (8.7\,$\mu$s per rate
-evaluation) and a vectorized PyTorch version that gives an exact $22\times22$ Jacobian by automatic differentiation.
+evaluation\footnote{All computing times in this paper were measured on one machine, sim1: a KVM virtual machine with
+16 Intel Core (Haswell) vCPUs, one thread per core, and 62\,GB of memory, running Ubuntu 26.04 and OpenFOAM v2412
+(GCC, MPICH). Parallel CFD runs use 8 MPI ranks, i.e.\ 8 processes on 8 cores. The machine was shared with other jobs
+(load 12--20 on 16 cores), so absolute times vary by up to about 20\,\% with the load; cost ratios were measured
+under similar load. \todo{machine reference or acknowledgement}}) and a vectorized PyTorch version that gives an exact $22\times22$ Jacobian by automatic differentiation.
 
 %% ---------------------------------------------------------------------------------------------------------------
 \section{Implementation in OpenFOAM}
@@ -233,7 +260,7 @@ Rosenbrock34 $10^{-4}$ / $10^{-12}$ & 363 & $1\times10^{-4}$ / $8\times10^{-6}$ 
 \end{tabular}}
 \end{table}
 
-Species diffusion uses the constant-Lewis model of the GA18 reference,
+Species diffusion uses the constant-Lewis model of the GA18 burner simulation that serves as the starting state and first reference (OF GA18 in Section~\ref{sec:burner}),
 $\rho D_k=\lambda/(c_p\,\mathrm{Le}_k)+\mu_t/\mathrm{Sc}_t$ with $\mathrm{Sc}_t=0.7$. The 14 species shared with GA18
 keep their Lewis numbers; the 8 new species take theirs from a Cantera counterflow flame with GRI-Mech~3.0 and
 mixture-averaged transport, weighted by $|dY_k/dx|$ where $T>600$\,K (\ce{CH_{3}OH} 1.33, \ce{C_{2}H_{2}} 1.34, \ce{C_{2}H_{4}}
@@ -273,7 +300,9 @@ Post-flame NO, 1\,atm flames & $\le4$\,\% & 3.07\,\% & -- \\
 \end{tabular}}
 \end{table}
 
-At the stoichiometric 1800\,K state, GRI-Mech~3.0 and the skeletal set share a spectral radius of
+The spectral radius, the largest magnitude among the eigenvalues of the chemical Jacobian, is the inverse of the
+fastest chemical timescale and sets the stiffness. At the stoichiometric 1800\,K state, GRI-Mech~3.0 and the skeletal
+set share a spectral radius of
 $4.99\times10^{8}$\,s$^{-1}$, set by NNH, so pruning alone removes no stiffness; in the ARC the fastest mode belongs to
 O, at $3.57\times10^{6}$\,s$^{-1}$. The chain-branching explosive eigenvalue~\cite{lu2010cema} is tracked within
 0.17\,\% during induction (1\,atm, 1350\,K, $\phi=1$). PSR NO agrees within 1.4\,\% at $\tau=3$\,ms, where thermal NO
@@ -286,15 +315,18 @@ algebraically (CH, NNH, NCO, HCNO) still feed NO correctly. In a 1\,atm counterf
 \centering
 \includegraphics[width=\linewidth]{figs/fig_1d_errors.pdf}
 \caption{Error of ARC\_GRI30\_NOx22 against GRI-Mech~3.0 in freely propagating \ce{CH_{4}}/air flames
-($T_u=300$\,K): (a) laminar flame speed, (b) post-flame NO (original reduction).}
+($T_u=300$\,K): (a) laminar flame speed, (b) post-flame NO (original reduction). The dashed lines are the
+acceptance targets fixed before the reduction (Table~\ref{tab:orig}): flame-speed error within $\pm5$\,\% and
+post-flame NO error within $\pm4$\,\% at 1\,atm.}
 \label{fig:1d}
 \end{figure}
 
 \subsection{Independent rebuild}
 \label{sec:rebuild}
 The mechanism was rebuilt from its specification as a plain-C core (skeletal set, partition, linearized QSSA with the
-11 truncated directions, projection). The rebuilt code matches Cantera on gri30\_skel43 to $4\times10^{-9}$ over 30
-random states (300--2400\,K) and the original kernel to $2\times10^{-8}$. GRI and the skeletal set run in Cantera
+11 truncated directions, projection). Without the QSSA, the rebuilt rate code reproduces Cantera's net production rates
+for gri30\_skel43 to a maximum relative difference of $4\times10^{-9}$ (dimensionless, all 43 species, 30 random
+states between 300 and 2400\,K); with the QSSA it matches the original kernel to $2\times10^{-8}$. GRI and the skeletal set run in Cantera
 (rtol $10^{-9}$), the ARC in a BDF integrator (rtol $10^{-8}$), in constant-pressure adiabatic reactors of \ce{CH_{4}}
 in air; the ignition delay is the time of maximum $dT/dt$ (Table~\ref{tab:ign}). In every case the ARC is closer to
 GRI than its skeletal parent: the QSSA partly offsets the skeletal error.
@@ -354,20 +386,33 @@ ignition, 5\,atm flames (worst: $S_L$ $-4.7$\,\% and NO $+13$\,\% at $\phi=1.3$)
 \label{sec:burner}
 
 \subsection{Case and solutions}
-The test is a laminar \ce{CH_{4}} jet flame burning under a pot, on a 2D axisymmetric domain 0.52\,m long and 0.14\,m in
+The test is a laminar \ce{CH_{4}} jet flame burning under a pot (Fig.~\ref{fig:domain}), on a 2D axisymmetric domain 0.52\,m long and 0.14\,m in
 radius (63,087 cells; a 5$^\circ$ wedge in OpenFOAM; gravity along $-x$). A pure \ce{CH_{4}} jet of
 $6.735\times10^{-6}$\,kg/s (about 340\,W) issues from $r<2.5$\,mm; an air coflow of $5.77\times10^{-5}$\,kg/s enters
 between $r=50$ and 75\,mm, plus 0.05\,m/s outside it; all inlets are at 300\,K. The pot is an unmeshed cylinder at
 $x=0.05$--0.20\,m, $r<0.05$\,m, with an adiabatic bottom and convective sides and top
 ($h=15$\,W/m$^2$K, 323\,K), under a hood with a chimney; the top and the chimney exit are pressure outlets. Radiation
 is solved with discrete ordinates, a transparent gas and black walls; the wall-to-wall exchange removes about 45\,\%
-of the heat release through the pot bottom, and OpenFOAM reproduces it with fvDOM. The fuel-jet Reynolds number is
-about 150 and $\mu_t/\mu<0.06$ in the reacting cells, so the flame is effectively laminar.
+of the heat release through the pot bottom, and OpenFOAM reproduces it with its finite-volume discrete ordinates model (fvDOM). The fuel-jet Reynolds number is
+about 150. Both codes keep the $k$--$\omega$ SST turbulence model of the original Fluent case active, but the ratio of
+its eddy viscosity to the molecular viscosity, $\mu_t/\mu$, stays below 0.06 in the reacting cells, so turbulent
+transport is negligible and the flame is effectively laminar.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figs/fig_domain.pdf}
+\caption{Burner domain (axisymmetric, axis at the bottom): every cell centre in grey, the flame as the mean
+temperature of OF GRI-Mech~3.0 above 600\,K, the unmeshed pot, and the hood baffle leading to the chimney.}
+\label{fig:domain}
+\end{figure}
 
 Table~\ref{tab:solutions} lists the solutions. OF GRI and OF ARC22 both start from the OF GA18 state at 0.1\,s and run
 with $\Delta t=2\times10^{-5}$\,s; snapshots every 2.5\,ms are averaged cell by cell. OF GRI ran to 0.15\,s. OF ARC22
-ran to 0.1874\,s, where a near-axis cell under the pot bottom diverged through the fvDOM radiation coupling, the same
-failure that ended OF GA18 at 0.1875\,s; the last clean ARC state is 0.185\,s. OpenFOAM cell $i$ is Fluent cell $i+1$
+ran to 0.1874\,s. There the temperature of one gas cell on the axis, just below the pot bottom, fell from 300\,K to a
+negative value within one time step, which stops the solver. The same cell failed in OF GA18 at 0.1875\,s: the
+radiative flux on the axis-adjacent faces of the pot bottom becomes noisy face to face once the fvDOM ray solution
+stalls, and the cooling of that cell then runs away. It is independent of the chemistry; the last clean ARC state is
+0.185\,s. OpenFOAM cell $i$ is Fluent cell $i+1$
 on the identical mesh, so every comparison is cell by cell. Differences are volume-weighted over the full revolution:
 the mean hot $|\Delta T|$ uses the cells above 1500\,K in either solution, and the relative L1 of a species is
 $\overline{|a-b|}/\overline{\max(a,b)}$ over the cells above 600\,K in either.
@@ -393,7 +438,7 @@ $\mathrm{Sc}_t=0.7$.}
 \end{table}
 
 \subsection{Against Fluent}
-Table~\ref{tab:fluent} compares the four solutions. The code difference (48.8\,K with GA18 in both codes) is about
+Table~\ref{tab:fluent} compares the five solutions. The code difference (48.8\,K with GA18 in both codes) is about
 twice the GA18-to-GRI chemistry difference (26.6\,K within Fluent), so a cross-code comparison cannot resolve the
 reduction error. Peak NO agrees ($2.48$ vs $2.47\times10^{-4}$), but the NO field differs by 0.37 in relative L1, an
 upper bound because NO is still building up in the exhaust at 0.185\,s. Outlet NO$_x$ is not usable: after 87\,ms both
@@ -401,34 +446,38 @@ outlets still carry gas from the initial state.
 
 \begin{table}[t]
 \centering\small
-\caption{Burner flame: four solutions (top) and cell-by-cell differences (bottom).}
+\caption{Burner flame: the five solutions (top; OF GRI is the mean over 0.125--0.15\,s, the only window it covers) and cell-by-cell differences (bottom).}
 \label{tab:fluent}
 \resizebox{\linewidth}{!}{%
-\begin{tabular}{lcccc}
+\begin{tabular}{lccccc}
 \toprule
-Metric & Fluent GRI & Fluent GA18 & OF GA18 & OF ARC22 \\
+Metric & Fluent GRI & Fluent GA18 & OF GA18 & OF GRI & OF ARC22 \\
 \midrule
-$T_{\max}$ [K] & 2077 & 2088 & 2121 & 2104 \\
-$V(T>1500$\,K) [cm$^3$] & 18.08 & 18.25 & 19.94 & 18.79 \\
-$V(T>2000$\,K) [cm$^3$] & 2.66 & 2.99 & 3.84 & 3.08 \\
-Flame base $x(T>1500$\,K) [mm] & 1.15 & 1.15 & 1.39 & 1.39 \\
-OH max [$10^{-3}$] & 3.47 & 3.28 & 3.34 & 3.46 \\
-$x$(OH max) [mm] & 16.9 & 15.1 & 15.9 & 17.6 \\
-CO max & 0.049 & 0.053 & 0.060 & 0.051 \\
-NO / \ce{NO_{2}} max [$10^{-5}$] & 24.7 / 5.5 & -- & -- & 24.8 / 4.0 \\
-\ce{N_{2}O} / HCN max [$10^{-5}$] & 0.60 / 11.4 & -- & -- & 0.61 / 14.6 \\
+$T_{\max}$ [K] & 2077 & 2088 & 2121 & 2107 & 2104 \\
+$V(T>1500$\,K) [cm$^3$] & 18.08 & 18.25 & 19.94 & 19.46 & 18.79 \\
+$V(T>2000$\,K) [cm$^3$] & 2.66 & 2.99 & 3.84 & 3.13 & 3.08 \\
+Flame base $x(T>1500$\,K) [mm] & 1.15 & 1.15 & 1.39 & 1.39 & 1.39 \\
+OH max [$10^{-3}$] & 3.47 & 3.28 & 3.34 & 3.47 & 3.46 \\
+$x$(OH max) [mm] & 16.9 & 15.1 & 15.9 & 19.1 & 17.6 \\
+CO max & 0.049 & 0.053 & 0.060 & 0.055 & 0.051 \\
+NO / \ce{NO_{2}} max [$10^{-5}$] & 24.7 / 5.5 & -- & -- & 24.0 / 2.8 & 24.8 / 4.0 \\
+\ce{N_{2}O} / HCN max [$10^{-5}$] & 0.60 / 11.4 & -- & -- & 0.11 / 10.6 & 0.61 / 14.6 \\
 \midrule
-Pair & \multicolumn{2}{l}{What differs} & Hot $|\Delta T|$ [K] & OH / CO rel.\ L1 \\
+Pair & \multicolumn{3}{l}{What differs} & Hot $|\Delta T|$ [K] & OH / CO rel.\ L1 \\
 \midrule
-Fluent GRI vs Fluent GA18 & \multicolumn{2}{l}{chemistry} & 26.6 & 0.13 / 0.06 \\
-OF GA18 vs Fluent GA18 & \multicolumn{2}{l}{code} & 48.8 & 0.22 / 0.12 \\
-OF GA18 vs Fluent GRI & \multicolumn{2}{l}{both} & 55.4 & 0.25 / 0.15 \\
-OF ARC22 vs Fluent GRI & \multicolumn{2}{l}{code and reduction} & 38.6 & 0.20 / 0.08 \\
+Fluent GRI vs Fluent GA18 & \multicolumn{3}{l}{chemistry} & 26.6 & 0.13 / 0.06 \\
+OF GA18 vs Fluent GA18 & \multicolumn{3}{l}{code} & 48.8 & 0.22 / 0.12 \\
+OF GA18 vs Fluent GRI & \multicolumn{3}{l}{both} & 55.4 & 0.25 / 0.15 \\
+OF ARC22 vs Fluent GRI & \multicolumn{3}{l}{code and reduction} & 38.6 & 0.20 / 0.08 \\
+OF GRI vs Fluent GRI & \multicolumn{3}{l}{code (GRI chemistry)} & \todo{cloud} & \todo{cloud} \\
+OF ARC22 vs OF GRI$^{a}$ & \multicolumn{3}{l}{reduction (same code)} & 3.2 & 0.015 / 0.033 \\
 \bottomrule
 \end{tabular}}
+\\[2pt]{\footnotesize $^{a}$Both averaged over 0.125--0.15\,s (Section~\ref{sec:samecode}).}
 \end{table}
 
 \subsection{Same code: ARC against full GRI-Mech 3.0}
+\label{sec:samecode}
 Both OpenFOAM runs are averaged over 0.125--0.15\,s (11 snapshots each; Table~\ref{tab:samecode},
 Fig.~\ref{fig:maps}). Within one code the ARC reproduces the GRI-Mech~3.0 flame to 3.2\,K, so the 38.6\,K against
 Fluent GRI is almost entirely code difference. The differences grow slowly with time: over 0.1025--0.125\,s the hot
@@ -466,7 +515,11 @@ GRI-Mech~3.0 (a, c) and ARC22 (b, d) in OpenFOAM, and their temperature differen
 \end{figure}
 
 \subsection{Ignition transient}
-The ignition test starts from the lean ($\phi=0.5$) burnt-gas state of the project's fixed CFD protocol. The ARC ran
+The ignition test follows the project's fixed CFD evaluation protocol, which freezes the mesh, models, time step
+($2\times10^{-5}$\,s), output times and metrics, so that runs that differ only in their chemistry can be compared
+snapshot by snapshot. Its ignition phase starts from a uniform lean ($\phi=0.5$) burnt-gas state at 1480\,K: the
+fuel jet enters this hot gas at $t=0$ and autoignites. Snapshots are written every 0.5\,ms up to 5\,ms and every
+2.5\,ms after; ignition is the first time the domain maximum temperature exceeds 1600\,K. The ARC ran
 0--25\,ms and full GRI-Mech~3.0 ran 0--5\,ms in the same code from the same state; OF GA18 (A2r) is a third reference
 (Fig.~\ref{fig:ign}). The ARC ignites with GRI-Mech~3.0 (domain $T_{\max}>1600$\,K at 2.8\,ms in both, sampled every
 0.2\,ms), and both reach 2060\,K at 5\,ms; GA18 ignites at 2.4\,ms and reaches 2098\,K. The 0.4\,ms earlier ignition of
@@ -508,8 +561,9 @@ plausible cause not yet tested; a nonlinear QSSA for that sub-block is the obvio
 regime, but rich high-pressure flames need further checks.
 
 \paragraph{Element projection}
-Unprojected drift reaches 2\,\% of the elements at $\phi=2$ over 3\,ms; in a CFD cell with tens of milliseconds of
-residence it would accumulate, so the projection is required.
+Unprojected drift reaches 2\,\% of the elements at $\phi=2$ over 3\,ms; in a burner, where the gas spends several
+tens of milliseconds (0.01--0.1\,s) in the hot region, it would accumulate step after step, so the projection is
+required.
 
 \paragraph{Cost}
 On 8 ranks a flow step costs 7.6\,s with GA18, 11.2\,s with the ARC and 30\,s with full GRI-Mech~3.0 (37\,s during
@@ -530,7 +584,11 @@ ARC carry. Cross-code peaks reflect both effects: the ARC $T_{\max}$ is 27\,K ab
 The flame windows are short (35\,ms for the ARC mean, 25\,ms for the same-code comparison); $V(T>1500$\,K) still
 drifts slowly (19.4 to 18.3\,cm$^3$ over 0.15--0.185\,s) and NO is still building up in the exhaust. All OpenFOAM
 flame runs end near 0.187\,s at the same near-axis fvDOM divergence, independent of the chemistry, and outlet NO$_x$
-cannot yet be evaluated. \todo{decide whether to fix the near-axis radiation divergence and extend the runs.}
+cannot yet be evaluated. Planned remedies, in order: (i) restart from 0.185\,s with the radiation solved at every flow step instead of every
+tenth, and more ray-solver iterations; (ii) if the cell still diverges, a finer angular discretization of fvDOM near
+the axis or a fixed-temperature condition on the axis corner of the pot bottom; (iii) then extend the ARC and GRI runs
+to about 0.3\,s, which gives a common 100\,ms averaging window and lets the burnt gas reach the outlets, so that
+outlet NO$_x$ can be compared. \todo{choose and run}
 
 \paragraph{Validation range}
 The 0D/1D checks cover ignition at 1--10\,atm and $T_0=1100$--1600\,K up to $\phi=2$, flame speeds at 1 and 5\,atm
@@ -556,8 +614,11 @@ not the mechanism. Likewise the earlier ignition and hotter flame of GA18 are GA
 \end{enumerate}
 
 \section*{Data availability}
-Mechanism, generation scripts, the rebuilt core with its validation, the OpenFOAM library, case inputs, run scripts,
-and per-cell result fields in Fluent cell order are in the project repository \todo{public archive and DOI}.
+The mechanism will be provided as Supplementary Material (C++17 header, PyTorch kernel, plain-C core and the
+43-species skeletal set in Cantera YAML), together with a short usage note. The generation and validation scripts, the
+OpenFOAM chemistry library, the case set-ups, the run scripts, and the per-cell result fields (compressed NumPy files
+in Fluent cell order, about 70\,MB) will be archived on Zenodo with a DOI and mirrored in a public GitHub release.
+\todo{create the archive and DOI; check that the Fluent case files may be shared}
 
 \section*{Acknowledgements}
 \todo{funding and computing resources}
