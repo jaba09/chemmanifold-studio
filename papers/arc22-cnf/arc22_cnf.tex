@@ -440,7 +440,8 @@ $\mathrm{Sc}_t=0.7$.}
 \subsection{Against Fluent}
 Table~\ref{tab:fluent} compares the five solutions. The code difference (48.8\,K with GA18 in both codes) is about
 twice the GA18-to-GRI chemistry difference (26.6\,K within Fluent), so a cross-code comparison cannot resolve the
-reduction error. Peak NO agrees ($2.48$ vs $2.47\times10^{-4}$), but the NO field differs by 0.37 in relative L1, an
+reduction error. Full GRI-Mech~3.0 in OpenFOAM is itself 37.2\,K from Fluent GRI (OH / CO relative L1 0.15 / 0.10),
+almost the same as the ARC's 38.6\,K, which confirms that this gap is the code and not the reduction. Peak NO agrees ($2.48$ vs $2.47\times10^{-4}$), but the NO field differs by 0.37 in relative L1, an
 upper bound because NO is still building up in the exhaust at 0.185\,s. Outlet NO$_x$ is not usable: after 87\,ms both
 outlets still carry gas from the initial state.
 
@@ -469,7 +470,7 @@ Fluent GRI vs Fluent GA18 & \multicolumn{3}{l}{chemistry} & 26.6 & 0.13 / 0.06 \
 OF GA18 vs Fluent GA18 & \multicolumn{3}{l}{code} & 48.8 & 0.22 / 0.12 \\
 OF GA18 vs Fluent GRI & \multicolumn{3}{l}{both} & 55.4 & 0.25 / 0.15 \\
 OF ARC22 vs Fluent GRI & \multicolumn{3}{l}{code and reduction} & 38.6 & 0.20 / 0.08 \\
-OF GRI vs Fluent GRI & \multicolumn{3}{l}{code (GRI chemistry)} & \todo{cloud} & \todo{cloud} \\
+OF GRI vs Fluent GRI & \multicolumn{3}{l}{code (GRI chemistry)} & 37.2 & 0.15 / 0.10 \\
 OF ARC22 vs OF GRI$^{a}$ & \multicolumn{3}{l}{reduction (same code)} & 3.2 & 0.015 / 0.033 \\
 \bottomrule
 \end{tabular}}
