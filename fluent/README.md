@@ -1,5 +1,8 @@
 # Using the surrogates in Ansys Fluent
 
+> For **direct chemistry with the 22-species ARC_GRI30_NOx22 mechanism** (no surrogate), see
+> [`arc22/README.md`](arc22/README.md).
+
 This folder plugs the trained ResNet-FiLM or Phy-ChemNODE surrogate into Fluent's chemistry step.
 Fluent then calls the network for each cell instead of integrating GA18 with its stiff ODE solver.
 It also tracks which cells fall outside the sampled training space and helps you measure how well the

@@ -1,0 +1,16 @@
+; Fluent journal: build, load and hook the ARC22 chemistry UDF in a case that ALREADY uses the 22-species
+; arc22 mixture (README.md steps 1-4 done in the GUI and the case saved). Run it from File > Read > Journal.
+; Lines marked "prompt" use TUI paths that were not run here (Fluent was not available to test them); if one
+; fails, do that step in the GUI as README.md says and run the rest.
+
+/define/user-defined/compiled-functions compile "libudf" yes "arc22_udf.c" "arc22_core.c" "arc22_kernel.c" "" "arc22_core.h" "arc22_kernel.h" ""   ; prompt
+/define/user-defined/compiled-functions load "libudf"
+/define/user-defined/user-defined-memory 3
+/define/user-defined/execute-on-demand "arc22_selftest::libudf"
+/define/user-defined/function-hooks/chemistry-step "arc22_chem_step::libudf"                 ; prompt
+/define/user-defined/function-hooks/adjust "arc22_monitor::libudf" ""                       ; prompt
+/define/user-defined/function-hooks/execute-on-loading "arc22_on_load::libudf" ""           ; prompt
+(rpsetvar 'species/isat? #f)
+(rpsetvar 'species/agglom-chemistry? #f)
+; first 20 iterations: read the "arc22:" lines in the console (cells, steps, chemistry seconds, dt)
+/solve/iterate 20
