@@ -46,6 +46,10 @@ To identify the model a Fluent run used, compare the sha256 of its `chemmanifold
 | [`burner_openfoam_tix2c-resnet_film-20261115-c3330ae8`](#burner_openfoam_tix2c-resnet_film-20261115-c3330ae8) | candidate | 2026-11-15 | 662,188 | 12 | 0.03 | 67.1 | 6.1 | 9.2 | 95.9% |
 | [`burner_openfoam_tix2c_s1-resnet_film-20261115-5003713d`](#burner_openfoam_tix2c_s1-resnet_film-20261115-5003713d) | candidate | 2026-11-15 | 662,188 | 12 | 0.03 | 9.3 | 3.6 | 9.4 | 95.9% |
 | [`burner_openfoam_tix2c_s2-resnet_film-20261115-d5e0e47e`](#burner_openfoam_tix2c_s2-resnet_film-20261115-d5e0e47e) | candidate | 2026-11-15 | 662,188 | 12 | 0.03 | 17.0 | 2.5 | 3.2 | 95.9% |
+| [`iterml_iter1-resnet_film-20261116-54ba9aa2`](#iterml_iter1-resnet_film-20261116-54ba9aa2) | candidate | 2026-11-16 | 1,018,750 | 12 | – | – | – | – | – |
+| [`iterml_iter2-resnet_film-20261117-a60b83f7`](#iterml_iter2-resnet_film-20261117-a60b83f7) | candidate | 2026-11-17 | 1,018,750 | 12 | – | – | – | – | – |
+| [`iterml_iter1-resnet_film-20261117-ac4015fe`](#iterml_iter1-resnet_film-20261117-ac4015fe) | candidate | 2026-11-17 | 827,734 | 12 | – | – | – | – | – |
+| [`iterml_iter2-resnet_film-20261118-2e31149b`](#iterml_iter2-resnet_film-20261118-2e31149b) | candidate | 2026-11-18 | 827,734 | 12 | – | – | – | – | – |
 
 ## h2_air_premixed-resnet_film-20261021-nofile
 
@@ -1169,3 +1173,115 @@ Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
 Training: latent d 12, hidden 192 x 3 blocks, best epoch 294 of 300, 989 min on 2 threads (Linux x86_64), git 6400f5b.
 Certification: Tier 1 R2 0.9925, T MAE 0.03 K; held-out flamelet coverage 95.9%; Tier 2 tau error –%, final T 280 K (Cantera 337 K); Tier 3 mean |tau error| –%, T MAE 17.0 K; cooled gas T MAE 2.5 K (max 5 K); mixing T MAE 3.2 K (max 6 K).
 Fluent file sha256: `22ae752bd4918f8a078028e1b8bea0ae66cc3d68486f5ab4686547b9d9b9ea09`.
+
+## iterml_iter1-resnet_film-20261116-54ba9aa2
+
+Config `iterml_iter1.yaml`, resnet_film, trained 2026-11-16T17:55:24+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | /home/ubuntu/chemmanifold-studio/mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 112 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.000659 kg/m2/s x 1.5^k, up to 31 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 1,018,750 train / 138,920 validation pairs (reactor_0D 134,670, PaSR 15,600, flamelet_states 11,720, wall_cooled_0D 8,108, recirculation 7,200, unsteady_flamelets 14,326, equilibrium_tail_0D 3,600, vitiated_ignition 237,340, burnt_relaxation 31,780, seeded_PaSR 18,643, seeded_relaxation 235,491, seeded_ignition 105,798, seeded_cooling 45,252, dilution_cooling 57,766, dynamic_PaSR 3,714, induction_layer 162,600, hot_wall 16,428, relaxation_flame_dt 11,778, 21 35,856).
+Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 40 of 40, 176 min on 3 threads (Linux x86_64), git 9b541c5.
+Certification: .
+Fluent file sha256: `0c2c20bc1d4abb62e13aed73910775f60db865eb18a4ad0f3308adadd7e6e32d`.
+
+## iterml_iter2-resnet_film-20261117-a60b83f7
+
+Config `iterml_iter2.yaml`, resnet_film, trained 2026-11-17T05:53:39+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | /home/ubuntu/chemmanifold-studio/mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 112 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.000659 kg/m2/s x 1.5^k, up to 31 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 1,018,750 train / 138,920 validation pairs (reactor_0D 134,670, PaSR 15,600, flamelet_states 11,720, wall_cooled_0D 8,108, recirculation 7,200, unsteady_flamelets 14,326, equilibrium_tail_0D 3,600, vitiated_ignition 237,340, burnt_relaxation 31,780, seeded_PaSR 18,236, seeded_relaxation 233,810, seeded_ignition 106,887, seeded_cooling 46,251, dilution_cooling 57,766, dynamic_PaSR 3,714, induction_layer 162,600, hot_wall 16,428, relaxation_flame_dt 11,778, 21 35,856).
+Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 37 of 40, 180 min on 3 threads (Linux x86_64), git 27cbac5-dirty.
+Certification: .
+Fluent file sha256: `0389a60e41fc743755484b948bf19a6db72537de966bda849abdc27c8a322028`.
+
+## iterml_iter1-resnet_film-20261117-ac4015fe
+
+Config `iterml_iter1.yaml`, resnet_film, trained 2026-11-17T22:44:48+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | /home/ubuntu/chemmanifold-studio/mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 112 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.000659 kg/m2/s x 1.5^k, up to 31 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 827,734 train / 112,873 validation pairs (reactor_0D 134,670, PaSR 15,600, flamelet_states 11,720, wall_cooled_0D 8,108, recirculation 7,200, unsteady_flamelets 14,326, equilibrium_tail_0D 3,600, vitiated_ignition 237,340, burnt_relaxation 31,780, seeded_PaSR 8,569, seeded_relaxation 109,396, seeded_ignition 49,099, seeded_cooling 21,057, dilution_cooling 57,766, dynamic_PaSR 3,714, induction_layer 162,600, hot_wall 16,428, relaxation_flame_dt 11,778, 21 35,856).
+Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 298 of 300, 1076 min on 3 threads (Linux x86_64), git dce7908-dirty.
+Certification: .
+Fluent file sha256: `b629b8636c2f7431056c4df7f86ad8b9f7028433b5998f78f351137f94b2d8ed`.
+
+## iterml_iter2-resnet_film-20261118-2e31149b
+
+Config `iterml_iter2.yaml`, resnet_film, trained 2026-11-18T22:30:57+00:00, status **candidate**.
+
+| Exploration | |
+|---|---|
+| mechanism | /home/ubuntu/chemmanifold-studio/mechanisms/ga18.yaml |
+| fuel | CH4:1.0 |
+| oxidizer | O2:0.232909, N2:0.767091 |
+| P_atm | 1.0 |
+| mode | flame |
+| n_traj | 112 |
+| f_pasr | 0.35 |
+| heat_loss | fraction psi <= 0.85 of the loss to T_wall = 300.0 K |
+| cooling_reactors | 35% of 0D seeds, tau_q [0.001, 1.0] s |
+| radiating_flamelets | True |
+| pasr_heat_loss | psi in [0.0, 0.85] |
+| recirculation | 24 ensembles x 300 |
+| strain_range | flamelets 0.000659 kg/m2/s x 1.5^k, up to 31 |
+| unsteady_flamelets | extinction 10, reignition 8, cooling 12, strain_jump 8 |
+| rollout_loss | 8 x 4 dt_base, weight 0.2 |
+
+Data: 827,734 train / 112,873 validation pairs (reactor_0D 134,670, PaSR 15,600, flamelet_states 11,720, wall_cooled_0D 8,108, recirculation 7,200, unsteady_flamelets 14,326, equilibrium_tail_0D 3,600, vitiated_ignition 237,340, burnt_relaxation 31,780, seeded_PaSR 8,468, seeded_relaxation 108,421, seeded_ignition 49,767, seeded_cooling 21,465, dilution_cooling 57,766, dynamic_PaSR 3,714, induction_layer 162,600, hot_wall 16,428, relaxation_flame_dt 11,778, 21 35,856).
+Flamelets: 44 (18 radiating), Z_st 0.0552, peak T 1064–2211 K.
+Training: latent d 12, hidden 192 x 3 blocks, best epoch 294 of 300, 1041 min on 3 threads (Linux x86_64), git dce7908-dirty.
+Certification: .
+Fluent file sha256: `09668f039e6dd9bd5ac62502286a98cea18a4e50c1fa0b0ebaf4cf89318dc862`.

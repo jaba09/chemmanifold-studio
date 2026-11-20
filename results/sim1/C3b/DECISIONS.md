@@ -21,5 +21,10 @@ Javier's choice (17 Nov): "ITERML variant: 20% seeds, fresh".
 
 ## Loop log (from /opt/ofb/iterml_v2b/DECISIONS.md)
 
-- 2026-11-17 23:23 CET: baseline: iteration 0 = P_tix2c (ensemble) S = 2.00 (F 1.60, I 2.00, C 0.15)
+- 2026-11-17 23:23 CET: baseline: iteration 0 = P_tix2c (tix2c s0-s2 mean ensemble; tix2h family + C2 ignition-focused data) (ensemble) S = 2.00 (F 1.60, I 2.00, C 0.15)
 - 2026-11-17 23:23 CET: iteration 1 starts from iteration 0 (the best, S 2.00)
+- 2026-11-18 23:11 CET: iteration 1: rejected: ensemble S 6.86 vs best 2.00: not better by more than 10%
+- 2026-11-18 23:11 CET: iteration 2 starts from iteration 0 (the best, S 2.00)
+- 2026-11-19 21:59 CET: iteration 2: rejected: ensemble S 16.80 vs best 2.00: not better by more than 10%
+- 2026-11-19 21:59 CET: STOP before iteration 3: 2 iterations in a row without an accepted model; best = iteration 0 (S 2.00)
+- 2026-11-20 23:10 CET: disk 10.7 GB free (< 15 GB): trimmed the field data of C3's collection runs (/opt/ofb/iterml_v2/iter*/collect_*/processor*/<time>); seeds, logs, csv kept. +0.5 GB.
