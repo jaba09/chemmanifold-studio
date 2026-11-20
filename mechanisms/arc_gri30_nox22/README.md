@@ -15,6 +15,7 @@ radicals (linearized QSSA). Rebuilt from Javier's technical report (no mechanism
 - ODE species: H2 H O O2 OH H2O HO2 H2O2 CH4 CH3 CO CO2 CH2O CH3OH C2H2 C2H4 C2H6 N2 NO NO2 N2O HCN.
 - QSS species: C CH CH2 CH2(S) HCO CH2OH CH3O C2H3 C2H5 HCCO N NH NH2 NNH HNO CN H2CN HCNO HOCN HNCO NCO.
 - OpenFOAM: `openfoam/arcChemStep` (chemistry solver plug-in; the case lists only the 22 species and no reactions).
+- Fluent: `fluent/arc22` (DEFINE_CHEM_STEP UDF with a plain-C copy of `original/arc_gri30_nox22.hpp`, 22-species CHEMKIN mixture files).
 - Validation: `validation/` (ctypes wrapper `arcpy.py`, `ignition.py`, `lewis.py`, `flame1d.py`), results in
   `validation/VALIDATION.md`.
 
