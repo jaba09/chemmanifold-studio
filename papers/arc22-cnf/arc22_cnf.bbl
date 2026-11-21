@@ -1,0 +1,54 @@
+\begin{thebibliography}{10}
+\expandafter\ifx\csname url\endcsname\relax
+  \def\url#1{\texttt{#1}}\fi
+\expandafter\ifx\csname urlprefix\endcsname\relax\def\urlprefix{URL }\fi
+\expandafter\ifx\csname href\endcsname\relax
+  \def\href#1#2{#2} \def\path#1{#1}\fi
+
+\bibitem{gri30}
+G.~P. Smith, D.~M. Golden, M.~Frenklach, N.~W. Moriarty, B.~Eiteneer,
+  M.~Goldenberg, C.~T. Bowman, R.~K. Hanson, S.~Song, W.~C. Gardiner, V.~V.
+  Lissianski, Z.~Qin, {GRI-Mech} 3.0,
+  \url{http://combustion.berkeley.edu/gri-mech/} (1999).
+
+\bibitem{lu2009review}
+T.~Lu, C.~K. Law, Toward accommodating realistic fuel chemistry in large-scale
+  computations, Progress in Energy and Combustion Science 35 (2009) 192--215.
+
+\bibitem{felden2018}
+A.~Felden, L.~Esclapez, E.~Riber, B.~Cuenot, H.~Wang, Including real fuel
+  chemistry in {LES} of turbulent spray combustion, Combustion and Flame 193
+  (2018) 397--416.
+
+\bibitem{fluent}
+{Ansys Inc.}, Ansys fluent 2020 r2 theory guide (2020).
+
+\bibitem{openfoam}
+{OpenCFD Ltd}, {OpenFOAM} v2412, \url{https://www.openfoam.com} (2024).
+
+\bibitem{cantera}
+D.~G. Goodwin, R.~L. Speth, H.~K. Moffat, B.~W. Weber, Cantera: An
+  object-oriented software toolkit for chemical kinetics, thermodynamics, and
+  transport processes, \url{https://www.cantera.org} (2023).
+
+\bibitem{pepiot2008drgep}
+P.~Pepiot-Desjardins, H.~Pitsch, An efficient error-propagation-based reduction
+  method for large chemical kinetic mechanisms, Combustion and Flame 154 (2008)
+  67--81.
+
+\bibitem{sun2010pfa}
+W.~Sun, Z.~Chen, X.~Gou, Y.~Ju, A path flux analysis method for the reduction
+  of detailed chemical kinetic mechanisms, Combustion and Flame 157 (2010)
+  1298--1307.
+
+\bibitem{lam1994csp}
+S.~H. Lam, D.~A. Goussis, The {CSP} method for simplifying kinetics,
+  International Journal of Chemical Kinetics 26 (1994) 461--486.
+
+\bibitem{lu2010cema}
+T.~F. Lu, C.~S. Yoo, J.~H. Chen, C.~K. Law, Three-dimensional direct numerical
+  simulation of a turbulent lifted hydrogen jet flame in heated coflow: a
+  chemical explosive mode analysis, Journal of Fluid Mechanics 652 (2010)
+  45--64.
+
+\end{thebibliography}

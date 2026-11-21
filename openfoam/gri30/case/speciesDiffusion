@@ -1,0 +1,70 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      speciesDiffusion;
+}
+// GRI-Mech 3.0 burner case (openfoam/gri30/make_case_files.py): GA18 values kept for its 18 species,
+// ARC22 values for its 8 new species, the rest from validation/lewis.py --all (same method)
+
+model           constantLewis;
+Sct             0.7;
+
+Le
+{
+    H2      0.309;
+    H       0.185;
+    O       0.712;
+    O2      1.084;
+    OH      0.729;
+    H2O     0.816;
+    HO2     1.086;
+    H2O2    1.081;
+    C       0.780;
+    CH      0.683;
+    CH2     0.995;
+    CH2(S)  0.995;
+    CH3     1.014;
+    CH4     0.870;
+    CO      1.120;
+    CO2     1.370;
+    HCO     1.281;
+    CH2O    1.290;
+    CH2OH   1.334;
+    CH3O    1.323;
+    CH3OH   1.332;
+    C2H     1.329;
+    C2H2    1.338;
+    C2H3    1.356;
+    C2H4    1.346;
+    C2H5    1.477;
+    C2H6    1.454;
+    HCCO    0.900;
+    CH2CO   1.536;
+    HCCOH   1.536;
+    N       0.821;
+    NH      0.692;
+    NH2     0.707;
+    NH3     0.919;
+    NNH     1.156;
+    NO      1.126;
+    NO2     1.221;
+    N2O     1.367;
+    HNO     1.127;
+    CN      1.155;
+    HCN     1.298;
+    H2CN    1.314;
+    HCNN    0.901;
+    HCNO    1.403;
+    HOCN    1.401;
+    HNCO    1.402;
+    NCO     1.398;
+    N2      1.151;
+    C3H7    1.874;
+    C3H8    1.869;
+    CH2CHO  1.542;
+    CH3CHO  1.553;
+    default 1;      // AR (absent)
+}

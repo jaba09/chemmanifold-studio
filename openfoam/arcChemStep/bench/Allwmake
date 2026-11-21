@@ -1,0 +1,8 @@
+#!/bin/sh
+# arcBench: ARC_GRI30_NOx22 cell ODEs over one flow step with an OpenFOAM ODE solver (cost and accuracy of
+# solver / tolerance choices), states from a protocol snapshot: make_states.py <csv> <out> [n] [Tmin]
+cd "${0%/*}" || exit 1
+M=../../../mechanisms/arc_gri30_nox22
+cp $M/arc_gri30_nox22.c $M/arc_gri30_nox22.h $M/arc_gri30_nox22_data.h .
+cp $M/arc_kernel_original.cpp arc_kernel_original.C; mkdir -p original; cp $M/original/arc_gri30_nox22.hpp original/
+wmake
