@@ -1,0 +1,542 @@
+%% ISANN vs ITERML comparison paper, draft v2, 2026-11-21 (Spain time).
+%% v2 = all headline results on the corrected burner (top + chimney open, wall radiation, constant Lewis)
+%% under protocol v2, with a shared physics-only parent (tix2c). The v1 study (old case, protocol v1)
+%% is kept in Appendix A as development history.
+%% Sources: results/sim1/{B,C2,C3,C3b,D,E,E2,offline_v2}/ on branch claude/project-thread-mq77al.
+%% Figures: python ../common/make_v2_figs.py <results/sim1> . p2   (v1 figures: scripts/make_figs.py)
+%% \todo{} = must be resolved before submission. Check every reference in refs.bib against the paper.
+\documentclass[preprint,review,12pt]{elsarticle}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{lineno}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,fit}
+\usepackage[hidelinks]{hyperref}
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\sisetup{group-separator={\,},group-minimum-digits=4}
+\linenumbers
+\journal{Combustion and Flame}
+
+\begin{document}
+\begin{frontmatter}
+
+\title{Where should the training data of a neural chemistry surrogate come from? Online learning from
+direct integration versus physics-based re-exploration seeded by the simulation}
+
+\author[a]{Javier \todo{surname}}
+\author[a]{\todo{co-authors}}
+\address[a]{\todo{affiliation}}
+
+\begin{abstract}
+Neural-network surrogates of finite-rate chemistry trained a priori on canonical reactors meet, in the
+actual simulation, states they have not seen or learned poorly. Two ways of using the simulation to close
+that gap are compared on the same laminar methane/air burner, 18-species mechanism (GA18), network
+architecture, physics-only parent network and evaluation protocol. In \emph{ISANN} (in situ adaptive
+neural network) the running simulation trains its own surrogate on deduplicated (state, time step, direct
+integration) pairs and switches it in through an acceptance gate. In \emph{ITERML} (iterative machine
+learning) no state of the simulation is ever a training pair: the states where the network is out of
+distribution or disagrees with sparse direct-integration checks only seed new Cantera reactor
+explorations, and the network is retrained on physics data alone, with frozen acceptance and stopping
+rules. Every network is scored without any direct-integration fallback by one protocol that combines
+the ignition delay from a lean start and the temperature and CO/OH errors of the established flame into a
+score $S$ ($S\le1$: every target met). From the same parent ($S=2.00$, flame error 8.0~K, ignition 0.6~ms
+early), ISANN reached $S=1.04$ (5.2~K, ignition 0.2~ms early, species within 3--7\%) in one 50~ms run of
+the start-up and one of the flame. Two warm-started ITERML iterations moved the ignition onto the
+reference ($+0.4$ and $+0.2$~ms) but made the flame worse (11.1 and 10.7~K, $S=2.22$ and 2.15), and the
+frozen rules stopped the loop. Two from-scratch ITERML iterations gave the most accurate physics-only
+networks of the project for 20~ms (1.7--2.2~K, ignition exactly on the reference) and then drifted away in
+the rich core under the nozzle ($S=6.86$ and 16.8); no offline check saw that drift. Tabulation (ISAT,
+tolerance \num{e-4}) meets every target at the same cost ($S=0.67$). Using the simulation's results as
+labels is the only scheme that brought a network close to the targets; using the simulation only to choose
+where to explore fixes the term it is aimed at and breaks others, because what limits it is the detector
+and the gate, not the exploration.
+\end{abstract}
+
+\begin{keyword}
+Chemistry acceleration \sep Neural network surrogate \sep Online learning \sep Active learning \sep
+Thermochemical space exploration \sep Out-of-distribution detection
+\end{keyword}
+\end{frontmatter}
+
+%% ===============================================================================================
+\section{Introduction}
+\label{sec:intro}
+
+The integration of stiff finite-rate chemistry dominates the cost of many reacting-flow simulations; in
+the burner of this study it is 90\% of a direct-integration (DI) time step. Storage/retrieval methods such
+as in situ adaptive tabulation (ISAT)~\cite{pope1997isat} tabulate direct integrations during the
+simulation itself; regression methods replace the integrator with a fitted map, and artificial neural
+networks (ANN) have been used for this since the 1990s~\cite{christo1996ann,blasco1998ann}. The training
+data of such networks have come from the simulation of a similar case~\cite{sen2010les}, from canonical
+laminar flames~\cite{ihme2009ann}, from abstract problems that sample the composition
+space~\cite{franke2017rcce,ding2021hybrid,readshaw2021hybrid}, or have been used to fit neural ordinary
+differential equations~\cite{owoyele2022chemnode}.
+
+Whatever the source, an a priori data set is a guess of the states the simulation will visit, and of how
+accurately each must be learned. Out-of-distribution (OOD) detectors with a DI fallback limit the damage,
+but a fallback does not exist in every solver (a commercial code such as Ansys Fluent calls a user-defined
+chemistry step that must return a result), and errors that build up over many steps inside the training
+data are not detected by an OOD test. The simulation itself is the only reliable source of information on
+the states it needs. This paper asks how that information should enter the surrogate:
+\begin{enumerate}
+\item \emph{as labels}: the simulation integrates the states it visits with DI and the network is trained
+  on those pairs. This is the ISAT idea transferred to a network; we call the scheme ISANN;
+\item \emph{as locations}: the simulation only says \emph{where} the network fails, and the training data
+  are generated by physics-based exploration started from those states. The data stay a model of the
+  mechanism, not of the simulation; we call the loop ITERML.
+\end{enumerate}
+The first answer uses the most relevant data possible but ties the network to one simulation. The second
+keeps the training data independent of the CFD solution, which matters when the surrogate is reported as a
+physics-based model, reused in another configuration, or validated against the same simulation it was
+built for, but relies on the exploration and on the error detector to find and reproduce the relevant
+states.
+
+We compare the two from the same physics-only parent network on the same burner, mechanism, network,
+exploration framework, OOD detector and evaluation protocol, with ISAT as the reference line, and report
+accuracy against DI during ignition and in the established flame, species, generality on an offline
+benchmark of canonical states, and cost. A first version of this comparison, on an earlier configuration of
+the burner with different parents and a looser protocol, is summarised in Appendix~\ref{app:v1}; its main
+lessons (the error detector limits ITERML; one-step checks miss multi-step errors) motivated the codified
+rules of the present study.
+\todo{Literature on online/active learning of chemistry surrogates and adaptive sampling (active learning of
+reaction manifolds, on-the-fly ANN tabulation, DeepFlame and similar frameworks); position both schemes.}
+
+%% ===============================================================================================
+\section{Common elements}
+\label{sec:common}
+
+\subsection{Surrogate network}
+The surrogate maps the composition at the start of a chemistry step to that at its end, at constant
+pressure and enthalpy. Species mass fractions are Box--Cox transformed ($\lambda=0.1$) and standardised;
+the context $c=(T,p,h,\log_{10}\Delta t)$ modulates a residual MLP through feature-wise linear modulation
+(FiLM)~\cite{perez2018film} (three residual blocks, 192 hidden units, SiLU, layer normalisation, output
+initialised to zero so that the untrained network is the identity). The temperature at the end of the
+step follows from the predicted composition and the conserved enthalpy. Steps longer than the trained range
+are sub-stepped; cells below $T_\mathrm{freeze}=600$~K are not advanced. The same C core is called by an
+OpenFOAM v2412 chemistry solver and by an Ansys Fluent DEFINE\_CHEM\_STEP user-defined function. A
+\emph{mean ensemble} averages the mass fractions predicted by several networks for the same state (and
+flags a state as OOD when any member does).
+
+\subsection{Physics-only parent}
+\label{sec:parent}
+Both schemes start from networks of the \emph{tix2c} family, trained only on Cantera~\cite{cantera}
+calculations with GA18 at the burner's inlet conditions (662,188 pairs; no CFD state): steady and
+unsteady flamelets over a range of strain rates, 0D ignition and wall-cooled reactors, partially stirred
+mixing ensembles, recirculation, equilibrium tails, vitiated ignition, burnt-gas relaxation, lean
+dilution--cooling parcels, a jet-induction mixing layer, relaxation at the flow time step and one round of
+committee sampling (states where three trained networks disagree in 0D rollouts). The ranges of mixture
+fraction, heat loss, strain and per-cell chemistry time step are bounded by statistics of a cheap two-step
+flame, never by its states. The parent of ITERML is the mean ensemble of three training repeats,
+P\_tix2c ($S=2.00$, Table~\ref{tab:main}); the parent of ISANN is its first member, tix2c\_s0, because ISANN
+fine-tunes a single network. \todo{Table of the parent's data sources and pair counts (companion paper on
+the exploration).}
+
+\subsection{Out-of-distribution detection and shadow checks}
+Each exported model carries tables built from its own training data. A state is OOD if its temperature, a
+species or the pressure leaves the trained range (globally or in its mixture-fraction band), if its
+residual to a local principal-component manifold is too large, or if it is farther than $d_\mathrm{L}$ from
+the nearest of a set of training landmarks. \emph{Shadow checks} integrate a sample of cells with DI from
+the same state as the network; the sample is stratified over bins of temperature, mixture fraction and
+inside/OOD, so that it covers all regions of the flame and not mostly the far field.
+
+\subsection{Deduplication}
+Both schemes store states with the same two-level deduplication: a grid in $T$, $\sqrt{Z}$, the logarithm
+of eight key species and $\log_{10}\Delta t$ with at most one state per box (reservoir sampling), and a
+radius of novelty in the standardised coordinates of the OOD detector. On \num{902029} hot-cell DI states of
+the burner the two levels reduce the states 93 times while every state stays within $0.27\,d_\mathrm{L}$ of a
+kept one. ITERML adds a third level: a seed within the radius of any seed of an earlier iteration is dropped.
+
+\subsection{Test case}
+\label{sec:case}
+The burner is a laminar, non-premixed methane/air burner of a domestic cooking geometry, computed 2D
+axisymmetric (5$^\circ$ wedge, 60k cells) with gravity: pure CH$_4$ at 300~K through a central tube
+($r<2.5$~mm, about 340~W), air through an annular co-flow and a slow outer co-flow, a pot above the burner,
+and open top and chimney boundaries. The solver is OpenFOAM's rhoReactingBuoyantFoam with constant Lewis
+numbers (turbulent Schmidt number 0.7 in the far field), Euler implicit, $\Delta t=\SI{2e-5}{s}$, and fvDOM
+radiation with a transparent gas and radiating walls. Wall radiation matters: without it the gas under the
+pot bottom, which radiates about 45\% of the fuel power, stays 500--1000~K too hot and the hot volume is
+three times that of an Ansys Fluent solution of the same case. With it the DI reference agrees with
+Fluent (volume above 1500~K 19.95 vs 18.25~cm$^3$, maximum temperature 2121 vs 2088~K, flame base 1.39 vs
+1.15~mm). The mechanism is the 18-species GA18 skeletal mechanism \todo{reference}. \todo{Geometry figure and
+DI temperature field.}
+
+\subsection{Evaluation protocol}
+\label{sec:protocol}
+Every model is scored with one fixed protocol (v2; companion paper \todo{cite}) in \emph{pure} mode: the
+network advances every cell, OOD cells are counted but never handed to DI, because this is the only mode
+the target Fluent case offers. Two phases are run at the same number of ranks (four):
+\begin{itemize}
+\item \emph{Ignition}: from a lit lean start (burnt gas at equivalence ratio 0.5 under the pot), 0--25~ms,
+  against a GA18 DI run from the same start, which ignites the fuel jet at 2.4~ms (first step with
+  domain $T_\mathrm{max}>1600$~K).
+\item \emph{Flame}: from the DI state at $t=0.1$~s, 50~ms, against the DI snapshots every 2.5~ms.
+\end{itemize}
+The score is $S=\max(F,I,C)$ with $F$ the mean flame-cell ($T>1600$~K) $|T-T_\mathrm{DI}|$ over
+102.5--150~ms divided by 5~K, $I$ the ignition-time error divided by 0.3~ms, and $C$ the largest
+$|\ln(\text{model/DI})|$ of the domain totals of CO and OH divided by $\ln 1.4$. $S\le1$ means every target is
+met. Drift, zone errors, L1 errors of OH, CO, CH$_4$ and H, heat release and cost are reported alongside. A
+run is valid only if it reaches the end time. Shadow-DI comparison data are kept with every run; the CFD
+states are diagnostic data of the protocol and never ITERML training data.
+
+\subsection{Offline benchmark}
+To measure generality away from the burner, each model is also run in Cantera on 218 canonical states that
+contain no CFD state (equilibrium, cooled, lean hot, vitiated, partially burnt, flamelet), 2500 steps of
+\SI{2e-5}{s} in homogeneous constant-$(p,h)$ reactors; the 10~ms temperature error is the ITERML gate.
+
+%% ===============================================================================================
+\section{ISANN: learning from the run's direct integration}
+\label{sec:isann}
+The run starts with DI in every cell (\emph{DI phase}); every hot cell offers its (state, $\Delta t$, DI
+result) pair to the store. The first network is fine-tuned from the parent when at least 100 steps have run,
+\num{3000} deduplicated pairs exist and the store has saturated, or at 400 steps. Afterwards, cells go to DI
+only if they are OOD or belong to an \emph{untrusted bin} (a bin whose decayed shadow-failure count exceeds
+its successes), and a new round starts after 100 steps if \num{1500} new pairs exist, the DI share exceeds
+5\%, or a bin is untrusted. A round fine-tunes the current network (20 epochs, learning rate \num{2e-4}) on
+the online pairs plus a replay of a priori pairs (three per online pair, at most \num{60000}), with 8-step
+Cantera continuations of online states in the rollout loss. A candidate is published only if its one-step
+error on held-out online pairs is lower than the current network's and its 100-step 0D rollouts do not fail
+more often nor have a median error above 1.1 times the current one. The trainer runs beside the CFD on four
+threads and publishes models through a control file read by all ranks.
+
+Here ISANN runs over both protocol phases in sequence: the ignition leg (0--25~ms from the lean start,
+with the DI phase), then the flame leg (from the DI state at 0.1~s), which continues the store and the
+rounds of the ignition leg with the last accepted network and no new DI phase. The final network is then
+scored in pure mode like every other model. Every ISANN model is labelled \emph{CFD-adapted}: it is trained
+on DI pairs of the flame it is scored on.
+
+%% ===============================================================================================
+\section{ITERML: the simulation chooses where to explore}
+\label{sec:iterml}
+
+Figure~\ref{fig:loops} compares the two loops. One ITERML iteration has six stages, all run by one driver
+with settings frozen before the first iteration:
+\begin{enumerate}
+\item[A] \emph{Collection.} Two hybrid legs with the current network (OOD cells to DI so that the visited
+  states stay realistic): the ignition leg (0--25~ms) and a flame leg (0.1--0.125~s). The store keeps, with
+  the grid cap, every state that is OOD, fails a shadow check (relative tests on $T$ and on CO, OH, H, O
+  with floors of \num{e-7}), belongs to a bin with more than 20\% shadow failures, or starts a drifting
+  \emph{sentinel} (a copied cell integrated for 25--100 steps with both the network and DI in every
+  temperature and mixture-fraction bin). A leg stops when the store is full or when the network is lost
+  (OOD share above 10\%).
+\item[B] \emph{Seeds.} The states are merged, deduplicated at three levels, described by their flame
+  features (Bilger $Z$, heat-loss fraction $\psi$, progress, radical excess) and assigned by rules to a
+  seeded regime: 10 PaSR with IEM mixing against the inlet streams, 11 relaxation of burnt gas with radical
+  perturbations, 12 ignition (fuel and O$_2$ at 800--1700~K), 13 cooling.
+\item[C] \emph{Seeded exploration.} Each seed spawns jittered Cantera reactors of its regime
+  (element-conserving radical perturbations, $\psi\pm0.05$, small mixing with either stream). The seed state
+  itself is never paired, and any pair that starts within \num{1e-8} of a seed is dropped.
+\item[D] \emph{Training.} Three repeats (different random seeds) on the parent's data plus the seeded
+  pairs.
+\item[E] \emph{Gate.} Offline benchmark: a repeat may not be worse than the parent by more than the spread
+  between training seeds at 10~ms.
+\item[F] \emph{Evaluation and decision.} The mean ensemble of the repeats that pass is scored with protocol
+  v2. It is accepted if its $S$ is below 0.9 times the best $S$ so far; the next iteration starts from the
+  best model. The loop stops at $S\le1$, after two rejections in a row, or after six iterations.
+\end{enumerate}
+Two settings of stage C--D were run: \emph{warm} (seeded share capped at 35\%, repeats warm-started from the
+parent members, 40 epochs) and \emph{scratch} (seeded share 20\%, repeats trained from scratch, 300 epochs).
+The scratch iterations reused the seeds of the warm ones.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[font=\footnotesize, node distance=5mm and 6mm,
+  box/.style={draw, rounded corners, align=center, minimum height=8mm, text width=33mm},
+  arr/.style={-{Latex[length=2mm]}, thick}]
+\node[box, fill=blue!6] (i1) {CFD starts with DI\\in every cell};
+\node[box, fill=blue!6, below=of i1] (i2) {store DI pairs\\(dedup)};
+\node[box, fill=blue!6, below=of i2] (i3) {fine-tune network\\on DI pairs + replay};
+\node[box, fill=blue!6, below=of i3] (i4) {gate; switch in\\the same run};
+\node[box, fill=blue!6, below=of i4] (i5) {OOD / untrusted cells\\to DI, new pairs};
+\draw[arr] (i1)--(i2); \draw[arr] (i2)--(i3); \draw[arr] (i3)--(i4); \draw[arr] (i4)--(i5);
+\draw[arr] (i5.east) -- ++(4mm,0) |- (i3.east);
+\node[above=2mm of i1, font=\small\bfseries, text=blue!60!black] {ISANN (one run)};
+\node[box, fill=orange!8, right=22mm of i1] (t1) {CFD run with network\\(hybrid collection)};
+\node[box, fill=orange!8, below=of t1] (t2) {keep OOD / wrong /\\drifting states (dedup)};
+\node[box, fill=orange!8, below=of t2] (t3) {seeds $\rightarrow$ Cantera reactors\\(seed itself excluded)};
+\node[box, fill=orange!8, below=of t3] (t4) {retrain on physics\\pairs only; gate};
+\node[box, fill=orange!8, below=of t4] (t5) {pure evaluation run\\(protocol v2), accept?};
+\draw[arr] (t1)--(t2); \draw[arr] (t2)--(t3); \draw[arr] (t3)--(t4); \draw[arr] (t4)--(t5);
+\draw[arr] (t5.east) -- ++(4mm,0) |- (t1.east);
+\node[above=2mm of t1, font=\small\bfseries, text=orange!60!black] {ITERML (between runs)};
+\end{tikzpicture}
+\caption{The two loops. In ISANN the CFD's DI results are the training labels and the network changes
+during the run. In ITERML the CFD only provides starting points for physics-based exploration; training
+happens between runs, on Cantera data alone, and frozen rules accept or reject each iteration.}
+\label{fig:loops}
+\end{figure}
+
+\begin{table}[t]
+\centering
+\caption{Design differences between the two schemes.}
+\label{tab:design}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+ & ISANN & ITERML \\
+\midrule
+Role of the CFD states & training pairs (state, $\Delta t$, DI result) & seeds: where to explore \\
+Origin of the training labels & DI of the running CFD & Cantera reactors started from seeds \\
+CFD state in the training set & yes & never (excluded, with a \num{1e-8} margin) \\
+When the network changes & during the run (control file) & between runs \\
+DI needed in the production run & yes (DI phase, fallback) & no (pure mode) \\
+Error detection & OOD + shadow checks & OOD + shadow checks + multi-step sentinels \\
+Acceptance & per round: held-out one-step and 0D rollouts & per iteration: protocol score $S$, elitism \\
+Parent & tix2c\_s0 (one network) & P\_tix2c (mean of tix2c\_s0--s2) \\
+Model label & CFD-adapted & physics-only (a priori + seeded exploration) \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\subsection{Fairness of the comparison}
+\label{sec:fair}
+Both schemes start from the same family, run on the same case and cores, and are scored by the same
+protocol. Three differences remain. (i) ISANN fine-tunes one network, ITERML trains three repeats and is
+scored as their mean ensemble; ensembling alone improves a family's score (the parent ensemble scores 2.00,
+its family members are not scored individually, but in the closely related tix2h family the ensemble scores
+2.97 against 2.35--10.6 for its members). This favours ITERML. (ii) ISANN's network has seen DI pairs of the
+very flame it is scored on (it is CFD-adapted by design); ITERML's has not. This favours ISANN, and is the
+point of the comparison. (iii) Each ISANN run is one realisation; a repeat would measure its spread.
+\todo{Repeat ISANN once (different seed) to measure its spread.}
+
+%% ===============================================================================================
+\section{Results}
+\label{sec:results}
+
+\begin{table}[t]
+\centering
+\caption{Protocol v2 against GA18 DI, pure mode, 4 ranks. Flame: mean $|T-T_\mathrm{DI}|$ for $T>1600$~K over
+102.5--150~ms; ignition: model $-$ DI ignition time (DI 2.4~ms); L1: volume-weighted relative error in hot
+cells, mean over the flame phase; $S=\max(F,I,C)$, target $S\le1$.}
+\label{tab:main}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccccc}
+\toprule
+ & ISAT & ISANN & parent & ITERML warm & ITERML warm & ITERML scratch & ITERML scratch \\
+ & tol.\ \num{e-4} & isann\_D & P\_tix2c & it.~1 & it.~2 & it.~1 & it.~2 \\
+\midrule
+Training data from the CFD   & -- & DI pairs & none & none & none & none & none \\
+$S$                          & 0.67 & \textbf{1.04} & 2.00 & 2.22 & 2.15 & 6.86 & 16.8 \\
+Flame $|dT|$ [K]             & 0.9 & 5.2 & 8.0 & 11.1 & 10.7 & 34.3 & 84.0 \\
+Ignition shift [ms]          & $-0.2$ & $-0.2$ & $-0.6$ & $+0.4$ & $+0.2$ & 0.0 & $+0.4$ \\
+Drift [K per 10 ms]          & $+0.2$ & $+0.4$ & $+0.5$ & $+1.3$ & $+1.8$ & $+25.5$ & $+65.1$ \\
+OH L1                        & 0.8\% & 3.1\% & 10.2\% & 7.7\% & 8.2\% & 17.3\% & 32.6\% \\
+CO L1                        & 0.3\% & 7.0\% & 5.9\% & 8.5\% & 10.6\% & 18.7\% & 18.1\% \\
+Cost [s per step]            & 3.65 & 1.94 & 3.66 & 3.85 & 3.65 & 3.41 & 3.33 \\
+Decision                     & reference & -- & baseline & rejected & rejected & rejected & rejected \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figs/fig_v2_runs.pdf}
+\caption{Protocol v2, pure runs against GA18 DI. (a) Mean temperature error in the flame zone
+($T>1600$~K) after the flame-phase start at 0.1~s; dashed grey: the 5~K target. (b) Domain maximum
+temperature after the lean start; dashed grey: ignition criterion. (c) L1 error of CO in hot cells.}
+\label{fig:runs}
+\end{figure}
+
+\subsection{How much information each scheme takes from the CFD}
+\label{sec:data}
+\emph{ISANN.} The ignition leg kept DI in every cell for 401 steps (8~ms), forced the first round there, and
+used a network from 9.4~ms on. Over the two legs it ran 12 training rounds and accepted 8 networks (3 in the
+ignition leg, 5 in the flame leg); the final network v8 was trained on \num{33159} deduplicated DI pairs of
+the run plus \num{60000} replayed a priori pairs, so about 36\% of its last training set is CFD data. Its
+held-out one-step temperature error on online pairs is 0.044~K (parent 0.73~K) and its OH error 16\%
+(parent 59\%). The DI phase cost 7.9~s per step against 4.3~s with the network; after the DI phase, 0.6\%
+(ignition leg) and 3.7\% (flame leg) of the hot cells were still sent to DI as OOD or untrusted.
+
+\emph{ITERML.} Each warm iteration's collection filled the store (15,000 states) after 10.6~ms of the
+ignition leg; the flame leg stopped after 18~ms because the network was lost (OOD share above 10\% for 58
+steps). Iteration 1 caught \num{29083} states, 7218 shadow checks failed in 12.6\% of the cases and 761 of
+1613 sentinels drifted; after deduplication \num{11440} seeds remained (10 PaSR 2657, 11 relaxation 5066,
+12 ignition 2271, 13 cooling 1446; 47\% lean), which gave \num{405184} seeded pairs, about 40\% of the
+training set before the cap. Iteration 2 gave \num{11296} seeds. No seeded pair is a CFD state. Compared with
+the first ITERML study (one ignition seed out of \num{7891}, Appendix~\ref{app:v1}), the relative checks and
+dense sentinels found the induction-zone states: 2271 ignition seeds and 809 seeds caught by drift.
+
+\subsection{Established flame}
+\label{sec:flame}
+ISANN reduced the parent's flame error from 8.0 to 5.2~K (Table~\ref{tab:main}, Fig.~\ref{fig:runs}a), with
+the same slow growth as the parent (2.6~K at 102.5~ms, 5.9~K at 150~ms, $+0.4$~K per 10~ms) and a warm bias
+($+4.5$~K). Its zone errors are uniform (reactive 4.3, lean burnt 4.5, rich 5.8~K; 95th percentile of the
+hot cells 12~K), the hot volume is within 1\% and the heat release in the flame within 7\% of DI. It had no
+OOD cell in the pure run. The ISANN run itself, with DI fallback and changing networks, gave the same 5.2~K.
+
+The warm ITERML iterations made the flame worse (11.1 and 10.7~K) and tripled the drift ($+1.3$ and
+$+1.8$~K per 10~ms). In each, one of the three repeats failed the offline gate (45 and 55~K at 10~ms against
+the parent's 25~K) and was left out of the ensemble. The seeded pairs, 35\% of the data, shifted the
+warm-started networks away from the flame states the parent had learned.
+
+The scratch iterations behaved differently in time. Up to about 122~ms they were the most accurate
+physics-only networks of the project: 1.7--2.2~K in the flame (iteration 1), three to four times better than
+the parent, with CO and OH within 2--3\%. From about 125~ms both failed the same way: an error started in the
+rich core under the nozzle (rich-zone bias $-6$~K at 125~ms, $-304$~K at 135~ms in iteration 1) and spread into
+the flame (Fig.~\ref{fig:runs}a); iteration 2 also lit spurious heat release on the axis outside the flame.
+Every repeat had passed the offline gate. The same failure in two iterations with different seeds and data
+points to the recipe (from scratch with 20\% seeded pairs) rather than to chance.
+
+\subsection{Ignition}
+\label{sec:ignition}
+The parent ignites the jet 0.6~ms early (Fig.~\ref{fig:runs}b), like every physics-only network of the
+project except one; the induction chemistry of a few cells at the jet base sets the delay. ISANN's final
+network ignites 0.2~ms early, within the target: its DI phase covered the ignition and its rounds kept those
+pairs. ITERML fixed this term in every iteration: $+0.4$ and $+0.2$~ms (warm), 0.0 and $+0.4$~ms (scratch).
+The ignition seeds of regime 12 and the drifting sentinels supply exactly the induction-zone chemistry that
+the a priori exploration had missed. This is the clearest success of physics-only seeding in this study.
+
+\subsection{Species}
+\label{sec:species}
+ISANN brought OH from 10\% to 3\% L1 error, CO to 7\% and the domain totals of OH, CO, CH$_4$ and H within
+1--5\% of DI ($C=0.15$). The warm ITERML networks kept OH and CO near the parent's level (8\% and 9--11\%;
+$C=0.14$--0.15) while the flame temperature degraded; the CO error grows over the flame phase
+(Fig.~\ref{fig:runs}c). Unlike the first study (Appendix~\ref{app:v1}), there is no runaway CO in cooled lean
+gas: the relative CO check and the lean dilution--cooling data of the parent closed that gap.
+
+\subsection{Generality away from the burner}
+\label{sec:offline}
+\todo{ISANN v8 on the 218-state offline benchmark (isann\_D model file on sim1); the old ISANN network v6 ranked
+mid-field there.} The ITERML gate shows the limit of an offline check of this kind: it rejected one warm repeat
+per iteration, but passed every scratch repeat that later drifted in the burner. Across 20 models with a valid
+protocol score, no offline metric predicts $S$ significantly (best Spearman $\rho=+0.36$, $p=0.12$; companion
+paper), so the gate can only reject clearly bad networks.
+
+\subsection{Cost}
+\label{sec:cost}
+ISANN pays for its labels during the production run: the ignition leg's DI phase cost 7.9~s per step (four
+ranks) and 3.7\% of the flame-leg hot cells stayed on DI, about 4.3 h of wall time for the two legs plus the
+pure scoring. The final single network then runs at 1.94~s per step, the fastest of all networks scored, and
+about half the cost of the three-member ensembles (3.4--3.9~s) or of ISAT \num{e-4} (3.65~s). ITERML pays
+between runs: one warm iteration took about 11--12~h on eight cores (collection, seeds and exploration under
+1~h, training of three repeats 3~h, scoring the rest); a scratch iteration 17--18~h of training. Neither scheme
+beats ISAT \num{e-4} on accuracy at equal cost on this 18-species mechanism; the flow and radiation solve
+(1.3~s per step) caps any chemistry method at about a tenfold speed-up of the whole step.
+
+%% ===============================================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+\paragraph{Labels or locations} Using the simulation's DI results as labels gave the only network that came
+close to every target ($S=1.04$), in one pass of each phase and with a single, cheap network. Using the
+simulation only to choose locations fixed the term the seeds were aimed at (the ignition delay) in all four
+iterations, but never improved the overall score: the warm iterations paid for it in the flame, the scratch
+iterations in a slow drift of the rich core. With labels the network learns what the flame needs everywhere
+at once; with locations it learns what the detector points at, and the rest of the training set moves.
+
+\paragraph{The detector and the gate set the ceiling} The detectors of the present loop are better than in the
+first study: relative species tests, sentinels in every bin, 2271 ignition seeds instead of one. They found
+the induction-zone error. What they cannot find is an error that does not exist yet: the rich-core drift of
+the scratch networks starts only after 20--25~ms of coupled flow and chemistry, in states that are inside the
+data and pass every one-step check. Neither the offline gate (10 ms of homogeneous reactors on canonical
+states) nor the shadow checks see it. ITERML therefore needs a gate that runs the candidate coupled long
+enough (or long rollouts on rich-core states) before it is accepted, and an acceptance rule on the whole
+score, as here, so that a fix of one term cannot hide a regression of another.
+
+\paragraph{Warm start vs scratch} Warm-started repeats kept the parent's behaviour (and its slow drift) but were
+pulled off the flame by a large seeded share; scratch repeats learned the seeded states and the flame best but
+lost the stability of the parent's rich side. A warm start from a scratch repeat, or a lower seeded share in
+warm starts, are the obvious next settings; under frozen rules each costs a new iteration.
+
+\paragraph{When to use which} For repeated simulations of one configuration where DI can run in the
+production solver, ISANN gives the best accuracy at the lowest effort, and its single network is cheap. When
+the surrogate must run in a solver without DI fallback from the start, must be reported as a physics-based
+model, or will be transferred to other conditions, ITERML keeps the training data clean and still uses the
+simulation to direct the effort, but it needs a coupled gate to be safe. On this mechanism, ISAT at tolerance
+\num{e-4} is more accurate than both at equal cost; the case for networks rests on larger mechanisms, where a
+tabulation's cost grows with the square of the number of species and a network's barely changes.
+
+\paragraph{Limitations}
+\begin{itemize}
+\item One laminar 2D configuration, one mechanism and one fuel. \todo{second case or second mechanism
+  (ISANN with the 22-species ARC reduction of GRI-Mech 3.0 is running).}
+\item One ISANN realisation; ITERML ensembles of three repeats (Section~\ref{sec:fair}).
+\item The evaluation covers a 25~ms start-up and a 50~ms window of the established flame; longer windows would
+  have exposed the scratch drift sooner, and might expose slower ones in other models.
+\item The circularity of ITERML: the seeds come from this burner, so the seeded data emphasise its states even
+  though they are physics data.
+\end{itemize}
+
+%% ===============================================================================================
+\section{Conclusions}
+\label{sec:conclusions}
+Two ways of letting a reacting-flow simulation improve its chemistry surrogate were compared on a laminar
+methane/air burner with an 18-species mechanism, from the same physics-only parent, under one protocol in pure
+mode:
+\begin{enumerate}
+\item learning from the run's DI pairs (ISANN) halved the parent's score, from 2.00 to 1.04: flame error 5.2~K,
+  ignition 0.2~ms early, species within a few per cent, at the lowest cost per step of all networks;
+\item seeding physics-based exploration with the states where the network fails (ITERML) fixed the ignition
+  delay in all four iterations, which no a priori exploration had achieved, but never improved the score: warm
+  starts lost flame accuracy, scratch training gave the best physics-only networks for 20~ms and then drifted in
+  the rich core;
+\item the drift was invisible to one-step checks and to the offline gate; ITERML needs a coupled acceptance test;
+\item ISAT at tolerance \num{e-4} remains the reference on this mechanism ($S=0.67$ at the same cost).
+\end{enumerate}
+The information on \emph{where} a network fails is enough to repair a specific error without using the
+simulation's results as labels, but not yet enough to make a physics-only network as good as one trained on the
+simulation's own direct integration.
+
+\section*{Data and code availability}
+\todo{Repository (chemmanifold-studio: openfoam/isann, openfoam/iterml/iterml\_v2.py, openfoam/protocol,
+configs/iterml/, results/sim1/), model files and protocol reports.}
+
+\section*{Acknowledgements}
+\todo{}
+
+\appendix
+\section{First study on the earlier burner configuration (protocol v1)}
+\label{app:v1}
+A first comparison was run on an earlier configuration of the burner (lateral side open, top and chimney
+closed, no wall radiation, unity-Schmidt species diffusion) under protocol v1 (lit start, flame error over
+25--50~ms, ignition and species reported separately, no single score). ISANN started from network ood7 and
+ITERML from ood8; ITERML iterations were accepted or rejected by hand, and the shadow check used an absolute CO
+floor of \num{5e-5}. The results are not comparable with the main text and are given as development history.
+
+\begin{table}[h]
+\centering
+\caption{Protocol v1 on the earlier configuration, pure mode except ISANN run 1.}
+\label{tab:v1}
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+ & ISANN run 1 (hybrid) & ISANN v6 & ITERML it.~1 & ITERML it.~2 & a priori ood1 \\
+\midrule
+Ignition, model $-$ DI [ms]   & 0 (DI phase) & $-0.4$ & $+0.6$ & $+1.1$ & $-1.6$ \\
+Flame $|dT|$, 25--50 ms [K]   & 2.6 & 2.1 & 3.3 & 6.6 & 68.8 \\
+OH total, model/DI            & -- & 0.55 & 1.05 & 2.15 & -- \\
+CO total, model/DI            & -- & 0.97 & 1.66 & 6.38 & -- \\
+Cost [s per step]             & 4.2 (2 ranks) & 2.85 (2 ranks) & 1.99 (4 ranks) & 1.91 (4 ranks) & -- \\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+Three lessons carried over to the main study. (1) ITERML's first collection caught one ignition seed out of
+\num{7891}: one-step checks and sparse sentinels do not find multi-step induction errors; hence dense sentinels in
+every bin. (2) The second iteration ran away in CO in cooled lean gas (100 times DI at 50~ms) whose CO level lay
+below the absolute floor of the check; hence relative checks with floors of \num{e-7}. (3) Discarding iteration 2
+and restarting from iteration 1 were judgment calls; hence frozen, codified acceptance on a single score with two
+training repeats. ISANN v6 later scored $S=1.16$ on the corrected configuration under protocol v2, close to the new
+ISANN network (1.04), so the ISANN result survived the change of case; ITERML's did not in the same form.
+
+\begin{figure}[h]
+\centering
+\includegraphics[width=0.48\textwidth]{figs/v1_fig_ignition.pdf}\hfill
+\includegraphics[width=0.48\textwidth]{figs/v1_fig_hrr.pdf}
+\caption{First study (earlier configuration, protocol v1): domain maximum temperature at start-up (left) and heat
+release relative to DI (right), pure runs.}
+\label{fig:v1}
+\end{figure}
+
+\bibliographystyle{elsarticle-num}
+\bibliography{refs}
+
+\end{document}
