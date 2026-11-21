@@ -56,6 +56,7 @@ Usage
         isann
         {
             control      "isann/control"; // case-relative: version N / model <file> / fromStep K
+            startActive  false;  // true: no DI phase, the parent network is used from step 1
             writeEvery   25;     // steps between rewrites of isannPairs.csv / isannStatus.csv
             capPerBox    2;      // pairs kept per dedup grid box (reservoir replacement)
             boxT 25; boxSqrtZ 0.02; boxLogY 0.25; boxLogDt 0.1; boxYFloor 1e-8;

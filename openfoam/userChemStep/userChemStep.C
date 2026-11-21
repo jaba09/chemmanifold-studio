@@ -47,7 +47,7 @@ Foam::userChemStep<ChemistryModel>::userChemStep
     isannDict_(coeffsDict_.subOrEmptyDict("isann")),
     isannControl_(isannDict_.getOrDefault<fileName>("control", "isann/control")),
     isannWriteEvery_(isannDict_.getOrDefault<label>("writeEvery", 25)),
-    isannActive_(false), isannVersion_(0), isannStep_(-1),
+    isannActive_(isannDict_.getOrDefault<bool>("startActive", false)), isannVersion_(0), isannStep_(-1),
     iHot_(0), iDI_(0), iOOD_(0), iUntrusted_(0), iANN_(0), iShadow_(0), iShadowBad_(0),
     trustTAbs_(isannDict_.getOrDefault<scalar>("trustTAbs", 1.0)),
     trustRel_(isannDict_.getOrDefault<scalar>("trustRel", 0.3)),
@@ -169,8 +169,10 @@ Foam::userChemStep<ChemistryModel>::userChemStep
         trustN_.setSize(nShadowT*nShadowZ, 0);
         trustBad_.setSize(nShadowT*nShadowZ, 0);
         if (shadowEvery_ <= 0) shadowEvery_ = 10;
-        Info<< "userChemStep: ISANN, DI phase (every cell on the ODE solver) until "
-            << isannControl_ << " names a model; dedup grid of " << st.keySpecies.size() + 3
+        Info<< "userChemStep: ISANN, "
+            << (isannActive_ ? "the parent network in use from the start (no DI phase)"
+                             : "DI phase (every cell on the ODE solver)")
+            << " until " << isannControl_ << " names a model; dedup grid of " << st.keySpecies.size() + 3
             << " coordinates, " << st.cap << " pairs per box" << endl;
     }
 

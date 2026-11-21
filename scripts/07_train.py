@@ -127,12 +127,18 @@ def batch_losses(model, b, A, sigma_dT, weights, eq_thr, alpha, rel=None):
         noisy = b["yt_in"] + alpha * sdy * torch.randn_like(b["yt_in"])
         Y_in, T_in = model.project_state(b["Y_in"], noisy, b["h_in"], b["T_in"])
     out = model(Y_in, T_in, b["P_in"], b["h_in"], b["dt"])
-    v_true = (b["yt_out"] - b["yt_in"]) / sdy_loss
-    v_pred = (out["yt_cand"] - b["yt_in"]) / sdy_loss
+    if model.increments:    # model.output dY: the loss is on the physical increments the network outputs
+        v_true = (b["Y_out"] - b["Y_in"]) / model.sigma_dYp
+        v_pred = (out["Y_cand"] - b["Y_in"]) / model.sigma_dYp
+    else:
+        v_true = (b["yt_out"] - b["yt_in"]) / sdy_loss
+        v_pred = (out["yt_cand"] - b["yt_in"]) / sdy_loss
     L = {}
     L["inc"] = ((v_pred - v_true) ** 2).mean()
     L["mass"] = ((((out["Y_cand"] - b["Y_in"]) @ A.T) / MASS_SCALE) ** 2).mean()
     L["T"] = (((out["T"] - b["T_out"]) / sigma_dT) ** 2).mean()
+    if "T_net" in out:      # the network's own dT output, against the same GA18 temperature
+        L["T"] = 0.5 * (L["T"] + (((out["T_net"] - b["T_out"]) / sigma_dT) ** 2).mean())
     eq = v_true.abs().amax(-1) < eq_thr
     L["equil"] = (v_pred[eq] ** 2).mean() if eq.any() else v_pred.sum() * 0.0
     ae = out["extras"].get("ae_recon")
@@ -178,9 +184,18 @@ def main(cfg, arch, seed=None, tag=None):
             if not torch.allclose(sd[k], getattr(model, k)):
                 raise ValueError(f"warm start: scaler {k} of {parent} differs from 04_prep - set "
                                  "preprocess.scalers_from to the parent's scalers.json and re-run stage 5")
-        model.load_state_dict(sd)
+        own = model.state_dict()
+        # A parent with another output layer (model.output state -> dY) gives the trunk only: the new
+        # output layer keeps its zero init, so the network starts as dY = 0, dT = 0
+        skip = [k for k in sd if k in own and sd[k].shape != own[k].shape]
+        if any(not k.startswith("net.out.") for k in skip):
+            raise ValueError(f"warm start: {parent} has other layer sizes ({skip})")
+        sd = {k: v for k, v in sd.items() if k not in skip}
+        missing = [k for k in own if k not in sd]
+        model.load_state_dict({**own, **sd})
         model.net.to(device)
-        print(f"  warm start from {parent} (epoch {ck.get('epoch')})")
+        print(f"  warm start from {parent} (epoch {ck.get('epoch')})"
+              + (f"; trunk only, new {', '.join(missing)}" if missing else ""))
     rel = RelativeTerms(tc, list(scalers["species"]))
 
     train, val = to_tensors(ds, ~ds["is_val"]), to_tensors(ds, ds["is_val"])

@@ -131,8 +131,16 @@ def snapshot_metrics(A, B, P, mech):
         qb = heat_release(B[hot], mech)
         w = V[hot]
         Qa, Qb = (w * qa).sum(), (w * qb).sum()
+        # the total over all hot cells is ill-conditioned (the large burnt-gas volume nearly cancels),
+        # so the ratio is taken over the flame cells and the heat released elsewhere is given as a
+        # fraction of the DI flame heat release (e.g. recombination heat of excess radicals)
+        fl = m["llama"][hot]
+        Fa = (w[fl] * qa[fl]).sum()
+        ok = fl.any() and Fa > 0
         r["HRR_DI"], r["HRR_run"] = float(Qa), float(Qb)
-        r["HRR_ratio"] = float(Qb / Qa) if Qa else float("nan")
+        r["HRR_ratio"] = float((w[fl] * qb[fl]).sum() / Fa) if ok else float("nan")
+        r["HRR_fuera_DI"] = float((w[~fl] * qa[~fl]).sum() / Fa) if ok else float("nan")
+        r["HRR_fuera_run"] = float((w[~fl] * qb[~fl]).sum() / Fa) if ok else float("nan")
         r["HRR_L1"] = float((w * np.abs(qb - qa)).sum() / (w * np.abs(qa)).sum())
     return r
 
@@ -234,8 +242,9 @@ def summarize(snap, log, curve_run, curve_di, P, status):
         Tmax_overshoot_K=over,
         absdT_caliente_mean=float(st.absdT_caliente.mean()),
         absdT_boquilla_mean=float(st.absdT_boquilla.mean()),
-        biasdT_boquilla_max=float(st.biasdT_boquilla.abs().max()) if len(st) else float("nan"),
-        biasdT_boquilla_at_max=float(st.biasdT_boquilla.iloc[st.biasdT_boquilla.abs().argmax()]) if len(st) else float("nan"),
+        absdT_llama_mean=float(st.absdT_llama.mean()),
+        biasdT_llama_peor=float(st.biasdT_llama.iloc[st.biasdT_llama.abs().fillna(-1).argmax()])
+        if st.biasdT_llama.notna().any() else float("nan"),
         L1_oh_mean=float(st.L1_oh.mean()),
     )
     for name in ("transicion", "llama"):
@@ -243,7 +252,7 @@ def summarize(snap, log, curve_run, curve_di, P, status):
         r = dict(snapshots=int(len(w)))
         for k in ("absdT_llama", "biasdT_llama", "absdT_caliente", "p95_absdT_caliente", "absdT_reactiva",
                   "absdT_quemado_pobre", "absdT_rica", "V_hot_ratio", "d_axis_tip_mm", "d_axis_base_mm",
-                  "HRR_ratio", "HRR_L1") + tuple(f"L1_{x}" for x in P["species"]) + \
+                  "HRR_ratio", "HRR_fuera_DI", "HRR_fuera_run", "HRR_L1") + tuple(f"L1_{x}" for x in P["species"]) + \
                 tuple(f"L1_{x}_llama" for x in P["species"]) + tuple(f"ratio_{x}" for x in P["species"]):
             if k in w:
                 r[k] = float(w[k].mean())
@@ -292,7 +301,8 @@ def write_report(out, label, info, summ, snap, shadow, P):
          f"| Tiempo de ignición (Tmax > {P['T_ignition']:.0f} K): DI / modelo / diferencia | "
          f"{fmt(a['t_ign_DI_ms'], '{:.2f}')} / {fmt(a['t_ign_run_ms'], '{:.2f}')} / {fmt(a['d_t_ign_ms'], '{:+.2f}')} ms |",
          f"| Máximo exceso de Tmax del dominio sobre DI | {fmt(a['Tmax_overshoot_K'], '{:+.0f}')} K |",
-         f"| Sesgo de T en la boquilla, peor instantánea | {fmt(a['biasdT_boquilla_at_max'], '{:+.0f}')} K |",
+         f"| Sesgo de T en la llama (T > {P['T_flame']:.0f} K), peor instantánea | {fmt(a['biasdT_llama_peor'], '{:+.0f}')} K |",
+         f"| Media abs dT en la llama | {fmt(a['absdT_llama_mean'])} K |",
          f"| Media abs dT en la boquilla | {fmt(a['absdT_boquilla_mean'])} K |",
          f"| Media abs dT, celdas calientes | {fmt(a['absdT_caliente_mean'])} K |",
          f"| Error L1 de OH, celdas calientes | {pc(a['L1_oh_mean'])} |",
@@ -314,8 +324,10 @@ def write_report(out, label, info, summ, snap, shadow, P):
     L += [f"| Volumen por encima de {P['flame_shape']['T_iso']:.0f} K, modelo/DI | ×{fmt(l.get('V_hot_ratio'), '{:.2f}')} |",
           f"| Punta / base de la llama en el eje, modelo - DI | {fmt(l.get('d_axis_tip_mm'), '{:+.1f}')} / "
           f"{fmt(l.get('d_axis_base_mm'), '{:+.1f}')} mm |",
-          f"| Calor liberado (GA18 evaluado en el estado): total modelo/DI, error L1 | "
-          f"×{fmt(l.get('HRR_ratio'), '{:.2f}')}, {pc(l.get('HRR_L1'))} |",
+          f"| Calor liberado (GA18 evaluado en el estado) en la llama, modelo/DI | ×{fmt(l.get('HRR_ratio'), '{:.2f}')} |",
+          f"| Calor liberado fuera de la llama, en fracción del de la llama DI: DI / modelo | "
+          f"{pc(l.get('HRR_fuera_DI'))} / {pc(l.get('HRR_fuera_run'))} |",
+          f"| Error L1 del campo de calor liberado (celdas calientes) | {pc(l.get('HRR_L1'))} |",
           f"| GA18 / OOD | {pc1(l.get('GA18_share'))} / {pc1(l.get('OOD_share'))} |",
           f"| Coste | {fmt(l.get('s_per_step'), '{:.2f}')} s por paso ({info.get('np', '?')} procesos) |\n"]
     L.append(f"Transición 5-25 ms (no puntúa): media abs dT llama {fmt(tr.get('absdT_llama'))} K, "
@@ -329,7 +341,7 @@ def write_report(out, label, info, summ, snap, shadow, P):
         L.append("")
     L += ["## Por instantánea\n",
           "| t [ms] | fase | celdas llama | abs dT llama | sesgo llama | abs dT caliente | abs dT boquilla | "
-          "L1 OH | L1 CO | V>1500 ×DI | HRR ×DI | Tmax DI / modelo |",
+          "L1 OH | L1 CO | V>1500 ×DI | calor llama ×DI | Tmax DI / modelo |",
           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for _, r in s.iterrows():
         L.append(f"| {r.t_ms:.1f} | {r.phase} | {r.n_llama} | {fmt(r.absdT_llama)} | {fmt(r.biasdT_llama, '{:+.1f}')} | "
@@ -357,7 +369,7 @@ def plot(out, label, snap, log):
     ax[0, 1].legend()
     ax[1, 0].plot(s.t_ms, s.V_hot_ratio, "o-", label="V(T>1500) ×DI")
     if "HRR_ratio" in s:
-        ax[1, 0].plot(s.t_ms, s.HRR_ratio, "s-", label="calor liberado ×DI")
+        ax[1, 0].plot(s.t_ms, s.HRR_ratio, "s-", label="calor liberado en la llama ×DI")
     ax[1, 0].axhline(1, color="k", lw=0.7)
     ax[1, 0].set(xlabel="t [ms]")
     ax[1, 0].legend()
@@ -428,15 +440,15 @@ def compare(a):
     L = ["# Protocolo CFD: comparación de modelos\n",
          "Mismo arranque encendido, dt 2e-5 s, frente a GA18 DI. (a) arranque 0-5 ms; (b) llama establecida 25-100 ms. "
          "Datos CFD solo para diagnóstico.\n",
-         "| Corrida | modo | hasta [ms] | (a) dt ignición [ms] | (a) sesgo boquilla [K] | (a) abs dT caliente [K] | "
+         "| Corrida | modo | hasta [ms] | (a) dt ignición [ms] | (a) peor sesgo llama [K] | (a) abs dT caliente [K] | "
          "(b) **abs dT llama [K]** | (b) deriva [K/10 ms] | (b) últimos 10 ms [K] | (b) abs dT caliente [K] | "
-         "(b) L1 OH | (b) L1 CO | (b) L1 CH4 | (b) calor ×DI | (b) GA18 | (b) OOD | s/paso |",
+         "(b) L1 OH | (b) L1 CO | (b) L1 CH4 | (b) calor llama ×DI | (b) GA18 | (b) OOD | s/paso |",
          "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in reps:
         s, i = r["summary"], r["info"]
         aa, ll = s["arranque"], s["llama"]
         L.append(f"| {i['label']} | {i['mode']} | {s['t_final_ms']:.0f}{'' if s['valida'] else ' (no válida)'} | "
-                 f"{fmt(aa['d_t_ign_ms'], '{:+.2f}')} | {fmt(aa['biasdT_boquilla_at_max'], '{:+.0f}')} | "
+                 f"{fmt(aa['d_t_ign_ms'], '{:+.2f}')} | {fmt(aa['biasdT_llama_peor'], '{:+.0f}')} | "
                  f"{fmt(aa['absdT_caliente_mean'])} | **{fmt(ll.get('absdT_llama'))}** | "
                  f"{fmt(ll.get('deriva_absdT_llama_K_por_10ms'), '{:+.2f}')} | {fmt(ll.get('absdT_llama_final'))} | "
                  f"{fmt(ll.get('absdT_caliente'))} | {pc(ll.get('L1_oh'))} | {pc(ll.get('L1_co'))} | "

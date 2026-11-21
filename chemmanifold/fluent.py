@@ -257,6 +257,10 @@ def write_model_file(path, arch, model, scalers, thermo, cfg, dt_range, ood_tabl
     arr("P_ref", scalers["ctx_mu"][1])
     for k in ("mu_y", "sigma_y", "ctx_mu", "ctx_sigma"):
         arr(k, scalers[k])
+    if getattr(model, "increments", False):   # outputs: dY_k / sigma_dYp_k and dT / sigma_dTp
+        arr("out_mode", 1)
+        arr("sigma_dYp", scalers["sigma_dYp"])
+        arr("sigma_dTp", scalers["sigma_dTp"])
     for k in ("A", "W", "T_mid", "a_lo", "a_hi"):
         arr(k, thermo[k])
     m = cfg["model"]

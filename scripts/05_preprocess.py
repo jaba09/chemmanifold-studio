@@ -4,7 +4,7 @@ z-score scalers and increment scales, and export the thermodynamic tables used b
 Reads  03_samples/pairs_0d.npz, 03_samples/pairs_pasr.npz (+ pairs_flamelet.npz, pairs_recirc.npz,
        pairs_unsteady.npz, pairs_vitiated.npz, pairs_relax.npz in flame mode).
 Writes 04_prep/dataset.npz  (raw pairs + split mask + standardized arrays)
-       04_prep/scalers.json (lambda, mu_y, sigma_y, ctx_mu, ctx_sigma, sigma_dy, dt_base)
+       04_prep/scalers.json (lambda, mu_y, sigma_y, ctx_mu, ctx_sigma, sigma_dy, sigma_dYp, sigma_dTp, dt_base)
        04_prep/thermo.npz   (A, W, NASA-7 tables, species/element names)
 
 With `preprocess.scalers_from: <scalers.json>` the scalers are those of a parent model instead of
@@ -60,12 +60,19 @@ def main(cfg):
     yt_out = (boxcox(data["Y_out"], lam) - mu_y) / sigma_y
     if not parent:
         sigma_dy = np.maximum((yt_out - yt_in)[tr].std(0), pp["sigma_dy_min"])    # Eq. 42
+    # Scales of the physical increments dY_k and dT, for a network whose outputs are those increments
+    # (model.output: dY); kept from the parent on a warm start so its output layer keeps its units
+    if parent and "sigma_dYp" in ps:
+        sigma_dYp, sigma_dTp = np.asarray(ps["sigma_dYp"]), float(ps["sigma_dTp"])
+    else:
+        sigma_dYp = np.maximum((data["Y_out"] - data["Y_in"])[tr].std(0), pp.get("sigma_dYp_min", 1e-9))
+        sigma_dTp = max(float((data["T_out"] - data["T_in"])[tr].std()), 1.0)
 
     gas = make_gas(cfg)
     thermo = thermo_tables(gas)
     scalers = dict(
         boxcox_lambda=lam, mu_y=mu_y, sigma_y=sigma_y, ctx_mu=ctx_mu, ctx_sigma=ctx_sigma,
-        sigma_dy=sigma_dy, dt_base=cfg["autoignition"]["dt_base"],
+        sigma_dy=sigma_dy, sigma_dYp=sigma_dYp, sigma_dTp=sigma_dTp, dt_base=cfg["autoignition"]["dt_base"],
         T_scale=float(np.std(data["T_out"][tr])), species=list(gas.species_names),
     )
 

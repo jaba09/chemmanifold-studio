@@ -6,6 +6,8 @@ parent:                       # a priori model the run starts from (tables for Z
 dedup:
   radius: 0.05                # radius of novelty, in units of the parent's landmark threshold
 di:                           # DI phase -> first network
+  skip: false                 # true: no DI phase (userChemStep isann.startActive true), the parent
+                              #  runs from step 1 and the retrain criteria apply from the start
   min_steps: 100              # 2 ms at least on GA18
   min_pairs: 3000             # deduplicated training pairs
   window: 25                  # steps over which the grid saturation is measured
@@ -34,6 +36,8 @@ training:                     # warm-started fine-tuning (07_train.py init_from)
   rollout_loss: true
   rollout_weight: 0.5
   online_segments: 4000       # Cantera continuations (8 steps) of online states for the rollout loss
+  relabel_dt: false           # true with local time stepping (LTS): pairs whose dt is above the
+                              #  trained range are re-integrated (Cantera) over their first sub-step
 gate:
   holdout_frac: 0.15          # online pairs never trained on, to accept or reject a candidate
   max_ratio: 1.1              # accept: one-step error below the current one, no more failed
