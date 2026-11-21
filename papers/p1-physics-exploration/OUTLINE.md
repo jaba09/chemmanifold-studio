@@ -86,7 +86,9 @@ One subsection per source, each with one figure (Library `chemmanifold/exploraci
 - [x] Coverage ablation per regime of the ood8 data (regimes 0-8) on the corrected Fluent GA18 DI:
       `papers/data/coverage/coverage_ood8.md`. Strict coverage is nearly complete (94 % of hot mass within 0.5);
       dense (Z, T) coverage goes 7 % (flamelets) -> 60 % (+0D) -> 74 % (+PaSR) -> 97 % (+burnt relaxation);
-      only burnt relaxation cannot be replaced. Still to do: the same for tix2c (regimes 15-21, data on sim1).
+      only burnt relaxation cannot be replaced. tix2c on the A1r DI (`results/sim1/offline_v2/a1r_regime_coverage.md`): 0 of 44k hot cells beyond
+      the OOD threshold; nearest regimes dilution cooling (15) 29 % of hot volume, flamelets 17 %, committee (21)
+      14 %, vitiated 9 %; dilution cooling dominates 600-1400 K (the old hole), vitiated 1400-1800 K.
 - [x] P_tix2c (C2) protocol v2 score: S 2.00 (`results/sim1/C2/summary.md`).
 - [ ] Hole sets M1-M7 (PR #27) trained and scored with 3 seeds.
 - [ ] Offline stage 18 numbers for the same families, same state set.

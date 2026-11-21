@@ -26,11 +26,11 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 
 | # | Working title | Target journal | Status | Draft location | Blocking |
 |---|---|---|---|---|---|
-| 1 | Physics-only exploration of the thermochemical space for neural chemistry surrogates | Combustion and Flame (alt. Energy and AI) | **Outline** (this PR) | `papers/p1-physics-exploration/OUTLINE.md` | ood8 coverage ablation done; tix2c regimes 15-21 (sim1) |
-| 2 | ISANN vs ITERML: where should a surrogate's training data come from? | Combustion and Flame (alt. Energy and AI) | **Draft v1** (protocol v1, old outlets) + revision outline (this PR) | `papers/isann-vs-iterml/` on PR #20 (branch `claude/project-thread-uzvup8`); outline `papers/p2-isann-vs-iterml/OUTLINE.md` | ISANN on R2 (phase D, not started); C3/C3b results now in |
+| 1 | Physics-only exploration of the thermochemical space for neural chemistry surrogates | Combustion and Flame (alt. Energy and AI) | **Outline** (this PR) | `papers/p1-physics-exploration/OUTLINE.md` | Coverage results done (ood8 + tix2c); ready to draft |
+| 2 | ISANN vs ITERML: where should a surrogate's training data come from? | Combustion and Flame (alt. Energy and AI) | **Draft v1** (protocol v1, old outlets) + revision outline (this PR) | `papers/isann-vs-iterml/` on PR #20 (branch `claude/project-thread-uzvup8`); outline `papers/p2-isann-vs-iterml/OUTLINE.md` | Phase D ISANN on R2 running on sim1 since 09:33 CET 21 Nov, score ~21:00 CET (results/sim1/D) |
 | 3 | State Y(t+dt) vs increment dY, dT network outputs | Combustion and Flame | **Draft v0** | `papers/y-vs-dy/` on PR #23 (branch `claude/project-thread-6ik60m`) | Per-species weighted dY loss test; rerun on corrected case |
 | 4 | One network or several? Single ANN vs ensemble / mixture of experts | Combustion and Flame | **Draft v0** (3 Nov) | `papers/single-vs-multiple-ann/` on branches 04fho7, mq77al, ... | Ensemble research (PR #21); add protocol v2 C4 results (P0, P_mix, P_tix2h) and repeat variance |
-| 5 | A CFD evaluation protocol for chemistry surrogates (offline benchmarks do not predict CFD ranking) | Combustion and Flame or Combust. Theory Model. (alt. Energy and AI) | **Outline** (this PR) | `papers/p5-cfd-protocol/OUTLINE.md` | Spearman done for 6 models (rho 0.43); sim1-only models still to add |
+| 5 | A CFD evaluation protocol for chemistry surrogates (offline benchmarks do not predict CFD ranking) | Combustion and Flame or Combust. Theory Model. (alt. Energy and AI) | **Outline** (this PR) | `papers/p5-cfd-protocol/OUTLINE.md` | Spearman done, n = 20 (no offline metric predicts S); ready to draft |
 | 6 | Same flame, two codes: OpenFOAM vs Fluent differences | Combust. Theory Model. or Flow Turb. Combust. | Material only | results in Library `fluent-vs-openfoam-simple/`, `comparacion-T-openfoam-fluent/`, sim1 A1/A1r G1 | Fluent F1/F2/F3 reruns at dt 1e-4; write outline |
 | 7 | 22-species ARC from GRI-Mech 3.0 in a laminar burner | Combustion and Flame or Fuel | **Two drafts** (Claude Docs) | https://claude.ai/artifact/RjFHRJUX3q3qmztavmHjWT and https://claude.ai/artifact/RpamXr1iSLYWMr9eVUakDh | Same-code OpenFOAM GRI-53 leg (~06 CET Tue 17 Nov); ARC ignition leg (Tue); choose one draft |
 | 8 | Reduced mechanism and coverage-hole exploration methods | later | Ideas only | memory `reduced-mechanism`, hole methods doc https://claude.ai/artifact/W8RXBwYEJpXiqN8THz4Eb7 | Hole methods M1-M7 runs (PR #27) |
@@ -90,5 +90,6 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 
 ## Change log
 - 2026-11-16: file created; outlines for papers 1, 2 and 5 added.
+- 2026-11-21: sim1 offline_v2 (n = 20 Spearman, tix2c regime coverage) added; phase D started.
 - 2026-11-21: coverage ablation (paper 1) and offline-vs-v2 Spearman (paper 5) added under papers/data/; phase D and the sim1-only benchmarks asked of the sim1 thread.
 - 2026-11-21: sim1 campaign results added (P_tix2c S 2.00, C3/C3b, cost study).

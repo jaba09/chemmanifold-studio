@@ -64,7 +64,9 @@ ranks, report s/step with chemistry share, version the protocol.
 ## Missing results
 - [x] Spearman of stage 18 vs protocol v2 S, 6 models in the cloud (`papers/data/offline_v2/spearman_v2.md`):
       composite rho 0.43 alone / 0.71 hybrid, not significant; ood8_s2 worst offline, best single physics model
-      in the CFD. Still to do: the ~14 sim1-only models (asked of the sim1 thread).
+      in the CFD. Full set done on sim1 (`results/sim1/offline_v2/summary.md`, branch mq77al 2d9f97e, n = 20 models with
+      valid S, 36 benchmarked): **no offline metric predicts S** (best hybrid dT_10ms rho +0.36, p 0.12); only the
+      ignition shift correlates (fp_OH rho +0.59, p 0.007; OOD-at-start share +0.56). Headline result of section 5.
 - [ ] Short-screen correlation (5 ms ignition + 10 ms flame vs full S).
 - [x] P_tix2c score: S 2.00.
 - [ ] ISANN v6 repeat.
