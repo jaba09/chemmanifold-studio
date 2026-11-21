@@ -1,0 +1,9 @@
+FoamFile { version 2.0; format ascii; class dictionary; object changeDictionaryDict; }
+// L306 remedy (ii-b): damp the radiation / wall-temperature feedback on the pot walls next to the axis
+T
+{
+    boundaryField
+    {
+        "wall-pot-.*" { qrRelaxation 0.2; relaxation 0.5; }
+    }
+}
