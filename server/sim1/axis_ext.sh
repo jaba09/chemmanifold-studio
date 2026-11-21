@@ -2,17 +2,19 @@
 # L306 remedy (iii): extend the ARC and GRI-Mech 3.0 burner flames to T_END (default 0.3 s) with the radiation settings
 # that removed the near-axis divergence (remedy ii-a: fvDOM nPhi = nTheta = 8, 256 rays, maxIter 10, solved every
 # 10 steps). ARC continues /opt/ofb/runs/arc22/flame_ext (restarted from 0.185 s); GRI restarts from its 0.15 s write.
-# Writes every 2.5 ms; snapshots (foam_snapshot.py) and field files for the common window T_AVG-T_END; NP ranks, one leg
-# after the other. Run as a systemd user unit (after sim1-arc-ext has ended):
-#   systemd-run --user --unit=sim1-axis-ext -p WorkingDirectory=/opt/ofb/arc22-src env NP=8 bash server/sim1/axis_ext.sh
+# Writes every 2.5 ms; snapshots (foam_snapshot.py) and field files for the common window T_AVG-T_END.
+# LEG=arc | gri runs one leg on NP ranks (the two can run side by side, 16 cores approved on 21 Nov);
+# LEG=fields waits for both legs and writes the field files and the comparison; LEG=all does everything in sequence.
+#   systemd-run --user --unit=sim1-axis-arc -p WorkingDirectory=/opt/ofb/arc22-src env NP=8 LEG=arc bash server/sim1/axis_ext.sh
+#   systemd-run --user --unit=sim1-axis-gri -p WorkingDirectory=/opt/ofb/arc22-src env NP=8 LEG=gri bash server/sim1/axis_ext.sh
+#   systemd-run --user --unit=sim1-axis-fields -p WorkingDirectory=/opt/ofb/arc22-src env LEG=fields bash server/sim1/axis_ext.sh
 set -e
-REPO=$(realpath "$(dirname "$(realpath "$0")")/../.."); NP=${NP:-8}; T_END=${T_END:-0.3}; T_AVG=${T_AVG:-0.2}
+REPO=$(realpath "$(dirname "$(realpath "$0")")/../.."); NP=${NP:-8}; LEG=${LEG:-all}; T_END=${T_END:-0.3}; T_AVG=${T_AVG:-0.2}
 W=${W:-/opt/ofb/runs/arc22}; PY=${PY:-/opt/ofb/ml/bin/python}; OUT=$REPO/results/sim1/ARC22/fields
 . /opt/ofb/ofenv.sh
-LOG=$W/axis_ext.log; say() { echo "$(date '+%F %T %Z') $*" | tee -a "$LOG"; }
+LOG=$W/axis_ext.log; say() { echo "$(date '+%F %T %Z') [$LEG] $*" | tee -a "$LOG"; }
 latest() { ls "$1/processor0" | grep -E '^[0-9.e+-]+$' | sort -g | tail -1; }
 lt() { awk "BEGIN{exit !($1 < $2 - 1e-9)}"; }
-while systemctl --user is-active -q sim1-arc-ext; do sleep 60; done
 say "start (NP $NP, to $T_END s, window $T_AVG-$T_END s)"
 
 run_leg() {   # <case> <label>
@@ -35,11 +37,13 @@ run_leg() {   # <case> <label>
 }
 
 # ARC: flame_ext already carries the remedy settings
-run_leg "$W/flame_ext" arc22_ext
+if [ "$LEG" = arc ] || [ "$LEG" = all ]; then
+    run_leg "$W/flame_ext" arc22_ext; touch "$W/.axis_done_arc"
+fi
 
 # GRI: new case from the 0.15 s write of the GRI leg, same radiation settings, IDefault for the added rays
 G=$W/gri/flame_ext
-if [ ! -d "$G" ]; then
+if { [ "$LEG" = gri ] || [ "$LEG" = all ]; } && [ ! -d "$G" ]; then
     S=$W/gri/flame; T0=$(latest "$S")
     mkdir -p "$G"; cp -r "$S/constant" "$S/system" "$S/chemkin" "$G/"
     for p in "$S"/processor*; do q=$G/$(basename "$p"); mkdir -p "$q"; cp -r "$p/constant" "$p/$T0" "$q/"; done
@@ -47,7 +51,11 @@ if [ ! -d "$G" ]; then
     for p in "$G"/processor*; do cp "$W/IDefault.processor" "$p/$T0/IDefault"; done   # uniform 300 K start for the added rays
     say "GRI case from $S at $T0 s"
 fi
-run_leg "$G" gri53_ext
+if [ "$LEG" = gri ] || [ "$LEG" = all ]; then
+    run_leg "$G" gri53_ext; touch "$W/.axis_done_gri"
+fi
+[ "$LEG" = arc ] || [ "$LEG" = gri ] && { say "leg done"; exit 0; }
+until [ -f "$W/.axis_done_arc" ] && [ -f "$W/.axis_done_gri" ]; do sleep 300; done
 
 # field files for the common window and the end state
 for L in arc22_ext gri53_ext; do
