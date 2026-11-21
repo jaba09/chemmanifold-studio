@@ -6,6 +6,7 @@
 # T boundary conditions of the pot walls (the pot-top axis corner ran away at 0.2074-0.2276 s with (ii-a) alone), and,
 # because that did not stop it, remedy (ii-c): the pot upper side + top (wall-pot-fff-fluid-exhaust, x = 85-200 mm) at
 # a fixed temperature equal to its face values at the restart time (ARC 0.205 s, GRI 0.155 s). Passed 0.209 s cleanly.
+# (ii-d): the pot bottom then ran away again at 0.2268 s, so it is fixed the same way (ARC 0.22 s, GRI 0.16 s).
 # ARC continues /opt/ofb/runs/arc22/flame_ext (restarted from 0.185 s); GRI restarts from its 0.15 s write.
 # Writes every 2.5 ms; snapshots (foam_snapshot.py) and field files for the common window T_AVG-T_END.
 # LEG=arc | gri runs one leg on NP ranks (the two can run side by side, 16 cores approved on 21 Nov);

@@ -1,6 +1,7 @@
 FoamFile { version 2.0; format ascii; class dictionary; object changeDictionaryDict; }
 // L306 remedies on the pot walls next to the axis.
 // (ii-b) qr / wall-temperature relaxation on the pot bottom and lower side (kept);
+// (ii-d) 21 Nov: the pot bottom ran away again at 0.2268 s with (ii-a)-(ii-c), so it is fixed the same way (restart 0.22 s).
 // (ii-c) the upper side + top of the pot (wall-pot-fff-fluid-exhaust, x = 85-200 mm) at a fixed temperature equal to
 //        its face values at the restart time (the convective + radiative condition let the axis corner run away).
 T
@@ -9,5 +10,6 @@ T
     {
         "wall-pot-.*" { qrRelaxation 0.2; relaxation 0.5; }
         wall-pot-fff-fluid-exhaust { type fixedValue; }
+        wall-pot-fff-fluid-fuel    { type fixedValue; }   // (ii-d) pot bottom at its face values at the restart time
     }
 }
