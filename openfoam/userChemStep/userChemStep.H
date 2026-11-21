@@ -65,7 +65,15 @@ Usage
             trustRel     0.3;    //  trustRel |T_DI - T0|), or the same for OH with trustOHAbs
             trustOHAbs   5e-5;
             trustMin     2;      // failed checks before a bin is untrusted (and > half of them)
+            sentinel     ();     // (T_lo T_hi Y_CH4 Y_O2 ...), one or more ranges, ITERML: cells in
+            sentinelEvery 100;   //  this range, sentinelPerStep per rank every sentinelEvery steps,
+            sentinelPerStep 10;  //  go to GA18 and are kept with reason 4; scripts/19_iterml_seeds.py
+                                 //  rolls them out 0D (network vs Cantera) to catch slow drift
         }
+
+    ITERML (docs/ITERML-ROADMAP.md) runs this same dictionary with startActive
+    true and no daemon: the store then holds the seeds of the next physics
+    exploration (reason 1 OOD, 2 untrusted bin, 3 shadow check, 4 sentinel).
 
 SourceFiles
     userChemStep.C
@@ -169,6 +177,11 @@ class userChemStep
             //- Per-step counters: hot cells, GA18 in the DI phase, GA18 OOD,
             //  GA18 untrusted bin, network, shadow checks, failed checks
             mutable label iHot_, iDI_, iOOD_, iUntrusted_, iANN_, iShadow_, iShadowBad_;
+            //- ITERML sentinel: (T_lo T_hi Y_CH4 Y_O2), period, cells per rank, count this step
+            scalarList sentinel_;
+            label sentinelEvery_, sentinelPerStep_;
+            mutable label iSentinel_, sentinelStep_;
+            mutable labelList sentinelCount_;
             mutable autoPtr<OFstream> isannStatus_;
             scalar trustTAbs_, trustRel_, trustOHAbs_;
             label trustMin_, iOHmodel_;
