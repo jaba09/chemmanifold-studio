@@ -1,0 +1,143 @@
+# ITERML v2 settings (sim1 C3, frozen 15 Nov 2026 before the run): openfoam/iterml/iterml_v2.py
+#   iterml_v2.py --settings configs/iterml/iterml_v2_tix2h.yaml --root /opt/ofb/iterml_v2 auto
+# G2 decision (Javier, 15 Nov): tix2h is the parent family. Iteration 0 = P_tix2h, the mean ensemble of tix2h s0-s2
+# (protocol v2 S 2.97, results/sim1/B/P_tix2h). If C2's P_tix2c beats it, iter0 is switched to tix2c before the start
+# (noted in DECISIONS.md). Per iteration: two hybrid collection legs on the LeFoam + radiation case (ignition start
+# 0-25 ms; A1r flame state 0.1-0.125 s) with member 0 of the parent; seeds (stage 19, generic detector) -> seeded
+# Cantera exploration (stage 4, CFD states never training pairs, seed state excluded); 3 repeats, warm start
+# member i -> repeat i, in parallel (8 threads); offline gate; protocol v2 pure on the mean ensemble of the repeats.
+# Accept if ensemble S < best S x (1 - accept_margin). Stop at S <= 1, 2 rejections in a row, or 6 iterations.
+# Collection/seeds/seeded/gate settings unchanged from iterml_auto.yaml.
+
+# 16 Nov 2026 15:25 CET, before the start: C2's P_tix2c (S 2.00) beat P_tix2h (2.97), so iteration 0 = P_tix2c
+# (tix2c s0-s2, base_config burner_openfoam_tix2c.yaml), as stated above. Nothing else changed.
+
+base_config: ../burner_openfoam_tix2c.yaml
+label_prefix: C3
+results_dir: /home/ubuntu/chemmanifold-studio/results/sim1/C3
+iter0:
+  label: P_tix2c (tix2c s0-s2 mean ensemble; tix2h family + C2 ignition-focused data)
+  data: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c
+  members:
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c/08_fluent/resnet_film
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s1/08_fluent/resnet_film
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s2/08_fluent/resnet_film
+  members_pt:
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c/06_models/resnet_film/model.pt
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s1/06_models/resnet_film/model.pt
+  - /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s2/06_models/resnet_film/model.pt
+  score: /home/ubuntu/chemmanifold-studio/results/sim1/B/P_tix2c/score_v2.json
+collect_bases:
+  ign:
+    case: /opt/ofb/protocol_v2/base_ign
+    t0: 0.0
+    t_end: 0.025
+  flame:
+    case: /opt/ofb/protocol_v2/base_flame
+    t0: 0.1
+    t_end: 0.125
+n_procs: 4
+collect:
+  t_end: 0.025
+  shadow_every: 25
+  shadow_per_bin: 3
+  cap_per_box: 1
+  sentinel:
+  - 900
+  - 1700
+  - 0.0001
+  - 0.01
+  - 600
+  - 1100
+  - -1.0
+  - 0.05
+  sentinel_every: 25
+  sentinel_per_step: 20
+  stop:
+    check_s: 120
+    min_seeds: 1500
+    saturation_window: 100
+    saturation: 0.02
+    max_seeds: 15000
+    ood_share: 0.1
+    ood_steps: 50
+seeds:
+  T_abs: 1.0
+  rel: 0.3
+  Y_abs: 5.0e-05
+  sentinel_steps: 100
+  generic: true
+  generic_floor_frac: 0.0001
+  generic_floor_abs: 1.0e-08
+  rollouts_per_bin: 4
+  drift_species:
+  - CO
+  - OH
+  - H
+  - CH4
+  drift_ratio: 2.0
+  drift_T_generic: 10.0
+  drift_T: 50.0
+  drift_OH: 2.0
+  dedup_radius: 0.05
+seeded:
+  starts_per_seed: 3
+  radical_decades: 0.5
+  dpsi: 0.05
+  p_mix: 0.5
+  mix_share:
+  - 0.001
+  - 0.1
+  n_pick: 25
+  t_max:
+    '10': 0.01
+    '11': 0.02
+    '12': 0.02
+    '13': 0.2
+  ignition_share:
+  - 0.01
+  - 0.5
+  tau_q_range:
+  - 0.001
+  - 1.0
+  pasr:
+    cluster: 12
+    particles: 48
+    stream_share: 0.15
+    tau_mix:
+    - 0.0001
+    - 0.01
+    steps: 60
+  max_share: 0.35
+  workers: 4
+gate:
+  n_states: 40
+  seed_spread_K: 15
+train:
+  model:
+    latent_dim: 12
+  training:
+    epochs: 40
+    patience: 8
+    lr_max: 0.0001
+    pct_start: 0.05
+    noise_amp: 0.005
+    noise_end_frac: 0.5
+    threads: 3
+  scratch_every: 0
+  tags:
+  - ''
+  - s1
+  - s2
+  threads_per_repeat:
+  - 3
+  - 3
+  - 2
+rules:
+  flame_dT: 5.0
+  ignition_ms: 0.3
+  T_ign: 1600.0
+  species_ratio: 1.4
+  patience: 2
+  max_iterations: 6
+  accept_margin: 0.1

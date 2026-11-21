@@ -1,0 +1,15 @@
+! ARC_GRI30_NOx22 (22 transported species of the analytically reduced GRI-Mech 3.0) for Fluent.
+! The chemistry is computed by the UDF arc22_chem_step (fluent/arc22/udf): 22 ODE species +
+! 21 QSS radicals, 262 reactions. The single reaction below only lets Fluent switch volumetric
+! reactions on; it is NOT used while the chemistry-step hook is set.
+ELEMENTS
+O  H  C  N
+END
+SPECIES
+H2  H  O  O2  OH  H2O  HO2  H2O2
+CH4  CH3  CO  CO2  CH2O  CH3OH  C2H2  C2H4
+C2H6  NO  NO2  N2O  HCN  N2
+END
+REACTIONS
+H+O2<=>O+OH                              2.650E+16    -.6707  17041.00
+END

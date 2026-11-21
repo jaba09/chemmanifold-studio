@@ -1,0 +1,6 @@
+blend: mean
+note: "P0 = mean of ood8 training repeats s0-s2 (sim1 phase B)"
+members:
+  - path: /home/ubuntu/inputs/sim1-extra/models/ood8_s0/chemmanifold_model.txt
+  - path: /home/ubuntu/inputs/sim1-extra/models/ood8_s1/chemmanifold_model.txt
+  - path: /home/ubuntu/inputs/sim1-extra/models/ood8_s2/chemmanifold_model.txt

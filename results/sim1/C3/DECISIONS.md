@@ -1,0 +1,6 @@
+- 2026-11-16 15:22 CET: baseline: iteration 0 = P_tix2c (tix2c s0-s2 mean ensemble; tix2h family + C2 ignition-focused data) (ensemble) S = 2.00 (F 1.60, I 2.00, C 0.15)
+- 2026-11-16 15:22 CET: iteration 1 starts from iteration 0 (the best, S 2.00)
+- 2026-11-17 03:27 CET: iteration 1: rejected: ensemble S 2.22 vs best 2.00: not better by more than 10%
+- 2026-11-17 03:27 CET: iteration 2 starts from iteration 0 (the best, S 2.00)
+- 2026-11-17 16:32 CET: iteration 2: rejected: ensemble S 2.15 vs best 2.00: not better by more than 10%
+- 2026-11-17 16:32 CET: STOP before iteration 3: 2 iterations in a row without an accepted model; best = iteration 0 (S 2.00)

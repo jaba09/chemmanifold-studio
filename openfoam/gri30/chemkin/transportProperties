@@ -1,0 +1,538 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// Sutherland fits to Cantera gri30 kinetic-theory viscosity, 300-2500 K (openfoam/gri30/make_case_files.py)
+
+"H2"
+{
+    transport
+    {
+        As  7.266950e-07;
+        Ts  142.4068;
+    }
+}
+// max fit error 5.17%
+
+"H"
+{
+    transport
+    {
+        As  8.831222e-07;
+        Ts  194.1173;
+    }
+}
+// max fit error 2.35%
+
+"O"
+{
+    transport
+    {
+        As  2.087700e-06;
+        Ts  155.2100;
+    }
+}
+// max fit error 4.13%
+
+"O2"
+{
+    transport
+    {
+        As  1.803057e-06;
+        Ts  169.2565;
+    }
+}
+// max fit error 3.33%
+
+"OH"
+{
+    transport
+    {
+        As  2.152463e-06;
+        Ts  155.2100;
+    }
+}
+// max fit error 4.13%
+
+"H2O"
+{
+    transport
+    {
+        As  2.129178e-06;
+        Ts  825.7384;
+    }
+}
+// max fit error 4.81%
+
+"HO2"
+{
+    transport
+    {
+        As  1.831237e-06;
+        Ts  169.2565;
+    }
+}
+// max fit error 3.33%
+
+"H2O2"
+{
+    transport
+    {
+        As  1.858989e-06;
+        Ts  169.2565;
+    }
+}
+// max fit error 3.33%
+
+"C"
+{
+    transport
+    {
+        As  1.276029e-06;
+        Ts  151.6619;
+    }
+}
+// max fit error 4.37%
+
+"CH"
+{
+    transport
+    {
+        As  1.883261e-06;
+        Ts  155.2100;
+    }
+}
+// max fit error 4.13%
+
+"CH2"
+{
+    transport
+    {
+        As  9.593782e-07;
+        Ts  193.3856;
+    }
+}
+// max fit error 2.36%
+
+"CH2(S)"
+{
+    transport
+    {
+        As  9.593782e-07;
+        Ts  193.3856;
+    }
+}
+// max fit error 2.36%
+
+"CH3"
+{
+    transport
+    {
+        As  9.932513e-07;
+        Ts  193.3856;
+    }
+}
+// max fit error 2.36%
+
+"CH4"
+{
+    transport
+    {
+        As  1.057592e-06;
+        Ts  191.5049;
+    }
+}
+// max fit error 2.39%
+
+"CO"
+{
+    transport
+    {
+        As  1.529833e-06;
+        Ts  164.0431;
+    }
+}
+// max fit error 3.61%
+
+"CO2"
+{
+    transport
+    {
+        As  1.669545e-06;
+        Ts  279.3493;
+    }
+}
+// max fit error 1.36%
+
+"HCO"
+{
+    transport
+    {
+        As  1.453002e-06;
+        Ts  527.9813;
+    }
+}
+// max fit error 1.86%
+
+"CH2O"
+{
+    transport
+    {
+        As  1.478023e-06;
+        Ts  527.9813;
+    }
+}
+// max fit error 1.86%
+
+"CH2OH"
+{
+    transport
+    {
+        As  1.428032e-06;
+        Ts  477.4898;
+    }
+}
+// max fit error 2.00%
+
+"CH3O"
+{
+    transport
+    {
+        As  1.428032e-06;
+        Ts  477.4898;
+    }
+}
+// max fit error 2.00%
+
+"CH3OH"
+{
+    transport
+    {
+        As  1.499064e-06;
+        Ts  513.3042;
+    }
+}
+// max fit error 1.63%
+
+"C2H"
+{
+    transport
+    {
+        As  1.069626e-06;
+        Ts  246.8189;
+    }
+}
+// max fit error 1.69%
+
+"C2H2"
+{
+    transport
+    {
+        As  1.090951e-06;
+        Ts  246.8189;
+    }
+}
+// max fit error 1.69%
+
+"C2H3"
+{
+    transport
+    {
+        As  1.111867e-06;
+        Ts  246.8189;
+    }
+}
+// max fit error 1.69%
+
+"C2H4"
+{
+    transport
+    {
+        As  1.189871e-06;
+        Ts  315.2393;
+    }
+}
+// max fit error 1.06%
+
+"C2H5"
+{
+    transport
+    {
+        As  1.036417e-06;
+        Ts  287.2985;
+    }
+}
+// max fit error 1.29%
+
+"C2H6"
+{
+    transport
+    {
+        As  1.054237e-06;
+        Ts  287.2985;
+    }
+}
+// max fit error 1.29%
+
+"HCCO"
+{
+    transport
+    {
+        As  3.776837e-06;
+        Ts  197.8110;
+    }
+}
+// max fit error 2.30%
+
+"CH2CO"
+{
+    transport
+    {
+        As  1.438069e-06;
+        Ts  470.2860;
+    }
+}
+// max fit error 1.01%
+
+"HCCOH"
+{
+    transport
+    {
+        As  1.438069e-06;
+        Ts  470.2860;
+    }
+}
+// max fit error 1.01%
+
+"N"
+{
+    transport
+    {
+        As  1.377982e-06;
+        Ts  151.6619;
+    }
+}
+// max fit error 4.37%
+
+"NH"
+{
+    transport
+    {
+        As  2.178001e-06;
+        Ts  155.2100;
+    }
+}
+// max fit error 4.13%
+
+"NH2"
+{
+    transport
+    {
+        As  2.249921e-06;
+        Ts  155.2100;
+    }
+}
+// max fit error 4.13%
+
+"NH3"
+{
+    transport
+    {
+        As  1.673311e-06;
+        Ts  562.1150;
+    }
+}
+// max fit error 3.23%
+
+"NNH"
+{
+    transport
+    {
+        As  1.495636e-06;
+        Ts  151.6619;
+    }
+}
+// max fit error 4.37%
+
+"NO"
+{
+    transport
+    {
+        As  1.609960e-06;
+        Ts  163.7400;
+    }
+}
+// max fit error 3.62%
+
+"NO2"
+{
+    transport
+    {
+        As  1.995487e-06;
+        Ts  238.8165;
+    }
+}
+// max fit error 1.78%
+
+"N2O"
+{
+    transport
+    {
+        As  1.617330e-06;
+        Ts  268.3432;
+    }
+}
+// max fit error 1.47%
+
+"HNO"
+{
+    transport
+    {
+        As  1.725007e-06;
+        Ts  174.8397;
+    }
+}
+// max fit error 3.07%
+
+"CN"
+{
+    transport
+    {
+        As  1.365179e-06;
+        Ts  153.0830;
+    }
+}
+// max fit error 4.27%
+
+"HCN"
+{
+    transport
+    {
+        As  1.359440e-06;
+        Ts  587.7422;
+    }
+}
+// max fit error 3.00%
+
+"H2CN"
+{
+    transport
+    {
+        As  1.384560e-06;
+        Ts  587.7422;
+    }
+}
+// max fit error 3.00%
+
+"HCNN"
+{
+    transport
+    {
+        As  3.777021e-06;
+        Ts  197.8110;
+    }
+}
+// max fit error 2.30%
+
+"HCNO"
+{
+    transport
+    {
+        As  1.599074e-06;
+        Ts  268.3432;
+    }
+}
+// max fit error 1.47%
+
+"HOCN"
+{
+    transport
+    {
+        As  1.599074e-06;
+        Ts  268.3432;
+    }
+}
+// max fit error 1.47%
+
+"HNCO"
+{
+    transport
+    {
+        As  1.599074e-06;
+        Ts  268.3432;
+    }
+}
+// max fit error 1.47%
+
+"NCO"
+{
+    transport
+    {
+        As  1.580232e-06;
+        Ts  268.3432;
+    }
+}
+// max fit error 1.47%
+
+"N2"
+{
+    transport
+    {
+        As  1.555603e-06;
+        Ts  163.7400;
+    }
+}
+// max fit error 3.62%
+
+"AR"
+{
+    transport
+    {
+        As  2.119029e-06;
+        Ts  188.0294;
+    }
+}
+// max fit error 2.51%
+
+"C3H7"
+{
+    transport
+    {
+        As  9.387390e-07;
+        Ts  301.4218;
+    }
+}
+// max fit error 1.17%
+
+"C3H8"
+{
+    transport
+    {
+        As  9.496557e-07;
+        Ts  301.4218;
+    }
+}
+// max fit error 1.17%
+
+"CH2CHO"
+{
+    transport
+    {
+        As  1.455209e-06;
+        Ts  470.2860;
+    }
+}
+// max fit error 1.01%
+
+"CH3CHO"
+{
+    transport
+    {
+        As  1.472149e-06;
+        Ts  470.2860;
+    }
+}
+// max fit error 1.01%

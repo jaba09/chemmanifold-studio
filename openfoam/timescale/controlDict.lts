@@ -1,0 +1,60 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  Cheap-flame LTS run for the timescale roadmap (step 1): same mesh, patches and inlet values as the
+  GA18 burner, global chemistry. One "time step" = one LTS iteration.
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+
+application         rhoReactingBuoyantFoam;
+startFrom           latestTime;
+startTime           0;
+stopAt              endTime;
+endTime             4250;           // as the GA18 DI LTS reference (iteration 4227)
+deltaT              1;
+writeControl        timeStep;
+writeInterval       250;
+purgeWrite          0;
+writeFormat         binary;
+writePrecision      8;
+writeCompression    off;
+timeFormat          general;
+timePrecision       6;
+runTimeModifiable   true;
+
+functions
+{
+    minMaxT
+    {
+        type            fieldMinMax;
+        libs            ("libfieldFunctionObjects.so");
+        fields          (T U);
+        writeControl    timeStep;
+        writeInterval   10;
+    }
+
+    // mean age of the gas (s): solves div(phi age) - div(Deff grad age) = rho at each write
+    age
+    {
+        type            age;
+        libs            ("libfieldFunctionObjects.so");
+        phi             phi;
+        rho             rho;
+        nCorr           1000;
+        tolerance       1e-6;
+        diffusion       on;
+        executeControl  writeTime;
+        writeControl    writeTime;
+    }
+
+    // Fluent's chemistry time scale per cell (counts only)
+    #include "tauCellHistogram"
+
+    #includeFunc flowRatePatch(name=inlet-fuel)
+    #includeFunc flowRatePatch(name=outlet-lab-026)
+}

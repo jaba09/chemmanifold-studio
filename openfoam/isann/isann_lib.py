@@ -113,9 +113,11 @@ def read_run_pairs(run_dir, species):
     frames = []
     for p in sorted(Path(run_dir).glob("processor*/isannPairs.csv")):
         try:
-            frames.append(pd.read_csv(p))
+            f = pd.read_csv(p)
         except (pd.errors.EmptyDataError, pd.errors.ParserError):
             continue
+        if len(f):      # a rank without hot cells writes only the header: an empty frame would turn
+            frames.append(f)    # every column of the concatenation into object dtype
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)

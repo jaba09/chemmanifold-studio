@@ -1,0 +1,114 @@
+== outletNOx_outlet-lab
+mean 0.15-0.185 s (1 samples):
+T          306.5
+NO     4.262e-51
+NO2    5.597e-61
+N2O    6.635e-29
+HCN     2.13e-69
+CO     2.867e-17
+CO2    2.503e-08
+C2H2    2.43e-63
+last (t = 0.15000 s):
+T          306.5
+NO     4.262e-51
+NO2    5.597e-61
+N2O    6.635e-29
+HCN     2.13e-69
+CO     2.867e-17
+CO2    2.503e-08
+C2H2    2.43e-63
+== outletNOx_outlet-lab
+mean 0.15-0.185 s (175 samples):
+T          307.2
+NO     7.322e-51
+NO2    1.448e-60
+N2O    1.022e-28
+HCN     3.87e-69
+CO     3.082e-17
+CO2    2.653e-08
+C2H2   6.418e-63
+last (t = 0.18740 s):
+T            308
+NO     1.238e-50
+NO2    3.172e-60
+N2O     1.49e-28
+HCN    8.647e-69
+CO     3.328e-17
+CO2    2.802e-08
+C2H2   1.927e-62
+== outletNOx_outlet-lab
+mean 0.15-0.185 s (0 samples):
+T      NaN
+NO     NaN
+NO2    NaN
+N2O    NaN
+HCN    NaN
+CO     NaN
+CO2    NaN
+C2H2   NaN
+last (t = 0.18720 s):
+T            308
+NO     1.143e-50
+NO2    2.915e-60
+N2O    1.467e-28
+HCN    6.494e-69
+CO     3.293e-17
+CO2    2.797e-08
+C2H2   1.343e-62
+== outletNOx_wall-fff-fluid-exhaust
+mean 0.15-0.185 s (1 samples):
+T          357.9
+NO     7.355e-42
+NO2    3.702e-43
+N2O    6.338e-26
+HCN    1.294e-59
+CO     1.038e-05
+CO2       0.0175
+C2H2   6.103e-59
+last (t = 0.15000 s):
+T          357.9
+NO     7.355e-42
+NO2    3.702e-43
+N2O    6.338e-26
+HCN    1.294e-59
+CO     1.038e-05
+CO2       0.0175
+C2H2   6.103e-59
+== outletNOx_wall-fff-fluid-exhaust
+mean 0.15-0.185 s (175 samples):
+T            358
+NO     1.024e-41
+NO2    7.451e-43
+N2O    8.746e-26
+HCN     1.84e-59
+CO     1.038e-05
+CO2      0.01751
+C2H2   8.451e-59
+last (t = 0.18740 s):
+T          357.8
+NO     1.342e-41
+NO2    1.274e-42
+N2O    1.139e-25
+HCN    2.462e-59
+CO     1.039e-05
+CO2      0.01751
+C2H2   1.102e-58
+== outletNOx_wall-fff-fluid-exhaust
+mean 0.15-0.185 s (0 samples):
+T      NaN
+NO     NaN
+NO2    NaN
+N2O    NaN
+HCN    NaN
+CO     NaN
+CO2    NaN
+C2H2   NaN
+last (t = 0.18720 s):
+T          357.8
+NO     1.339e-41
+NO2    1.268e-42
+N2O    1.137e-25
+HCN    2.455e-59
+CO     1.039e-05
+CO2      0.01751
+C2H2   1.099e-58
