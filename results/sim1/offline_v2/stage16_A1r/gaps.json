@@ -1,0 +1,87 @@
+{
+  "exports": [
+    "/opt/ofb/runs/A1r_R2rad/snap/A1r_t0100.00ms.csv",
+    "/opt/ofb/runs/A1r_R2rad/snap/A1r_t0125.00ms.csv",
+    "/opt/ofb/runs/A1r_R2rad/snap/A1r_t0150.00ms.csv"
+  ],
+  "model": "data/openfoam_tix2c/08_fluent/resnet_film/chemmanifold_model.txt",
+  "T_min_K": 600.0,
+  "options": {},
+  "hot_cells": 44013,
+  "ood_cells": 158,
+  "ood_fraction": 0.0035898484538659033,
+  "ood_fraction_per_snapshot": [
+    0.0037,
+    0.004,
+    0.0031
+  ],
+  "flag_counts": {
+    "T_range": 0,
+    "T_range_at_Z": 154,
+    "pressure": 0,
+    "species_range": 0,
+    "off_manifold": 4,
+    "far_from_data": 0
+  },
+  "species_out_of_range": {},
+  "ood_cells_quantiles": {
+    "Z": {
+      "q05": 0.0264,
+      "q50": 0.0271,
+      "q95": 0.0276
+    },
+    "T": {
+      "q05": 1479.8763,
+      "q50": 1495.0644,
+      "q95": 1516.3778
+    },
+    "psi": {
+      "q05": -0.0474,
+      "q50": -0.0441,
+      "q95": -0.0179
+    },
+    "c": {
+      "q05": 0.9124,
+      "q50": 0.9342,
+      "q95": 0.9504
+    }
+  },
+  "flamelet_strain_range": [
+    0.23217083587277682,
+    2067.4120052310655
+  ],
+  "largest_gaps": [
+    {
+      "Z_lo": 0.0138,
+      "Z_hi": 0.0276,
+      "psi_lo": -Infinity,
+      "psi_hi": 0.0,
+      "cells": 2604,
+      "ood_cells": 154,
+      "ood_fraction": 0.0591
+    },
+    {
+      "Z_lo": 0.0414,
+      "Z_hi": 0.0552,
+      "psi_lo": 0.6,
+      "psi_hi": 0.8,
+      "cells": 1206,
+      "ood_cells": 4,
+      "ood_fraction": 0.0033
+    }
+  ],
+  "proposals": {
+    "envelope.u_knots": [
+      0.0,
+      0.717,
+      0.837,
+      0.901,
+      0.949,
+      1.0
+    ]
+  },
+  "reasons": {
+    "envelope.u_knots": "seed share per z_knots band, now 54%, 14%, 13%, 10%, 10%; OOD cells per band 90%, 10%, 0%, 0%, 0%; proposed 50% towards the OOD cells",
+    "enthalpy_excess": "149 OOD cells (94%) have more enthalpy than adiabatic mixing at their Z (differential diffusion, which also makes Bilger Z non-conserved, or heat taken from a hotter wall). The exploration only removes heat; these states come only from the mixture-averaged flamelets, so more flamelets (a lower flame.strain_factor) or a bounded enthalpy excess in the seeds are the a-priori ways to reach them. Check the T-Z map first"
+  }
+}

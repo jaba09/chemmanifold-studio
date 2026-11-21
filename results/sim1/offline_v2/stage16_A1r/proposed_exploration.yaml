@@ -1,0 +1,5 @@
+# Suggested changes to the exploration (stage 16). Nothing is applied automatically:
+# copy what you accept into the config, then re-run stages 0-12.
+# envelope.u_knots: seed share per z_knots band, now 54%, 14%, 13%, 10%, 10%; OOD cells per band 90%, 10%, 0%, 0%, 0%; proposed 50% towards the OOD cells
+# enthalpy_excess: 149 OOD cells (94%) have more enthalpy than adiabatic mixing at their Z (differential diffusion, which also makes Bilger Z non-conserved, or heat taken from a hotter wall). The exploration only removes heat; these states come only from the mixture-averaged flamelets, so more flamelets (a lower flame.strain_factor) or a bounded enthalpy excess in the seeds are the a-priori ways to reach them. Check the T-Z map first
+envelope.u_knots: [0.0, 0.717, 0.837, 0.901, 0.949, 1.0]
