@@ -3,7 +3,9 @@
 # that removed the near-axis divergence (remedy ii-a: fvDOM nPhi = nTheta = 8, 256 rays, maxIter 10, solved every
 # 10 steps) plus remedy (ii-b), applied on 21 Nov at the restart times (ARC 0.205 s, GRI 0.15 s) with
 # changeDictionary -parallel and server/sim1/axis_ext_changeDictionaryDict: qrRelaxation 0.2 and relaxation 0.5 in the
-# T boundary conditions of the pot walls (the pot-top axis corner ran away at 0.2074-0.2276 s with (ii-a) alone).
+# T boundary conditions of the pot walls (the pot-top axis corner ran away at 0.2074-0.2276 s with (ii-a) alone), and,
+# because that did not stop it, remedy (ii-c): the pot upper side + top (wall-pot-fff-fluid-exhaust, x = 85-200 mm) at
+# a fixed temperature equal to its face values at the restart time (ARC 0.205 s, GRI 0.155 s). Passed 0.209 s cleanly.
 # ARC continues /opt/ofb/runs/arc22/flame_ext (restarted from 0.185 s); GRI restarts from its 0.15 s write.
 # Writes every 2.5 ms; snapshots (foam_snapshot.py) and field files for the common window T_AVG-T_END.
 # LEG=arc | gri runs one leg on NP ranks (the two can run side by side, 16 cores approved on 21 Nov);

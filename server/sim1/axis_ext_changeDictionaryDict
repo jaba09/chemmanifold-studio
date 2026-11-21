@@ -1,9 +1,13 @@
 FoamFile { version 2.0; format ascii; class dictionary; object changeDictionaryDict; }
-// L306 remedy (ii-b): damp the radiation / wall-temperature feedback on the pot walls next to the axis
+// L306 remedies on the pot walls next to the axis.
+// (ii-b) qr / wall-temperature relaxation on the pot bottom and lower side (kept);
+// (ii-c) the upper side + top of the pot (wall-pot-fff-fluid-exhaust, x = 85-200 mm) at a fixed temperature equal to
+//        its face values at the restart time (the convective + radiative condition let the axis corner run away).
 T
 {
     boundaryField
     {
         "wall-pot-.*" { qrRelaxation 0.2; relaxation 0.5; }
+        wall-pot-fff-fluid-exhaust { type fixedValue; }
     }
 }
