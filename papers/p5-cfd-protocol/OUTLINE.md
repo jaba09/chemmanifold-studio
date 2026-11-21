@@ -62,7 +62,9 @@ Pure mode, ignition + flame phases, >= 2-3 training repeats or ensembles, ISAT/T
 ranks, report s/step with chemistry share, version the protocol.
 
 ## Missing results
-- [ ] Spearman of stage 18 offline benchmark vs **protocol v2** S on the G2/C4 candidates (v1 numbers only so far).
+- [x] Spearman of stage 18 vs protocol v2 S, 6 models in the cloud (`papers/data/offline_v2/spearman_v2.md`):
+      composite rho 0.43 alone / 0.71 hybrid, not significant; ood8_s2 worst offline, best single physics model
+      in the CFD. Still to do: the ~14 sim1-only models (asked of the sim1 thread).
 - [ ] Short-screen correlation (5 ms ignition + 10 ms flame vs full S).
 - [x] P_tix2c score: S 2.00.
 - [ ] ISANN v6 repeat.

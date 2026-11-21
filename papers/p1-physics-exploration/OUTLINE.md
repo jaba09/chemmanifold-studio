@@ -83,7 +83,10 @@ One subsection per source, each with one figure (Library `chemmanifold/exploraci
 5. Flame |dT| vs time for best families and ISAT 1e-4.
 
 ## Missing results (to run before writing)
-- [ ] Coverage ablation per regime on the **corrected** Fluent/OpenFOAM DI (stage 16 + `psi.py`/`tz.py`).
+- [x] Coverage ablation per regime of the ood8 data (regimes 0-8) on the corrected Fluent GA18 DI:
+      `papers/data/coverage/coverage_ood8.md`. Strict coverage is nearly complete (94 % of hot mass within 0.5);
+      dense (Z, T) coverage goes 7 % (flamelets) -> 60 % (+0D) -> 74 % (+PaSR) -> 97 % (+burnt relaxation);
+      only burnt relaxation cannot be replaced. Still to do: the same for tix2c (regimes 15-21, data on sim1).
 - [x] P_tix2c (C2) protocol v2 score: S 2.00 (`results/sim1/C2/summary.md`).
 - [ ] Hole sets M1-M7 (PR #27) trained and scored with 3 seeds.
 - [ ] Offline stage 18 numbers for the same families, same state set.
