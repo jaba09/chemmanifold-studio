@@ -1,0 +1,16 @@
+metric                                     Fluent A4r LTS + rad
+Tmax [K]                                   2087.5       2117.7
+x(Tmax) [mm]                               42.855       43.354
+r(Tmax) [mm]                               8.8673       9.8661
+axis Tmax [K]                              1437.4       1474.9
+x(axis Tmax) [mm]                          46.374       46.374
+flame length T>1500 on axis [mm]              nan          nan
+flame base x T>1500 [mm]                   1.1459       1.3947
+hot volume T>1500 [cm3]                    18.248       19.623
+OH max                                  0.0032769    0.0030582
+CO max                                   0.053188     0.059569
+x(OH max) [mm]                             15.125       10.875
+Ux max [m/s]                                1.398       1.3938
+
+cell-by-cell T difference (A4r LTS + rad - Fluent): mean |dT| in hot cells 47.6 K, volume-weighted 40.6 K, max |dT| 242 K
+saved cmp_3000.png

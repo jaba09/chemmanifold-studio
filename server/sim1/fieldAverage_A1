@@ -1,0 +1,33 @@
+// mean and RMS of T, U and every species over the statistics window (t >= 0.1 s)
+fieldAverageR2
+{
+    type            fieldAverage;
+    libs            (fieldFunctionObjects);
+    timeStart       0.1;
+    writeControl    writeTime;
+    restartOnRestart false;
+    restartOnOutput false;
+    fields
+    (
+        T  { mean on; prime2Mean on; base time; }
+        U  { mean on; prime2Mean on; base time; }
+        H2 { mean on; prime2Mean on; base time; }
+        H  { mean on; prime2Mean on; base time; }
+        O  { mean on; prime2Mean on; base time; }
+        O2 { mean on; prime2Mean on; base time; }
+        OH { mean on; prime2Mean on; base time; }
+        H2O { mean on; prime2Mean on; base time; }
+        HO2 { mean on; prime2Mean on; base time; }
+        H2O2 { mean on; prime2Mean on; base time; }
+        CH2 { mean on; prime2Mean on; base time; }
+        "CH2(S)" { mean on; prime2Mean on; base time; }
+        CH3 { mean on; prime2Mean on; base time; }
+        CH4 { mean on; prime2Mean on; base time; }
+        CO { mean on; prime2Mean on; base time; }
+        CO2 { mean on; prime2Mean on; base time; }
+        HCO { mean on; prime2Mean on; base time; }
+        CH2O { mean on; prime2Mean on; base time; }
+        CH3O { mean on; prime2Mean on; base time; }
+        N2 { mean on; prime2Mean on; base time; }
+    );
+}

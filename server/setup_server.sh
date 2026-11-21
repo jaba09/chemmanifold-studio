@@ -62,7 +62,8 @@ export LD_LIBRARY_PATH=$E/lib/sys-mpich:$E/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PA
 export WM_PROJECT_DIR=$E FOAM_ETC=$E/etc FI_PROVIDER=tcp
 . $E/etc/bashrc > /dev/null 2>&1 || true
 export GXX=g++ GCC=gcc
-export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$FOAM_USER_LIBBIN:$E/lib/sys-mpich:$E/lib:$LD_LIBRARY_PATH   # etc/bashrc drops these; user-built solvers need them (no rpath)
+export PATH=$FOAM_USER_APPBIN:$PATH
 EOF
 
 # --- 4. Python for the ML pipeline (Cantera + PyTorch CPU) -----------------------------------------

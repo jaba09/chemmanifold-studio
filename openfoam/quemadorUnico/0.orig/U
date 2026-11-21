@@ -45,7 +45,7 @@ boundaryField
         value           uniform (0.05 0 0);
     }
 
-    outlet-lab-026
+    "(outlet-lab|wall-fff-fluid-exhaust)"
     {
         // Fluent: pressure outlet, 0 Pa gauge
         type            pressureInletOutletVelocity;

@@ -1,0 +1,105 @@
+{
+  "id": "iterml_iter2-resnet_film-20261118-2e31149b",
+  "config": "iterml_iter2.yaml",
+  "arch": "resnet_film",
+  "trained_utc": "2026-11-18T22:30:57+00:00",
+  "status": "candidate",
+  "notes": [],
+  "exploration": {
+    "mechanism": "/home/ubuntu/chemmanifold-studio/mechanisms/ga18.yaml",
+    "fuel": "CH4:1.0",
+    "oxidizer": "O2:0.232909, N2:0.767091",
+    "P_atm": 1.0,
+    "mode": "flame",
+    "n_traj": 112,
+    "f_pasr": 0.35,
+    "heat_loss": "fraction psi <= 0.85 of the loss to T_wall = 300.0 K",
+    "cooling_reactors": "35% of 0D seeds, tau_q [0.001, 1.0] s",
+    "radiating_flamelets": true,
+    "pasr_heat_loss": "psi in [0.0, 0.85]",
+    "recirculation": "24 ensembles x 300",
+    "strain_range": "flamelets 0.000659 kg/m2/s x 1.5^k, up to 31",
+    "unsteady_flamelets": "extinction 10, reignition 8, cooling 12, strain_jump 8",
+    "rollout_loss": "8 x 4 dt_base, weight 0.2"
+  },
+  "data": {
+    "n_train": 827734,
+    "n_val": 112873,
+    "pairs_by_regime": {
+      "reactor_0D": 134670,
+      "PaSR": 15600,
+      "flamelet_states": 11720,
+      "wall_cooled_0D": 8108,
+      "recirculation": 7200,
+      "unsteady_flamelets": 14326,
+      "equilibrium_tail_0D": 3600,
+      "vitiated_ignition": 237340,
+      "burnt_relaxation": 31780,
+      "seeded_PaSR": 8468,
+      "seeded_relaxation": 108421,
+      "seeded_ignition": 49767,
+      "seeded_cooling": 21465,
+      "dilution_cooling": 57766,
+      "dynamic_PaSR": 3714,
+      "induction_layer": 162600,
+      "hot_wall": 16428,
+      "relaxation_flame_dt": 11778,
+      "21": 35856
+    },
+    "T_range_K": [
+      299.9999999997643,
+      2299.094898873518
+    ],
+    "flamelets": {
+      "n": 44,
+      "n_radiating": 18,
+      "Z_st": 0.05516636514797154,
+      "T_ad_max_K": 2238.7464652865892,
+      "peak_T_K": [
+        1064.4444538781925,
+        2211.227710018228
+      ]
+    }
+  },
+  "training": {
+    "latent_dim": 12,
+    "pca_d_995": null,
+    "hidden": 192,
+    "n_blocks": 3,
+    "epochs": 300,
+    "best_epoch": 294,
+    "loss_weights": {
+      "inc": 1.0,
+      "mass": 1.0,
+      "T": 1.0,
+      "equil": 0.1,
+      "ae": 1.0
+    },
+    "n_epochs_run": 300,
+    "wall_time_s": 62487.7,
+    "n_parameters": 237138,
+    "device": "cpu",
+    "threads": 3,
+    "torch": "2.9.1",
+    "machine": "Linux x86_64",
+    "git_commit": "dce7908-dirty"
+  },
+  "certification": {
+    "export": {
+      "ood_flagged_validation": 0.0025781187706537434,
+      "T_range_K": [
+        299.9999999997647,
+        2299.1009177886945
+      ],
+      "dt_range_s": [
+        9.54e-06,
+        0.00022
+      ]
+    }
+  },
+  "files": {
+    "model_pt_sha256": "2e31149b122ee1a0b4f98feb7bde85173f77bbaad207a95fb683e87519aec173",
+    "data_dir": "data",
+    "fluent_model_sha256": "09668f039e6dd9bd5ac62502286a98cea18a4e50c1fa0b0ebaf4cf89318dc862"
+  }
+}
