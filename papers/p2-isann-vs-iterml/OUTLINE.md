@@ -28,7 +28,8 @@ well as the error detector that picks the seeds.
    stratified relative-error sentinels (replace the CO floor that hid iteration 2's error).
 5. Results.
    5.1 Information taken from the CFD (keep table: pairs vs seeds, share of CFD-derived data).
-   5.2 Protocol v2 scores: ISANN v6 S 1.16 (5.8 K, -0.2 ms); a priori parent P_tix2c S 2.00;
+   5.2 Protocol v2 scores, shared parent family tix2c: ISANN isann_D S 1.04 (5.2 K, -0.2 ms; old isann_v6 1.16);
+       a priori parent P_tix2c S 2.00;
        ITERML v2 warm-started (C3): ignition fixed (-0.6 -> +0.2 ms) but flame 8 -> 11 K, S 2.22 / 2.15,
        stopped after 2 rejections, one of 3 repeats failed the offline gate each iteration;
        ITERML from scratch with 20 % seeded share (C3b): flame 1.7-2.2 K, CO/OH 2-3 %, ignition on DI up
@@ -46,8 +47,11 @@ well as the error detector that picks the seeds.
 - [x] C3 / C3b: ITERML v2 on the corrected case done (`results/sim1/C3/progress.md`, `C3b/summary.md`).
 - [ ] Optional: longer coupled gate on rich-core states + warm start from a C3b repeat (sim1 open item,
       most promising route to beat P_tix2c).
-- [ ] Phase D: ISANN on R2 (A1r) from a physics-only parent of the tix2h family, so both schemes share a parent
-      (fixes the "different parents" caveat of v1: ood7 vs ood8).
+- [x] Phase D done (`results/sim1/D/summary.md`, mq77al 364b4fb): ISANN on A1r from parent tix2c_s0 (= ITERML's
+      parent family, fixes the "different parents" caveat). isann_D v8 pure **S 1.04** (flame 5.2 K, ignition -0.2 ms,
+      drift +0.4 K/10 ms, 1.94 s/step, 0 % OOD); 12 rounds, 8 accepted, 8 ms DI phase, GA18 3.7 % of hot cells in
+      the online flame leg. Same parent: ISANN halves S (2.00 -> 1.04); ITERML C3 2.22 / 2.15. Pending: second full
+      score of v8 (~19:15 CET 21 Nov).
 - [ ] Two training seeds for each final model (fairness).
 - [ ] Same offline benchmark state set for all models (v1 used 440 vs 218 states).
 
