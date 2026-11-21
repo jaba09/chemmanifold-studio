@@ -58,12 +58,15 @@ One subsection per source, each with one figure (Library `chemmanifold/exploraci
 5.1 Coverage: share of the corrected-case DI hot mass inside the data, per regime added (ablation).
 5.2 Offline: one-step and 0D rollout errors vs Cantera on held-out physics states (stage 18).
 5.3 CFD, protocol v2 pure mode (paper 5's protocol): families ood8 -> tix1 -> tix2 -> tix2h -> tix2c,
-    with 3 training repeats each and their ensembles (G2 table: P_mix S 2.05 best physics-only; tix2h_s0
-    2.35; P0 2.67).
+    with 3 training repeats each and their ensembles. Final ranking (sim1 SUMMARY.md): **P_tix2c S 2.00
+    best physics-only** (flame 8.0 K, ignition -0.6 ms), P_mix 2.05, tix2h_s0 2.35 (best single), P0 2.67,
+    P_tix2h 2.97. The C2 ignition-focused exploration (jet induction + committee round) improved the
+    flame 14.9 -> 8.0 K but not ignition; all physics-only models except P_tix2h ignite early.
 5.4 What each regime fixed, with the trial that showed it: vitiated ignition and burnt relaxation (early
     nozzle ignition caused by radicals pumped into the hot lean start gas, `odeAbove` proof);
     wide dt_range hurts the flame at the flow step (ood3); equilibrium tails (flame core cold near nozzle).
-5.5 Against ISAT 1e-4 (S 0.67): honest gap, 3-15x in flame error.
+5.5 Against ISAT 1e-4 (S 0.67): honest gap, ~9x in flame error for the best model (8.0 vs 0.9 K);
+    on GA18 ISAT wins at matched accuracy, a network only pays off for larger mechanisms (cost study).
 
 ## 6. Discussion
 - Remaining error is near-equilibrium precision and induction timing, not coverage.
@@ -81,7 +84,7 @@ One subsection per source, each with one figure (Library `chemmanifold/exploraci
 
 ## Missing results (to run before writing)
 - [ ] Coverage ablation per regime on the **corrected** Fluent/OpenFOAM DI (stage 16 + `psi.py`/`tz.py`).
-- [ ] P_tix2c (C2) protocol v2 score (running on sim1; early result: ignites 0.6 ms early).
+- [x] P_tix2c (C2) protocol v2 score: S 2.00 (`results/sim1/C2/summary.md`).
 - [ ] Hole sets M1-M7 (PR #27) trained and scored with 3 seeds.
 - [ ] Offline stage 18 numbers for the same families, same state set.
 - [ ] Regenerate the regime figures for the final data set (figures/make_figs.py).

@@ -14,6 +14,7 @@ Update it whenever a draft or a result changes.
   (side open, top and chimney closed) and, before 10 Nov, **without wall radiation**. Papers must use
   the corrected case (protocol v2: LeFoam + constantLewis + fvDOM wall radiation, A1r/A2r references)
   or say explicitly which case a number comes from.
+- sim1 campaign closed 21 Nov 2026: summary `results/sim1/SUMMARY.md` (branch `claude/project-thread-mq77al`, commit 53d6f21; Library `chemmanifold/sim1/SUMMARY.md`). **Best physics-only model = P_tix2c (S 2.00, flame 8.0 K, ignition -0.6 ms, 3.66 s/step).**
 - Reference for "good enough" in the CFD: **ISAT 1e-4, protocol v2 score S = 0.67** (flame 0.9 K,
   ignition -0.2 ms, 3.65 s/step on 4 ranks, ~3.7x faster than GA18 DI). Every surrogate paper must
   state where it stands against it.
@@ -25,8 +26,8 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 
 | # | Working title | Target journal | Status | Draft location | Blocking |
 |---|---|---|---|---|---|
-| 1 | Physics-only exploration of the thermochemical space for neural chemistry surrogates | Combustion and Flame (alt. Energy and AI) | **Outline** (this PR) | `papers/p1-physics-exploration/OUTLINE.md` | Ablation by regime on corrected case; C2 score (P_tix2c) |
-| 2 | ISANN vs ITERML: where should a surrogate's training data come from? | Combustion and Flame (alt. Energy and AI) | **Draft v1** (protocol v1, old outlets) + revision outline (this PR) | `papers/isann-vs-iterml/` on PR #20 (branch `claude/project-thread-uzvup8`); outline `papers/p2-isann-vs-iterml/OUTLINE.md` | ITERML v2 (C3) on corrected case; ISANN on R2 (phase D) |
+| 1 | Physics-only exploration of the thermochemical space for neural chemistry surrogates | Combustion and Flame (alt. Energy and AI) | **Outline** (this PR) | `papers/p1-physics-exploration/OUTLINE.md` | Ablation by regime on corrected case (C2 score now in: P_tix2c S 2.00) |
+| 2 | ISANN vs ITERML: where should a surrogate's training data come from? | Combustion and Flame (alt. Energy and AI) | **Draft v1** (protocol v1, old outlets) + revision outline (this PR) | `papers/isann-vs-iterml/` on PR #20 (branch `claude/project-thread-uzvup8`); outline `papers/p2-isann-vs-iterml/OUTLINE.md` | ISANN on R2 (phase D, not started); C3/C3b results now in |
 | 3 | State Y(t+dt) vs increment dY, dT network outputs | Combustion and Flame | **Draft v0** | `papers/y-vs-dy/` on PR #23 (branch `claude/project-thread-6ik60m`) | Per-species weighted dY loss test; rerun on corrected case |
 | 4 | One network or several? Single ANN vs ensemble / mixture of experts | Combustion and Flame | **Draft v0** (3 Nov) | `papers/single-vs-multiple-ann/` on branches 04fho7, mq77al, ... | Ensemble research (PR #21); add protocol v2 C4 results (P0, P_mix, P_tix2h) and repeat variance |
 | 5 | A CFD evaluation protocol for chemistry surrogates (offline benchmarks do not predict CFD ranking) | Combustion and Flame or Combust. Theory Model. (alt. Energy and AI) | **Outline** (this PR) | `papers/p5-cfd-protocol/OUTLINE.md` | Offline benchmark vs protocol v2 rank correlation (not yet computed) |
@@ -47,8 +48,11 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 - Draft v1 exists (abstract and all sections; iteration 2 as negative result). All its CFD numbers
   are protocol v1 on the old-outlet case.
 - New since the draft: ISANN v6 on protocol v2 S 1.16 (best surrogate, CFD-adapted); ITERML iteration
-  3 and the automatic rules (`openfoam/iterml/rules.py`); ITERML v2 (C3) on the corrected case is
-  ready but not run (sim1 Remote Control session paused until Fri 20 Nov 23:00 CET).
+  3 and the automatic rules (`openfoam/iterml/rules.py`); ITERML v2 on the corrected case done (C3:
+  ignition fixed -0.6 -> +0.2 ms but flame 8 -> 11 K, stopped after 2 rejections, S 2.22 / 2.15;
+  C3b from-scratch with 20 % seeded share: flame 1.7-2.2 K and ignition on DI up to ~122 ms, then a
+  rich-core cold drift, S 6.86 / 16.80, invisible to the 10-step offline gate). Phase D (ISANN on R2)
+  still missing.
 - Next: see `p2-isann-vs-iterml/OUTLINE.md`.
 
 ### 3. Y(t+dt) vs dY, dT outputs
@@ -86,3 +90,4 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 
 ## Change log
 - 2026-11-16: file created; outlines for papers 1, 2 and 5 added.
+- 2026-11-21: sim1 campaign results added (P_tix2c S 2.00, C3/C3b, cost study).

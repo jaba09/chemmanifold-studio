@@ -37,7 +37,7 @@ Tmax 2121 vs 2087.5 K, base 1.39 vs 1.15 mm).
 ## 4. Results: what the protocol reveals
 4.1 Reference line: ISAT 1e-4 S 0.67 (0.9 K, -0.2 ms, 3.65 s/step, ~3.7x DI); ISAT 1e-3 S 3.33 (good
     flame, ignition 1.0 ms early); DI Treact cutoff only 1.1x.
-4.2 Surrogates (G2 + C4 tables): best physics-only P_mix 2.05, tix2h_s0 2.35, P0 2.67; CFD-adapted
+4.2 Surrogates (G2 + C4 + C2 tables): best physics-only P_tix2c 2.00, P_mix 2.05, tix2h_s0 2.35, P0 2.67; CFD-adapted
     ISANN v6 1.16; none meets all targets; networks 3-15x worse in flame than ISAT 1e-4.
 4.3 Repeat variance: same data, same architecture, three seeds: S 2.35 / 5.26 / 10.58 (tix2h),
     4.67 / 7.72 / 14.14 (ood8). Single-seed rankings are noise.
@@ -49,6 +49,8 @@ Tmax 2121 vs 2087.5 K, base 1.39 vs 1.15 mm).
   Spearman with CFD 0.28-0.68 (v1), 0.62-0.77 only when driven by one clearly bad model; ITERML iteration 2
   ranked better offline (22.9 vs 31.8) and was worse in CFD.
 - One-step test-set error: ISANN round 1 was 18x better in one step but drifted -60..-110 K in 0D.
+- C3b: the 10-step offline gate passed networks that were the best in CFD to 122 ms and then drifted
+  (S 6.86 / 16.80): a strong example for the paper that short offline checks miss slow coupled drift.
 - What offline tests are good for: rejecting clearly bad models (Phy-ChemNODE worst in both).
 
 ## 6. Cost of the protocol and a cheaper screen
@@ -62,5 +64,6 @@ ranks, report s/step with chemistry share, version the protocol.
 ## Missing results
 - [ ] Spearman of stage 18 offline benchmark vs **protocol v2** S on the G2/C4 candidates (v1 numbers only so far).
 - [ ] Short-screen correlation (5 ms ignition + 10 ms flame vs full S).
-- [ ] P_tix2c score (running) and ISANN v6 repeat.
+- [x] P_tix2c score: S 2.00.
+- [ ] ISANN v6 repeat.
 - [ ] Optional: same protocol on Fluent (pure mode is its only mode) to show code portability.

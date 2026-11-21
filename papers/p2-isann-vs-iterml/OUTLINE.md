@@ -28,8 +28,12 @@ well as the error detector that picks the seeds.
    stratified relative-error sentinels (replace the CO floor that hid iteration 2's error).
 5. Results.
    5.1 Information taken from the CFD (keep table: pairs vs seeds, share of CFD-derived data).
-   5.2 Protocol v2 scores: ISANN v6 S 1.16 (5.8 K, -0.2 ms); ITERML v2 iterations from P_tix2h
-       (C3, to run); a priori parents; ISAT 1e-4 S 0.67 as the line.
+   5.2 Protocol v2 scores: ISANN v6 S 1.16 (5.8 K, -0.2 ms); a priori parent P_tix2c S 2.00;
+       ITERML v2 warm-started (C3): ignition fixed (-0.6 -> +0.2 ms) but flame 8 -> 11 K, S 2.22 / 2.15,
+       stopped after 2 rejections, one of 3 repeats failed the offline gate each iteration;
+       ITERML from scratch with 20 % seeded share (C3b): flame 1.7-2.2 K, CO/OH 2-3 %, ignition on DI up
+       to ~122 ms, then a slow cold drift in the rich core under the nozzle (S 6.86 / 16.80) that the
+       10-step offline gate cannot see. ISAT 1e-4 S 0.67 as the line.
    5.3 Ignition (mirror-image errors in v1: ISANN early, ITERML late; check if it survives v2).
    5.4 Species and HRR in lean burnt gas (iteration 2 negative result: CO x6.4 under the 5e-5 floor).
    5.5 Generality away from the burner: offline benchmark (ISANN v6 alone best there too, 1.75).
@@ -39,9 +43,9 @@ well as the error detector that picks the seeds.
 7. Conclusions.
 
 ## Missing results
-- [ ] C3: ITERML v2 on the corrected case (`openfoam/iterml/iterml_v2.py`,
-      `configs/iterml/iterml_v2_tix2h.yaml`), parent P_tix2h or P_tix2c. Needs the sim1 session
-      (paused until Fri 20 Nov 23:00 CET) and Javier's start.
+- [x] C3 / C3b: ITERML v2 on the corrected case done (`results/sim1/C3/progress.md`, `C3b/summary.md`).
+- [ ] Optional: longer coupled gate on rich-core states + warm start from a C3b repeat (sim1 open item,
+      most promising route to beat P_tix2c).
 - [ ] Phase D: ISANN on R2 (A1r) from a physics-only parent of the tix2h family, so both schemes share a parent
       (fixes the "different parents" caveat of v1: ood7 vs ood8).
 - [ ] Two training seeds for each final model (fairness).
