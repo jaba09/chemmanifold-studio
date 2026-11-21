@@ -49,7 +49,7 @@ import pandas as pd
 from chemmanifold.chemistry import advance_const_p, const_p_reactor, make_gas, set_unburnt
 from chemmanifold.flame import (FlameSeeds, case_label, flame_pressure, heat_loss, is_flame, wall_temperature,
                                z_from_unit)
-from chemmanifold.io import base_parser, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
+from chemmanifold.io import base_parser, choose_strides, load_config, load_json, require, save_json, save_npz, stage_dir, dt_strides
 from chemmanifold.unsteady_flamelet import ZFlamelet, chi_profile, run_transient, z_grid
 
 
@@ -60,7 +60,13 @@ EXTRA_SETS = {   # flame-mode sets that `--only` can (re)generate alone, e.g. to
     "equilibrium_perturbed": lambda g, c, s, r: relaxation_pairs(g, c, s, r, "equilibrium_perturbed",
                                                                  "pairs_eq_perturbed.npz"),
     "equilibrium_fixed_point": lambda g, c, s, r: equilibrium_pairs(g, c, s, r),
+    "seeded": lambda g, c, s, r: seeded_set(c, r),
+    "relaxation_flamedt": lambda g, c, s, r: relaxation_pairs(g, c, s, r, "relaxation_flamedt",
+                                                              "pairs_relax_flamedt.npz"),
+    "holes": lambda g, c, s, r: hole_sets(c, r),
 }
+for _name in ("dilution", "dynamic_pasr", "induction_layer", "hot_wall"):   # one holes set alone
+    EXTRA_SETS["holes." + _name] = (lambda n: lambda g, c, s, r: hole_sets(c, r, [n]))(_name)
 
 
 def main(cfg, only=None):
@@ -97,7 +103,7 @@ def main(cfg, only=None):
             dh = rng.uniform(*p["dh_range"], size=p["n_particles"])
             if p.get("dh_scale_by_alpha", False):
                 dh = dh * alpha
-        strides = rng.choice(dt_strides(cfg, "pasr"), size=p["n_particles"])
+        strides = choose_strides(cfg, rng, dt_strides(cfg, "pasr"), size=p["n_particles"])
         for i, (a, d, s) in enumerate(zip(alpha, dh, strides)):
             Y_mix = (1 - a) * Y_fresh + a * Y_burnt                        # Eq. 16
             h_mix = (1 - a) * h_fresh + a * h_burnt
@@ -142,6 +148,12 @@ def main(cfg, only=None):
             equilibrium_pairs(gas, cfg, seeds, rng)
         if cfg.get("unsteady_flamelets"):
             unsteady_pairs(cfg, seeds, rng)
+        if p.get("relaxation_flamedt"):
+            relaxation_pairs(gas, cfg, seeds, rng, "relaxation_flamedt", "pairs_relax_flamedt.npz")
+        if p.get("holes"):
+            hole_sets(cfg, rng)
+        if p.get("seeded"):
+            seeded_set(cfg, rng)
 
 
 def flamelet_pairs(gas, cfg, seeds, rng):
@@ -149,7 +161,7 @@ def flamelet_pairs(gas, cfg, seeds, rng):
     out = {k: [] for k in ("Y_in", "T_in", "P_in", "h_in", "dt", "Y_out", "T_out", "regime", "traj_id")}
     for j in seeds.train_ids:
         for Y, h in zip(*seeds.raw[j]):
-            s = rng.choice(dt_strides(cfg, "pasr"))
+            s = choose_strides(cfg, rng, dt_strides(cfg, "pasr"))
             gas.HPY = h, seeds.P, Y
             Y_in, T_in = gas.Y.copy(), gas.T
             advance_const_p(gas, s * dt_base)
@@ -179,7 +191,7 @@ def recirculation_pairs(gas, cfg, seeds, rng):
         beta = rng.beta(rc.get("beta_a", 0.7), rc.get("beta_b", 0.7), size=rc["n_particles"])
         aged = rng.uniform(size=rc["n_particles"]) < rc.get("f_aged", 0.5)
         ages = 10.0 ** rng.uniform(lo, hi, size=rc["n_particles"])
-        strides = rng.choice(dt_strides(cfg, "pasr"), size=rc["n_particles"])
+        strides = choose_strides(cfg, rng, dt_strides(cfg, "pasr"), size=rc["n_particles"])
         for b, a, age, s in zip(beta, aged, ages, strides):
             try:
                 gas.HPY = b * h_p + (1 - b) * h_s, seeds.P, b * Y_p + (1 - b) * Y_s
@@ -254,7 +266,7 @@ def vitiated_pairs(gas, cfg, seeds, rng):
         p_pick = (1 - v.get("time_share", 0.0)) * w / w.sum() + v.get("time_share", 0.0) / len(w)
         idx = rng.choice(len(w), size=min(v.get("n_pick", 150), len(w)), replace=False, p=p_pick)
         for i in idx:
-            for st in rng.choice(strides, size=k_dt, replace=False):
+            for st in choose_strides(cfg, rng, strides, size=k_dt, replace=False):
                 gas.HPY = hs, seeds.P, Ys[i]
                 T_in = gas.T
                 advance_const_p(gas, float(st) * dt_base)
@@ -279,7 +291,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
     """Regime 8: burnt gas relaxing to its equilibrium, the state most of a lit burner sits in.
 
     Products at Z (log-uniform in Z_range, a training flamelet's burnt state) lose a fraction psi of
-    their largest heat loss (psi uniform in [0, psi_max]). Half of the cases start at the HP
+    their largest heat loss (psi uniform in [psi_min, psi_max], psi_min default 0; psi < 0 = excess enthalpy). Half of the cases start at the HP
     equilibrium of that enthalpy with every radical scaled by 10^u (u uniform in +-radical_decades),
     the other half at the cooled frozen composition; the 0D reactor then runs for t_max at dt_base and
     n_pick states, log-uniform in time, are paired at the strides of the dt range. Near equilibrium the
@@ -289,6 +301,10 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
     v = cfg["pasr"][key]
     dt_base, T_wall = cfg["autoignition"]["dt_base"], wall_temperature(cfg)
     strides = dt_strides(cfg, "pasr")
+    if v.get("dt_window"):            # only the strides inside [lo, hi] s (e.g. the flame's own tau_cell)
+        lo_w, hi_w = v["dt_window"]
+        strides = [st for st in strides if lo_w <= float(st) * dt_base <= hi_w] or strides
+    regime = int(v.get("regime", 8))
     k_dt = min(int(cfg.get("dt_range", {}).get("per_state", 1)), len(strides))
     n_max = int(round(v.get("t_max", 0.02) / dt_base))
     rad = [gas.species_index(r) for r in v.get("radicals", RADICALS) if r in gas.species_names]
@@ -297,7 +313,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
     for e in range(v["n"]):
         Z = float(10 ** rng.uniform(lo, hi))
         j = int(rng.choice(seeds.train_ids))
-        psi = rng.uniform(0.0, v.get("psi_max", 0.5))
+        psi = rng.uniform(v.get("psi_min", 0.0), v.get("psi_max", 0.5))   # psi < 0: excess enthalpy
         Y, h = seeds.burnt(Z, j)
         h = h + heat_loss(gas, Y, h, psi, seeds.P, T_wall)
         from_eq = e % 2 == 0 or v.get("all_from_equilibrium", False)
@@ -312,7 +328,7 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
                 if Y is None:
                     continue
                 gas.HPY = h, seeds.P, Y
-            if gas.T < v.get("T_min", 800.0):
+            if not v.get("T_min", 800.0) <= gas.T <= v.get("T_max", 4000.0):
                 continue
             _, net = const_p_reactor(gas)
             times, Ys = [0.0], [gas.Y.copy()]
@@ -326,13 +342,13 @@ def relaxation_pairs(gas, cfg, seeds, rng, key="burnt_relaxation", out_name="pai
         t_pick = 10 ** rng.uniform(np.log10(dt_base), np.log10(n_max * dt_base), size=v.get("n_pick", 60))
         idx = np.unique(np.concatenate([[0], np.searchsorted(times, t_pick).clip(0, n_max)]))
         for i in idx:
-            for st in rng.choice(strides, size=k_dt, replace=False):
+            for st in choose_strides(cfg, rng, strides, size=k_dt, replace=False):
                 gas.HPY = h, seeds.P, Ys[i]
                 T_in = gas.T
                 advance_const_p(gas, float(st) * dt_base)
                 for k, val in (("Y_in", Ys[i]), ("T_in", T_in), ("P_in", seeds.P), ("h_in", h),
                                ("dt", float(st) * dt_base), ("Y_out", gas.Y.copy()), ("T_out", gas.T),
-                               ("regime", 8), ("traj_id", e)):
+                               ("regime", regime), ("traj_id", e)):
                     out[k].append(val)
         if e % 20 == 0:
             print(f"  relaxation {e:03d}: Z={Z:.3f} psi={psi:.2f} {'equilibrium x10^u radicals' if from_eq else 'frozen'} "
@@ -440,7 +456,7 @@ def _transient(job):
             if gas.T > T_min:
                 cand.append(i)
         for i in rng.permutation(cand)[:n_pts]:
-            s = float(rng.choice(strides))
+            s = float(choose_strides(cfg, rng, strides))
             gas.HPY = hs[i], P, Ys[i]
             Y_in, T_in = gas.Y.copy(), gas.T
             try:
@@ -522,6 +538,55 @@ def unsteady_pairs(cfg, seeds, rng):
           f"(highest burning strain {a_ext:.0f} 1/s, {len(Z)} Z points)")
     save_npz(stage_dir(cfg, "samples") / "pairs_unsteady.npz", **arrays)
     save_json(stage_dir(cfg, "samples") / "unsteady_flamelets.json", log)
+
+
+def hole_sets(cfg, rng, only=None):
+    """Regimes 15-18 (chemmanifold/holes.py): a-priori sets aimed at the 2026-11-10 coverage holes."""
+    from chemmanifold.holes import hole_sets as _hole_sets
+    return _hole_sets(cfg, rng, only)
+
+
+def seeded_set(cfg, rng):
+    """ITERML regimes 10-13 (chemmanifold/seeded.py): physics reactors started from the seeds that a
+    CFD run flagged (scripts/19_iterml_seeds.py). Writes 03_samples/pairs_seeded.npz; the seeds
+    themselves are never paired. `pasr.seeded.files` are seeds.npz paths relative to the config."""
+    from pathlib import Path
+    from chemmanifold.seeded import seeded_pairs
+    from chemmanifold.io import load_npz
+    v = cfg["pasr"]["seeded"]
+    base = Path(cfg["_config_path"]).parent
+    files = [str((base / f).resolve()) if not Path(f).is_absolute() else f for f in v["files"]]
+    samples = stage_dir(cfg, "samples")
+    out = v.get("out", "pairs_seeded.npz")
+    n_existing = sum(len(load_npz(f)["dt"]) for f in sorted(samples.glob("pairs_*.npz"))
+                     if not f.name.startswith("pairs_seeded"))
+    olds = [f for f in sorted(samples.glob("pairs_seeded*.npz")) if f.name != out]
+    n_old = sum(len(load_npz(f)["dt"]) for f in olds)
+    arrays = seeded_pairs(cfg, files, rng, n_existing)       # capped at the whole seeded budget
+    # Share of the budget (max_share of the training set) between iterations: the new seeds get at
+    # least half of it, earlier iterations' seeded pairs are thinned (uniformly) to fit the rest.
+    # Without this, iteration 1 filled the budget and iteration 2's seeds produced no pair at all.
+    from chemmanifold.seeded import settings
+    share = float(settings(cfg)["max_share"])
+    budget = int(share / (1 - share) * n_existing)
+    n_new = len(arrays["dt"])
+    keep_new = min(n_new, max(budget - n_old, budget // 2))
+    if keep_new < n_new:
+        idx = np.sort(rng.choice(n_new, size=keep_new, replace=False))
+        arrays = {k: v[idx] for k, v in arrays.items()}
+    allow_old = budget - keep_new
+    if n_old > allow_old:
+        frac = allow_old / n_old
+        for f in olds:
+            d = load_npz(f)
+            n = len(d["dt"])
+            idx = np.sort(rng.choice(n, size=int(round(frac * n)), replace=False))
+            f.unlink()                     # usually a link into the parent iteration's data: keep that intact
+            save_npz(f, **{k: v[idx] for k, v in d.items()})
+            print(f"  {f.name}: thinned {n} -> {len(idx)} to share the seeded budget")
+    print(f"  {len(arrays['dt'])} seeded pairs of this iteration (budget {budget}, earlier seeded "
+          f"{min(n_old, allow_old)}, a priori pairs: {n_existing})")
+    save_npz(samples / out, **arrays)
 
 
 if __name__ == "__main__":

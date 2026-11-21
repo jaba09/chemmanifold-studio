@@ -40,6 +40,9 @@ The defaults are tuned for a MacBook Air (16 GB RAM, 8 cores):
 * Expected runtime: about 55 min for the default burner-flame config (most of it training), and
   about 11 min for the premixed H2 config.
 
+To run everything (training, OpenFOAM protocol, ISANN, ITERML) on a rented Linux server, see
+[`docs/SERVER-GUIDE.md`](docs/SERVER-GUIDE.md) and the scripts in `server/`.
+
 ## Running
 
 ```bash

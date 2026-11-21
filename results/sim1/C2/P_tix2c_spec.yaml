@@ -1,0 +1,6 @@
+blend: mean
+note: "P_tix2c = mean of tix2c s0-s2 (sim1 C2)"
+members:
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c/08_fluent/resnet_film/chemmanifold_model.txt
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s1/08_fluent/resnet_film/chemmanifold_model.txt
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2c_seeds/s2/08_fluent/resnet_film/chemmanifold_model.txt

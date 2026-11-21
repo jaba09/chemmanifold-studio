@@ -1,0 +1,29 @@
+{
+ "label": "isat1e-4",
+ "S": 0.6666666666666655,
+ "F": 0.17791676896933364,
+ "I": 0.6666666666666655,
+ "C": 0.00709815069606192,
+ "valid": true,
+ "flame_absdT_K": 0.8895838448466682,
+ "d_t_ign_ms": -0.19999999999999965,
+ "ign_source": "minMaxT",
+ "t_ign_DI_ms": 2.4,
+ "flame_OOD_share": NaN,
+ "flame_s_per_step": 3.6499999999999844,
+ "ign_OOD_share": NaN,
+ "drift_K_per_10ms": 0.1742246463595362,
+ "L1_oh": 0.008406404719176986,
+ "L1_co": 0.003193588990352463,
+ "V_hot_ratio": 0.9984842040247113,
+ "rules": {
+  "flame_window_ms": [
+   102.5,
+   150.0
+  ],
+  "flame_dT": 5.0,
+  "ignition_ms": 0.3,
+  "T_ign": 1600.0,
+  "species_ratio": 1.4
+ }
+}

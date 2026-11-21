@@ -42,7 +42,19 @@ Usage
             odeInduction ();     // (T_lo T_hi Y_CH4 Y_O2): with oodFallback, flammable unburnt
                                  //  gas (T in [T_lo, T_hi), CH4 and O2 above) goes to the ODE solver
             isann        { ... } // optional: online learning (ISANN), see below
+            dtMode       flow;   // flow: chemistry dt = the solver's (local) time step;
+                                 // tauCell: Fluent's steady stiff-chemistry step, each cell
+                                 //  advanced over tau_cell = 0.1 min(dx/|U|, dx^2/D),
+                                 //  D = (alpha + alphat)/rho, and the source taken as
+                                 //  dY(tau_cell)/tau_cell (timescale roadmap, test 6b),
+                                 //  limited so no species goes negative
+            tauCellLimits (1e-7 1);  // s, clip of tau_cell
+            wedgeAngle   5;      // deg, for dx = sqrt(V/(r theta)); 0 = planar/3D (dx = V^(1/3))
         }
+
+    dtMode tauCell assumes the chemistry model calls solve() once per cell in
+    cell order per time step (StandardChemistryModel with Treact 0, the
+    default); the call count is checked against the cell count every step.
 
     ISANN (isann sub-dictionary, replaces oodFallback): the run starts with
     every cell on the ODE solver (GA18) while the (state, dt, GA18 result)
@@ -56,6 +68,7 @@ Usage
         isann
         {
             control      "isann/control"; // case-relative: version N / model <file> / fromStep K
+            startActive  false;  // true: no DI phase, the parent network is used from step 1
             writeEvery   25;     // steps between rewrites of isannPairs.csv / isannStatus.csv
             capPerBox    2;      // pairs kept per dedup grid box (reservoir replacement)
             boxT 25; boxSqrtZ 0.02; boxLogY 0.25; boxLogDt 0.1; boxYFloor 1e-8;
@@ -64,7 +77,15 @@ Usage
             trustRel     0.3;    //  trustRel |T_DI - T0|), or the same for OH with trustOHAbs
             trustOHAbs   5e-5;
             trustMin     2;      // failed checks before a bin is untrusted (and > half of them)
+            sentinel     ();     // (T_lo T_hi Y_CH4 Y_O2 ...), one or more ranges, ITERML: cells in
+            sentinelEvery 100;   //  this range, sentinelPerStep per rank every sentinelEvery steps,
+            sentinelPerStep 10;  //  go to GA18 and are kept with reason 4; scripts/19_iterml_seeds.py
+                                 //  rolls them out 0D (network vs Cantera) to catch slow drift
         }
+
+    ITERML (docs/ITERML-ROADMAP.md) runs this same dictionary with startActive
+    true and no daemon: the store then holds the seeds of the next physics
+    exploration (reason 1 OOD, 2 untrusted bin, 3 shadow check, 4 sentinel).
 
 SourceFiles
     userChemStep.C
@@ -77,6 +98,7 @@ SourceFiles
 #include "ode.H"
 #include "OFstream.H"
 #include "chemmanifold_core.h"
+#include "chemmanifold_ensemble.h"
 #include "isannStore.H"
 #include <memory>
 
@@ -102,8 +124,24 @@ class userChemStep
         //- Work array of mass fractions
         mutable scalarField Y_;
 
-        //- Surrogate model (nullptr: Fluent manual example)
+        //- Surrogate model (nullptr: Fluent manual example). For an ensemble file
+        //  this is member 0 (species, NASA tables, dt range), owned by ens_.
         mutable cm_model* model_;
+
+        //- Ensemble of surrogates (chemmanifold_ensemble.txt), or nullptr
+        mutable cm_ensemble* ens_;
+
+        //- One surrogate step / OOD check, through the ensemble when there is one
+        int surrogateAdvance(double* Y, double T, double p, double dt, cm_info* info) const
+        {
+            return ens_ ? cme_advance(ens_, &options_, Y, T, p, dt, info, nullptr)
+                        : cm_advance(model_, &options_, Y, T, p, dt, info);
+        }
+        void surrogateOOD(const double* Y, double T, double p, cm_info* info) const
+        {
+            if (ens_) cme_ood(ens_, &options_, Y, T, p, info);
+            else cm_ood(model_, &options_, Y, T, p, info);
+        }
 
         //- Surrogate options
         cm_options options_;
@@ -128,6 +166,16 @@ class userChemStep
 
         //- Print the counters every this many calls (0 = never)
         label reportCalls_;
+
+        //- dtMode tauCell: per-cell chemistry dt from Fluent's tau_cell
+        bool tauCellMode_;
+        scalarList tauLimits_;
+        scalar tauMaxScale_;
+        scalar wedgeAngle_;
+        mutable scalarField tau_;
+        mutable label tauIndex_, tauCall_, tauWarned_;
+        mutable scalar tauSumScale_;
+        mutable label tauN_, tauLimited_;
 
         //- Counters since the last report: calls, advanced, frozen, OOD, invalid, capped
         mutable label nCalls_, nAdvanced_, nFrozen_, nOOD_, nInvalid_, nCapped_;
@@ -168,6 +216,11 @@ class userChemStep
             //- Per-step counters: hot cells, GA18 in the DI phase, GA18 OOD,
             //  GA18 untrusted bin, network, shadow checks, failed checks
             mutable label iHot_, iDI_, iOOD_, iUntrusted_, iANN_, iShadow_, iShadowBad_;
+            //- ITERML sentinel: (T_lo T_hi Y_CH4 Y_O2), period, cells per rank, count this step
+            scalarList sentinel_;
+            label sentinelEvery_, sentinelPerStep_;
+            mutable label iSentinel_, sentinelStep_;
+            mutable labelList sentinelCount_;
             mutable autoPtr<OFstream> isannStatus_;
             scalar trustTAbs_, trustRel_, trustOHAbs_;
             label trustMin_, iOHmodel_;
@@ -236,6 +289,19 @@ public:
 
 
     // Member Functions
+
+        //- One cell's update over deltaT (flow dt mode)
+        void solveCell
+        (
+            scalarField& c,
+            scalar& T,
+            scalar& p,
+            scalar& deltaT,
+            scalar& subDeltaT
+        ) const;
+
+        //- Recompute tau_cell for this time step
+        void updateTau() const;
 
         //- Advance the concentrations over deltaT
         virtual void solve

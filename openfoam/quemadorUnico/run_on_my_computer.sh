@@ -51,6 +51,41 @@ export LD_LIBRARY_PATH=$ENV_DIR/lib/sys-mpich:$ENV_DIR/lib${LD_LIBRARY_PATH:+:$L
 export WM_PROJECT_DIR=$ENV_DIR FOAM_ETC=$ENV_DIR/etc FI_PROVIDER=tcp
 command -v rhoReactingBuoyantFoam > /dev/null || die "OpenFOAM did not install correctly. Delete $INSTALL_DIR and run again."
 
+# --- solver named in system/controlDict ------------------------------------------------------
+# rhoReactingBuoyantLeFoam (per-species Lewis numbers, constant/speciesDiffusion) is not part of
+# OpenFOAM: it is compiled once from ../simpleFlame/solver into the user bin directory.
+APP=$(foamDictionary -entry application -value system/controlDict)
+USER_APPBIN=$INSTALL_DIR/user/bin
+export FOAM_USER_APPBIN=$USER_APPBIN
+export PATH=$USER_APPBIN:$PATH
+if ! command -v "$APP" > /dev/null; then
+    SRC=../simpleFlame/solver/$APP
+    [ -d "$SRC" ] || die "$APP is neither an OpenFOAM solver nor in $SRC"
+    if ! command -v x86_64-conda-linux-gnu-g++ > /dev/null || ! command -v make > /dev/null; then
+        say "Installing the C++ compiler into $ENV_DIR (one time)..."
+        "$INSTALL_DIR/mamba/bin/micromamba" install -y -q -r "$INSTALL_DIR/mamba" -p "$ENV_DIR" \
+            -c conda-forge --override-channels gxx_linux-64 make \
+            || die "could not install the compiler. Run the script again."
+    fi
+    # wmake calls plain g++/gcc/cpp; conda names them x86_64-conda-linux-gnu-*
+    for t in g++ c++ gcc cpp; do
+        if [ -e "$ENV_DIR/bin/x86_64-conda-linux-gnu-$t" ] && [ ! -e "$ENV_DIR/bin/$t" ]; then
+            ln -s "x86_64-conda-linux-gnu-$t" "$ENV_DIR/bin/$t"
+        fi
+    done
+    if [ ! -e "$ENV_DIR/bin/gcc" ]; then ln -s x86_64-conda-linux-gnu-g++ "$ENV_DIR/bin/gcc"; fi
+    export GXX=g++ CXX=g++ CC=g++
+    # wmake looks for the headers in $WM_PROJECT_DIR/src; conda puts them in include/OpenFOAM-2412/src
+    if [ ! -e "$ENV_DIR/src" ]; then ln -s include/OpenFOAM-2412/src "$ENV_DIR/src"; fi
+    rm -rf "$SRC"/Make/linux64*
+    say "Compiling $APP (one time, a few minutes)..."
+    mkdir -p "$FOAM_USER_APPBIN"
+    ( . "$ENV_DIR/etc/bashrc" > /dev/null 2>&1 || true
+      export FOAM_USER_APPBIN=$USER_APPBIN   # etc/bashrc resets it
+      cd "$SRC" && wmake ) > log.wmake 2>&1 || die "compiling $APP failed, see $(pwd)/log.wmake"
+    command -v "$APP" > /dev/null || die "compiling $APP failed, see $(pwd)/log.wmake"
+fi
+
 latest() { # newest saved iteration in processor0 (or 0 if none)
     ls -d processor0/[0-9]* 2>/dev/null | sed 's|.*/||' | sort -n | tail -1
 }
@@ -72,9 +107,9 @@ case "$1" in
     [ -d processor0 ] || die "there is no stopped run here to resume. Start one without --resume."
     np=$(ls -d processor[0-9]* | wc -l)
     say "Resuming from iteration $(latest) on $np cores. Stop at any time with Ctrl+C."
-    say "Progress:  tail -f $(pwd)/log.rhoReactingBuoyantFoam   (in a second terminal)"
+    say "Progress:  tail -f $(pwd)/log.$APP   (in a second terminal)"
     trap : INT  # Ctrl+C stops the solver but not this script, so the results still get collected
-    mpirun -np "$np" rhoReactingBuoyantFoam -parallel >> log.rhoReactingBuoyantFoam 2>&1 || true
+    mpirun -np "$np" "$APP" -parallel >> log.$APP 2>&1 || true
     results
     exit 0
     ;;
@@ -84,7 +119,7 @@ esac
 CAS=$1
 if [ -z "$CAS" ]; then
     set -- *.cas.h5
-    [ -e "$1" ] || die "no .cas.h5 file in $(pwd). Copy quemadorUnicoTesis_60KCells-GA18--ID-UDF.cas.h5 here, or give its path."
+    [ -e "$1" ] || die "no .cas.h5 file in $(pwd). Copy quemadorUnicoTesis_60KCells-GA18--ID.cas.h5 (the corrected case in fluent/cases/) here, or give its path."
     CAS=$1
 fi
 [ -f "$CAS" ] || die "file not found: $CAS"
@@ -98,7 +133,7 @@ fi
 ./Allclean
 say "Building the case and starting the simulation on $CORES cores."
 say "This runs for hours. Stop at any time with Ctrl+C and continue later with --resume."
-say "Progress:  tail -f $(pwd)/log.rhoReactingBuoyantFoam   (in a second terminal)"
+say "Progress:  tail -f $(pwd)/log.$APP   (in a second terminal)"
 trap : INT
 ./Allrun "$CAS" "$CORES" || true
 results

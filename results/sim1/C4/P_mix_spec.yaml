@@ -1,0 +1,9 @@
+blend: mean
+note: "P_mix = mean of ood8 s0-s2 + tix2h s0-s2 (sim1 C4, combines P0 flame precision with P_tix2h coverage)"
+members:
+  - path: /home/ubuntu/inputs/sim1-extra/models/ood8_s0/chemmanifold_model.txt
+  - path: /home/ubuntu/inputs/sim1-extra/models/ood8_s1/chemmanifold_model.txt
+  - path: /home/ubuntu/inputs/sim1-extra/models/ood8_s2/chemmanifold_model.txt
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h/08_fluent/resnet_film/chemmanifold_model.txt
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s1/08_fluent/resnet_film/chemmanifold_model.txt
+  - path: /home/ubuntu/chemmanifold-studio/data/openfoam_tix2h_seeds/s2/08_fluent/resnet_film/chemmanifold_model.txt
