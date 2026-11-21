@@ -1,0 +1,66 @@
+\begin{thebibliography}{10}
+\expandafter\ifx\csname url\endcsname\relax
+  \def\url#1{\texttt{#1}}\fi
+\expandafter\ifx\csname urlprefix\endcsname\relax\def\urlprefix{URL }\fi
+\expandafter\ifx\csname href\endcsname\relax
+  \def\href#1#2{#2} \def\path#1{#1}\fi
+
+\bibitem{pope1997isat}
+S.~B. Pope, Computationally efficient implementation of combustion chemistry
+  using in situ adaptive tabulation, Combustion Theory and Modelling 1 (1997)
+  41--63.
+
+\bibitem{christo1996ann}
+F.~C. Christo, A.~R. Masri, E.~M. Nebot, Artificial neural network
+  implementation of chemistry with pdf simulation of {H2/CO2} flames,
+  Combustion and Flame 106 (1996) 406--427.
+
+\bibitem{blasco1998ann}
+J.~A. Blasco, N.~Fueyo, C.~Dopazo, J.~Ballester, Modelling the temporal
+  evolution of a reduced combustion chemical system with an artificial neural
+  network, Combustion and Flame 113 (1998) 38--52.
+
+\bibitem{sen2010les}
+B.~A. Sen, S.~Menon, Linear eddy mixing based tabulation and artificial neural
+  networks for large eddy simulations of turbulent flames, Combustion and Flame
+  157 (2010) 62--74.
+
+\bibitem{ihme2009ann}
+M.~Ihme, C.~Schmitt, H.~Pitsch, Optimal artificial neural networks and
+  tabulation methods for chemistry representation in {LES} of a bluff-body
+  swirl-stabilized flame, Proceedings of the Combustion Institute 32 (2009)
+  1527--1535.
+
+\bibitem{franke2017rcce}
+L.~L.~C. Franke, A.~K. Chatzopoulos, S.~Rigopoulos, Tabulation of combustion
+  chemistry via artificial neural networks ({ANNs}): Methodology and
+  application to {LES-PDF} simulation of {Sydney} flame {L}, Combustion and
+  Flame 185 (2017) 245--260.
+
+\bibitem{ding2021hybrid}
+T.~Ding, T.~Readshaw, S.~Rigopoulos, W.~P. Jones, Machine learning tabulation
+  of thermochemistry in turbulent combustion: An approach based on hybrid
+  flamelet/random data, Combustion and Flame 231 (2021) 111493.
+
+\bibitem{readshaw2021hybrid}
+T.~Readshaw, T.~Ding, S.~Rigopoulos, W.~P. Jones, Modeling of turbulent flames
+  with the large eddy simulation--probability density function ({LES--PDF})
+  approach, stochastic fields, and artificial neural networks, Physics of
+  Fluids 33 (2021) 035154.
+
+\bibitem{owoyele2022chemnode}
+O.~Owoyele, P.~Pal, {ChemNODE}: A neural ordinary differential equations
+  framework for efficient chemical kinetic solvers, Energy and AI 7 (2022)
+  100118.
+
+\bibitem{perez2018film}
+E.~Perez, F.~Strub, H.~de~Vries, V.~Dumoulin, A.~Courville, {FiLM}: Visual
+  reasoning with a general conditioning layer, in: Proceedings of the AAAI
+  Conference on Artificial Intelligence, Vol.~32, 2018.
+
+\bibitem{cantera}
+D.~G. Goodwin, H.~K. Moffat, I.~Schoegl, R.~L. Speth, B.~W. Weber, Cantera: An
+  object-oriented software toolkit for chemical kinetics, thermodynamics, and
+  transport processes, \url{https://www.cantera.org} (2023).
+
+\end{thebibliography}
