@@ -1,0 +1,7 @@
+date,kind,run_dir,core_hours,mean_cores_while_active,peak_cores,first_seen,last_seen
+2026-11-22,openfoam,/opt/ofb/runs/arc22/gri/flame_ext,238.75,10.06,15.99,00:05,23:55
+2026-11-22,openfoam,/opt/ofb/runs/arc22/flame_ext,123.59,7.98,7.99,00:05,15:30
+2026-11-22,openfoam,/opt/ofb/runs/arc22/flame_ext/snap/.pp_arc22_ext,0.04,0.01,0.02,07:40,15:30
+2026-11-22,openfoam,/opt/ofb/runs/arc22/gri/flame_ext/snap/.pp_gri53_ext,0.01,0.01,0.02,19:30,23:20
+2026-11-22,python,/opt/ofb/runs/arc22/gri/flame_ext,0.00,0.00,0.01,19:40,23:25
+2026-11-22,python,/opt/ofb/runs/arc22/flame_ext,0.00,0.00,0.01,07:30,15:20
