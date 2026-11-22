@@ -22,7 +22,7 @@ Update it whenever a draft or a result changes.
 
 ## Overview
 
-Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
+Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8. Paper 9 (working method) is independent of the others.
 
 | # | Working title | Target journal | Status | Draft location | Blocking |
 |---|---|---|---|---|---|
@@ -34,6 +34,7 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 | 6 | Same flame, two codes: OpenFOAM vs Fluent differences | Combust. Theory Model. or Flow Turb. Combust. | Material only | results in Library `fluent-vs-openfoam-simple/`, `comparacion-T-openfoam-fluent/`, sim1 A1/A1r G1 | Fluent F1/F2/F3 reruns at dt 1e-4; write outline |
 | 7 | 22-species ARC from GRI-Mech 3.0 in a laminar burner | Combustion and Flame or Fuel | **Two drafts** (Claude Docs) | https://claude.ai/artifact/RjFHRJUX3q3qmztavmHjWT and https://claude.ai/artifact/RpamXr1iSLYWMr9eVUakDh | Same-code OpenFOAM GRI-53 leg (~06 CET Tue 17 Nov); ARC ignition leg (Tue); choose one draft |
 | 8 | Reduced mechanism and coverage-hole exploration methods | later | Ideas only | memory `reduced-mechanism`, hole methods doc https://claude.ai/artifact/W8RXBwYEJpXiqN8THz4Eb7 | Hole methods M1-M7 runs (PR #27) |
+| 9 | From idea to paper with AI agents: working method, compute operations and safeguards of a one-researcher combustion project | Computing in Science & Engineering (alt. Patterns; arXiv first) | **Draft v0** (22 Nov) | `papers/human-ai-methodology/` | Javier's review; update worked example when the ARC/GRI 0.3 s legs finish; check refs; AI-use statement |
 
 ## Per paper
 
@@ -88,7 +89,16 @@ Suggested order: **1, 2, 5 first**, then 3, 7, 6, 4, 8.
 ### 8. Reduced mechanism + hole-exploration methods
 - Later. Depends on M1-M7 runs and the DRGEP -> QSSA roadmap.
 
+### 9. Human + AI working method (requested 22 Nov)
+- Story: how one researcher and AI agent sessions take an idea to a paper: intake, context from project memory,
+  literature reviews, roadmaps with gates, branches and PRs, resumable supervised runs, core allocation, disk export
+  and pruning, monitoring, ETAs in Spain time, decision cards, typed approvals, standing rules, codifying the agent's
+  judgement, quality control, hand-offs. Case study = this whole project; worked example = ARC22 axis-divergence
+  campaign 21-22 Nov. Failures table with the safeguard each produced.
+- Next: Javier's review; refresh section 8 with the 0.23-0.3 s results; decide what memory/thread logs to release.
+
 ## Change log
+- 2026-11-22: paper 9 (human + AI working method) added, draft v0 in `papers/human-ai-methodology/`.
 - 2026-11-16: file created; outlines for papers 1, 2 and 5 added.
 - 2026-11-21: drafts written: paper 1 v0, paper 2 v2, paper 5 v0 (compiled PDFs in the paper folders).
 - 2026-11-21: phase D done (isann_D S 1.04 vs ITERML C3 2.22/2.15, same parent family).

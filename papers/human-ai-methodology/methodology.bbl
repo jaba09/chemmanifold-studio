@@ -1,0 +1,55 @@
+\begin{thebibliography}{10}
+\expandafter\ifx\csname url\endcsname\relax
+  \def\url#1{\texttt{#1}}\fi
+\expandafter\ifx\csname urlprefix\endcsname\relax\def\urlprefix{URL }\fi
+\expandafter\ifx\csname href\endcsname\relax
+  \def\href#1#2{#2} \def\path#1{#1}\fi
+
+\bibitem{pope1997isat}
+S.~B. Pope, Computationally efficient implementation of combustion chemistry
+  using in situ adaptive tabulation, Combustion Theory and Modelling 1 (1997)
+  41--63.
+
+\bibitem{christo1996ann}
+F.~C. Christo, A.~R. Masri, E.~M. Nebot, Artificial neural network
+  implementation of chemistry with pdf simulation of {H2/CO2} flames,
+  Combustion and Flame 106 (1996) 406--427.
+
+\bibitem{blasco1998ann}
+J.~A. Blasco, N.~Fueyo, C.~Dopazo, J.~Ballester, Modelling the temporal
+  evolution of a reduced combustion chemical system with an artificial neural
+  network, Combustion and Flame 113 (1998) 38--52.
+
+\bibitem{boiko2023autonomous}
+D.~A. Boiko, R.~MacKnight, B.~Kline, G.~Gomes, Autonomous chemical research
+  with large language models, Nature 624 (2023) 570--578.
+
+\bibitem{lu2024aiscientist}
+C.~Lu, C.~Lu, R.~T. Lange, J.~Foerster, J.~Clune, D.~Ha, The {AI} scientist:
+  towards fully automated open-ended scientific discovery, arXiv:2408.06292
+  (2024).
+
+\bibitem{sandve2013tenrules}
+G.~K. Sandve, A.~Nekrutenko, J.~Taylor, E.~Hovig, Ten simple rules for
+  reproducible computational research, PLoS Computational Biology 9 (2013)
+  e1003285.
+
+\bibitem{wilson2017goodenough}
+G.~Wilson, J.~Bryan, K.~Cranston, J.~Kitzes, L.~Nederbragt, T.~K. Teal, Good
+  enough practices in scientific computing, PLoS Computational Biology 13
+  (2017) e1005510.
+
+\bibitem{wilkinson2016fair}
+M.~D. Wilkinson, et~al., The {FAIR} guiding principles for scientific data
+  management and stewardship, Scientific Data 3 (2016) 160018.
+
+\bibitem{nature2023ground}
+{Nature editorial}, Tools such as {ChatGPT} threaten transparent science; here
+  are our ground rules for their use, Nature 613 (2023) 612.
+
+\bibitem{cope2023ai}
+{Committee on Publication Ethics}, Authorship and {AI} tools: {COPE} position
+  statement, https://publicationethics.org/cope-position-statements/ai-author
+  (2023).
+
+\end{thebibliography}
