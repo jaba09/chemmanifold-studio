@@ -1,0 +1,31 @@
+metric                                                  ARC22_0.23-0.3      ARC22_0.15-0.185        A1r_0.1-0.1875           Fluent_GA18
+V(T>1500) [cm3]                                                 19.243                18.788                19.939                18.248
+Tmax [K]                                                        2101.4                2104.4                2121.4                2087.5
+flame base x(T>1500) [mm]                                       1.3947                1.3947                1.3947                1.1459
+x(OH max) [mm]                                                  17.875                17.625                15.875                15.125
+OH max                                                       0.0034349             0.0034557             0.0033345             0.0032769
+CO max                                                        0.050815               0.05099              0.059866              0.053188
+axis Tmax [K]                                                   1392.3                1397.8                1471.8                1437.4
+NO max (mean field)                                         0.00024681            0.00024798                                            
+NO max (instantaneous, over window)                         0.00025345             0.0002514                                            
+NO2 max (mean field)                                        4.2657e-05            4.0162e-05                                            
+NO2 max (instantaneous, over window)                        4.3938e-05            4.2343e-05                                            
+N2O max (mean field)                                        7.5547e-06            6.1353e-06                                            
+N2O max (instantaneous, over window)                        8.7496e-06            7.2764e-06                                            
+HCN max (mean field)                                        0.00014797            0.00014623                                            
+HCN max (instantaneous, over window)                        0.00014934            0.00014829                                            
+C2H2 max (mean field)                                         0.015447              0.015463                                            
+C2H2 max (instantaneous, over window)                         0.015635              0.015533                                            
+CH3OH max (mean field)                                      8.7468e-05            8.7257e-05                                            
+CH3OH max (instantaneous, over window)                      8.8723e-05            8.8209e-05                                            
+C2H4 max (mean field)                                        0.0025305             0.0025283                                            
+C2H4 max (instantaneous, over window)                         0.002548             0.0025401                                            
+C2H6 max (mean field)                                        0.0014344             0.0014365                                            
+C2H6 max (instantaneous, over window)                        0.0014662             0.0014549                                            
+mean hot |dT| vs Fluent_GA18 [K]                                60.647                56.399                51.673                      
+mean hot |dT| vs Fluent_GA18, volume-weighted [K]                53.505                45.884                 51.62                      
+L1 rel OH vs Fluent_GA18 (hot, vol-weighted)                   0.21141               0.19642               0.25606                      
+L1 rel CO vs Fluent_GA18 (hot, vol-weighted)                  0.078613              0.075192               0.13497                      
+window                                          0.2300-0.3000 s, 29 snapshots0.1500-0.1850 s, 15 snapshots0.1000-0.1875 s, 36 snapshots                      
+V(T>1500) range over snapshots [cm3]            [17.933644137599998, 20.469760766495998][18.332403633431998, 19.364919097032][19.200817022688, 20.284830644976]                      
+Tmax range over snapshots [K]                   [2102.5061, 2109.4353][2104.5524, 2106.3315][2120.0089, 2123.4609]                      
