@@ -399,3 +399,17 @@ in the thread.
 | Case B cost higher than estimated | coarse smoke first; LTS for the steady state; reduce Ly to 25 mm if needed (thermal NO then partly cut). |
 | sim1 Remote Control usage limits pause reports for a day | systemd units keep running; each stage writes its own report file. |
 | Somers–de Goey values in the chat are not checked | check against the 1995 paper before G1. |
+
+---
+
+## 13. Progress
+
+### 2026-11-23 (Spain time): decisions and stage 0 code
+
+- 14:48 run location sim1 for both cases; 14:51 step 1 widened to every general method (section 4);
+  14:55 Javier: "OK, go with the defaults" (Q1 yes, Q3 shared, Q4 phi 1.0 only, Q5 ARC22 ISAT bar yes).
+- Stage 0 code written and smoke-tested in the cloud only (`openfoam/covloop/README.md` has the table):
+  MoE trainer and export, MoE branch in the C core (C vs numpy dY parity 6e-17), 15 general sampling
+  families with ARC22 labels, coverage tool, hole-seeded sampling S1-S4, frozen-rule driver, Case B builder.
+- Not done yet: rollout loss in the MoE training; ARC22 cell export of a leg; sentinel export; the OpenFOAM
+  build and Case B mesh/solver checks (sim1). Nothing has run on sim1.
