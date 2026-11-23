@@ -1,0 +1,10 @@
+FoamFile { version 2.0; format ascii; class dictionary; object changeDictionaryDict; }
+// 23 Nov, GRI leg only: the outer lab side wall (r = 140 mm, zero total flux incl. qr) let a wall cell run away at
+// 0.2622 s (x = 92-99 mm); it is held at the ambient 300 K from 0.2625 s.
+T
+{
+    boundaryField
+    {
+        outlet-lab-026 { type fixedValue; value uniform 300; }
+    }
+}
