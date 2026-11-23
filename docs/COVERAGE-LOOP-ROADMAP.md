@@ -1,6 +1,6 @@
 # Roadmap: iterative coverage exploration (COVLOOP) with an ARC22 mixture-of-experts surrogate
 
-Requested by Javier on 2026-11-23 (14:38 Spain time, CET). Status: **plan only**, nothing launched.
+Requested by Javier on 2026-11-23 (14:38 Spain time, CET). Status: all open choices decided 14:55 CET (defaults, section 11); **stage 0 code started** in the cloud (smoke tests only). Nothing runs on sim1 without Javier's typed OK in the thread.
 Written in English; all times are Spain time (CET, UTC+1).
 
 Inputs read for this plan: the Gemini paper draft "A C1-smooth sparse Top-2 Mixture-of-Experts
@@ -104,7 +104,7 @@ L.P.H. de Goey, Combust. Sci. Technol. 108 (1995), before the case is frozen):
 | Burner rim and side wall | y = 0, x 2-6 mm and x = 6 mm: no slip, zero species flux, isothermal 298 K |
 | Axis | x = 0 symmetry plane |
 | Outlet | y = 40 mm, 1 atm, zero gradient / inletOutlet |
-| Mesh | 20-25 um cells across the flame (about 20 cells per 0.43 mm flame thickness), stretched to 150 um outside and to ~0.5 mm above y = 10 mm; ~35-45k cells |
+| Mesh | 25 um cells for y < 8 mm and x < 2.5 mm (about 17 cells per 0.43 mm flame thickness), graded to ~190 um at the side wall and ~420 um at the outlet: 69k cells at 25 um, 17k at 50 um (coarse smoke mesh); builder `openfoam/slitBurner/make_case.py` |
 | Start | fresh reactants for x <= 2 mm, y <= 5 mm; burnt gas elsewhere from an HP equilibrium of the **major C/H/O species plus N2 only**, with NO, NO2, N2O, HCN set to zero (the chat warns that equilibrium NO, ~2000 ppm, poisons the slow rim region for many flow-through times) |
 | Steady state | ~1.5-2 flow-through times; the cone is ~5-7 mm high |
 | Expected regimes | cooled rim foot (heat loss, quenching, NO to NO2 by HO2), quasi-1D flank, negatively curved tip, adiabatic post-flame plume with slow thermal NO |
@@ -377,11 +377,11 @@ in the thread.
 
 | # | Question | Default in this plan |
 |---|---|---|
-| Q1 | Does R1 allow the enthalpy box, random-pair mixing (P3/S3) and relaxation, as written in 1.1? | yes |
+| Q1 | Does R1 allow the enthalpy box, random-pair mixing (P3/S3) and relaxation, as written in 1.1? | **DECIDED 2026-11-23: yes** |
 | Q2 | Canonical 1D flames in step 1? | **DECIDED 2026-11-23: yes**, as many general methods as possible (section 4) |
-| Q3 | One shared training database and MoE for both cases, or one loop per case? | shared (tests generality; coverage still reported per case) |
-| Q4 | Case B variants (phi = 0.75, rich slit with air co-flow) | not included |
-| Q5 | ARC22 ISAT 1e-4 run on Case A as the same-mechanism bar | yes, at the end (~4 h, 8 ranks) |
+| Q3 | One shared training database and MoE for both cases, or one loop per case? | **DECIDED 2026-11-23: shared** (coverage still reported per case) |
+| Q4 | Case B variants (phi = 0.75, rich slit with air co-flow) | **DECIDED 2026-11-23: not included** (phi = 1.0 only) |
+| Q5 | ARC22 ISAT 1e-4 run on Case A as the same-mechanism bar | **DECIDED 2026-11-23: yes**, at the end (~4 h, 8 ranks) |
 | Q6 | Run location | sim1 for all heavy runs (DECIDED 2026-11-23) |
 
 ---
