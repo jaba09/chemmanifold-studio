@@ -42,7 +42,7 @@ again on the old plus the new physics data, and the cycle repeats until coverage
 
 | Rule | What it means in practice |
 |---|---|
-| R1. No flame-specific assumptions in sampling | No heat-loss or heat-gain models (no cooling reactors, no wall temperatures, no psi-based enthalpy targets, regimes 15/17/18 of `holes.py` are off). No jet-induction or entrainment mixing models (M5 off). No flamelets tuned to a burner (strain from a CFD run, etc.). |
+| R1. No flame-specific assumptions in sampling | No heat-loss or heat-gain models (no cooling reactors, no wall temperatures, no psi-based enthalpy targets, regimes 15/17/18 of `holes.py` are off). No jet-induction or entrainment mixing models (M5 / regime 17 off). No strain, mixing time or residence time taken from a CFD run. Canonical flames and reactors that need only the mechanism and the streams ARE used (section 4). |
 | R2. Never train on DI data | DI results (the hybrid fallback, the shadow checks, the DI reference runs) are **never** training pairs. CFD/DI states are used only as starting points for physics sampling, and the starting state itself is flagged `excluded`. Same rule as ITERML ([javier-methodology]); ISANN stays a separate method. |
 | R3. Network | MoE in the style of the Gemini paper: state-only router, top-2 smooth gate, dt as an input to the experts, increment dY as the output (rate form dY = dt * R). |
 | R4. CPU only | Training and inference on CPU (PyTorch CPU for training, plain C++ / BLAS for inference inside OpenFOAM). No GPU code paths. |
@@ -119,30 +119,72 @@ burnt T vs adiabatic, and a short LTS-vs-transient check.
 
 ---
 
-## 4. Step 1: general sampling (iteration 0)
+## 4. Step 1: general sampling (iteration 0, the base case for both flames)
 
-Inputs only: the ARC22 mechanism, the inlet streams of both cases (CH4, air, premixed phi = 1.0
-reactant), p = 1 atm and a temperature box 298-2400 K. Mixture fraction Z (Bilger) spans 0-1; the
-premixed reactant is the point Z = 0.055.
+Revised 2026-11-23 15:00 CET after Javier's remark: step 1 uses **as many general methods as
+possible**, including canonical 1D flames. "General" means a method needs only the mechanism, the
+inlet streams (CH4, air, and any premixed CH4/air mixture between the flammability limits), the
+pressure (1 atm) and a stream-temperature range. It must not need anything that comes from one
+burner: no wall temperature or heat-loss rate, no strain or mixing time taken from a CFD run, no
+jet/entrainment law. The same database is the starting point for **both** cases: the
+non-premixed burner (A) and the premixed slit (B), so the premixed and the non-premixed families
+are both sampled in full.
 
-| Set | What it does | Share (first guess) |
+### 4.1 Catalogue of general methods
+
+**Family R: homogeneous (0D) reactors**
+
+| Set | Method | Sweep |
 |---|---|---|
-| G1 homogeneous reactors | Adiabatic constant-pressure reactors, Latin hypercube over (Z, T0): Z log-spaced in 0-1 with extra density around Z_st, T0 298-1800 K; integrated through ignition to equilibrium, states taken by arc length | 40 % |
-| G2 equilibrium and relaxation | HP equilibrium over the (Z, h) box, then relaxation from perturbed equilibrium (radicals scaled 0.1-10x, majors +/-3 %) | 15 % |
-| G3 composition perturbations | Around G1/G2 states: multiplicative noise on majors (+/-3 %) and radicals (+/-0.25 decade), enthalpy box shift +/-65 K, element-conserving projection (the paper's off-manifold set) | 20 % |
-| G4 generic mixing | Random pairs of existing states (any set, any Z), mixed at a random fraction, then reacted; no stream or flow model | 15 % |
-| G5 low-temperature mixtures | Frozen and slowly reacting mixtures 298-950 K over all Z, some with up to 12 % products from G1 | 10 % |
+| R1 autoignition | adiabatic constant-pressure reactor, through ignition to equilibrium, states by arc length plus log-time (induction is sampled, not skipped) | Latin hypercube over Z in 0-1 (log, dense near Z_st) or phi 0.3-4, T0 600-1800 K |
+| R2 low-temperature ignition | same, long times (up to 1 s) at T0 600-1000 K, where induction is slow | all Z |
+| R3 PSR S-curves | steady perfectly stirred reactor, residence time 1e-5-1 s, burning branch, extinction turning point and the **unstable middle branch** by continuation | premixed phi 0.4-2.5 and two-stream inlets at mixed Z; inlet T 298-800 K |
+| R4 generic PaSR | stochastic particle reactor, inflow from the two streams and/or a premixed stream, modified Curl and IEM mixing, residence and mixing times swept over 3 decades, adiabatic (regime 16 of `holes.py` with heat loss off) | tau_res 1e-4-1e-1 s, tau_mix / tau_res 0.01-10 |
+| R5 vitiated ignition | fresh mixture mixed with equilibrium products of any Z, then reacted (regime 7) | product fraction 0-0.9 |
+| R6 equilibrium and relaxation | HP equilibrium over the (Z, h) box, then relaxation from perturbed equilibrium (radicals 0.1-10x, majors +/-3 %) (regimes 6, 8, 19) | all Z |
 
-Labels: for every state, **several dt** drawn log-uniformly from the dt range (initially 1 us-1 ms
-from the 2026-10-29 tau_cell histogram; refined after the first run), with 2-3 dt per state. The
-ARC22 kernel (Rosenbrock, relTol 1e-8 for labels) gives Y(t + dt); the target is dY. Sampling code:
-existing stages 01-04 with a new config `configs/covloop_general.yaml` that switches off regimes
-5-8, 15-21 (flamelets tied to burner strain, heat loss, jet mixing) and adds G4/G5 if the existing
-`pasr` options cannot express them.
+**Family F: canonical 1D flames** (Cantera with the 43-species skeleton of ARC22, states
+projected onto the 22 transported species; every label is then recomputed with the ARC22 kernel)
 
-Size: aim at 300-500k states (0.6-1.5M pairs). The paper used 41k states for a much narrower space.
+| Set | Method | Sweep |
+|---|---|---|
+| F1 freely propagating premixed | adiabatic 1D premixed flames, whole structure from fresh to post-flame | phi from the lean to the rich flammability limit (about 0.5-1.7), Tu 298-800 K |
+| F2 counterflow diffusion | CH4 against air, strain from ~1 1/s to extinction, **both stable and unstable branches** by two-point continuation | stream T 298-800 K |
+| F3 counterflow premixed | fresh against its own equilibrium products (fresh-to-burnt) and fresh against fresh (twin flames), strain up to extinction | phi 0.5-1.7 |
+| F4 counterflow partially premixed | rich premixed (phi 1.3-3) against air, and lean premixed against fuel: double and triple-flame-like structures | strain up to extinction |
+| F5 unsteady flamelets | ignition (cold fuel vs hot air, and fresh vs hot products), extinction after a strain step, re-ignition (regime 5; `unsteady_flamelet.py` with tau_q = 0) | chi steps over 2 decades |
+| F6 transport variants | F1-F4 repeated with mixture-averaged, constant-Lewis and unity-Lewis transport, so that differential-diffusion states (local element and enthalpy excess) appear without a model of any burner | all of the above |
 
----
+**Family P: perturbation, mixing and space filling**
+
+| Set | Method |
+|---|---|
+| P1 off-manifold perturbations | around any R/F state: majors +/-3 %, radicals +/-0.25 decade, enthalpy box shift +/-65 K, element-conserving projection (the Gemini paper's set) |
+| P2 multi-scale sampling | perturbations at several scales in Box-Cox space along trajectories (Zhang et al., Combust. Flame 245, 2022, the paper's ref. 13) |
+| P3 random-pair mixing | two existing states of any set and any Z mixed at a random fraction, then reacted (covers what regime 4 recirculation did, without a flow model) |
+| P4 low-temperature mixtures | frozen and slowly reacting mixtures 298-950 K over all Z, with 0-12 % products |
+| P5 committee sampling | after the first training: 0D rollouts of the 2 repeats from database states; where they disagree, start new R1/R6 reactors (regime 21; no CFD) |
+
+**Left out on purpose** (they need a burner-specific assumption): burner-stabilised flames and
+any heat-loss reactor or flamelet (regimes 3, 15, 18, wall-cooled flamelets), jet induction
+mixing layers (regime 17), radiation losses, and strain or mixing times taken from a CFD run.
+These states must be reached in step 4 from hole states instead.
+
+### 4.2 Labels, balance and size
+
+- Labels: for every state **several dt** (2-3) drawn log-uniformly from the dt range (initially
+  1 us-1 ms from the 2026-10-29 tau_cell histogram, refined after the first run); ARC22 kernel,
+  relTol 1e-8; target dY.
+- Balance on the coverage grid of section 5.1, not by fixed shares: every set generates freely,
+  then each bin is thinned to a cap (and bins below a floor are topped up with P1/P2 around their
+  states). Every pair keeps a `family/set` tag, so the contribution of each method to coverage can
+  be measured afterwards (an ablation for paper 1: which general methods matter).
+- Size: 0.5-1M states before thinning, ~400k after (about 1-1.5M pairs).
+- Code: existing stages 00-04 cover R1, R2, R5, R6, F2, F5, P1, P3, P4, P5 (regimes 0, 2, 5-8, 16,
+  19, 21); new are R3 (PSR continuation), F1, F3, F4, F6 and P2. Config
+  `configs/covloop_general.yaml`.
+- Cost: the 1D flame continuation is the slow part, roughly 4-8 h on 8 cores of sim1 for all
+  F sets; the whole step 1 including ARC22 labels ~10-16 h.
 
 ## 5. Steps 2-3: the run, the holes and the coverage
 
@@ -302,9 +344,9 @@ thread writes code, runs smoke tests and analyses; Javier's PC is not needed (no
 
 | Stage | Work | Where | Cost (estimate) |
 |---|---|---|---|
-| 0 | Code: `chemmanifold/moe.py` (trainer, export), dt-aware ARC22 labeller, `configs/covloop_general.yaml` + G4/G5 sets, `scripts/25_coverage.py` (grid, holes, C, C_data, C_ref), shadow + sentinel bins in the plug-in, model file v3 C++ loader, `openfoam/slitBurner/` case builder, `openfoam/covloop/covloop.py` driver with frozen rules | cloud | 2-3 thread-days, smoke tests only |
+| 0 | Code: `chemmanifold/moe.py` (trainer, export), dt-aware ARC22 labeller, `configs/covloop_general.yaml` + new sets R3, F1, F3, F4, F6, P2, `scripts/25_coverage.py` (grid, holes, C, C_data, C_ref), shadow + sentinel bins in the plug-in, model file v3 C++ loader, `openfoam/slitBurner/` case builder, `openfoam/covloop/covloop.py` driver with frozen rules | cloud | 2-3 thread-days, smoke tests only |
 | 1 | Case B: coarse smoke (cloud, 4 cores, ~1 h), then 2 meshes x ARC22 DI to steady (LTS first, then 10 ms transient) | sim1, 8 ranks | ~1-1.5 days wall (unverified: ~40k cells at ~2-5 us flow steps) |
-| 2 | G0 offline tests; iteration 0 general sampling (ARC22 labels) and 2 training repeats | sim1, 8 cores | sampling 4-8 h, training 4-8 h per repeat (paper: 8 min for 41k states; ours ~10x data and rollout loss) |
+| 2 | G0 offline tests; iteration 0 general sampling (all families of section 4, ARC22 labels) and 2 training repeats | sim1, 8 cores | sampling 10-16 h, training 4-8 h per repeat (paper: 8 min for 41k states; ours ~10x data and rollout loss) |
 | 3 | Iteration k: 4 hybrid legs (A ignition, A flame, B start-up, B steady) | sim1, 2 x 8 ranks | ~6-10 h |
 | 4 | Coverage + holes + seeded sampling + 2 trainings from scratch | sim1 | ~8-12 h |
 | 5 | Repeat 3-4 until the plateau rule stops it | sim1 | ~14-22 h per iteration, 3-8 iterations: 2-7 days |
@@ -335,8 +377,8 @@ in the thread.
 
 | # | Question | Default in this plan |
 |---|---|---|
-| Q1 | Does R1 allow the enthalpy box, random-pair mixing (G4/S3) and relaxation, as written in 1.1? | yes |
-| Q2 | Canonical 1D flames (freely propagating premixed, counterflow) in step 1? They are not tied to a burner but they are flame structures | **no** (stricter reading of R1); can be an ablation |
+| Q1 | Does R1 allow the enthalpy box, random-pair mixing (P3/S3) and relaxation, as written in 1.1? | yes |
+| Q2 | Canonical 1D flames in step 1? | **DECIDED 2026-11-23: yes**, as many general methods as possible (section 4) |
 | Q3 | One shared training database and MoE for both cases, or one loop per case? | shared (tests generality; coverage still reported per case) |
 | Q4 | Case B variants (phi = 0.75, rich slit with air co-flow) | not included |
 | Q5 | ARC22 ISAT 1e-4 run on Case A as the same-mechanism bar | yes, at the end (~4 h, 8 ranks) |
