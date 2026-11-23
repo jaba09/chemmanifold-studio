@@ -27,7 +27,10 @@
 #define CM_LN_EPS 1e-5     /* torch.nn.LayerNorm default */
 #define CM_MAX_FEAT (CM_MAX_SPECIES + 1)
 
-enum { ARCH_RESNET = 1, ARCH_NODE = 2 };
+enum { ARCH_RESNET = 1, ARCH_NODE = 2, ARCH_MOE = 3 };
+#define CM_MOE_MAX_K 16
+#define CM_MOE_MAX_LAYERS 6
+#define CM_MOE_MAX_PCA 16
 
 typedef struct {
     char name[96];
@@ -59,6 +62,12 @@ struct cm_model {
     /* Phy-ChemNODE */
     int latent, n_substeps;
     cm_linear enc[3], fld[3], dec[3];
+
+    /* COVLOOP top-2 mixture of experts (chemmanifold/moe.py, arch "moe_top2"): rate output, dY = dt R */
+    int moe_K, moe_nl, moe_npc;
+    double moe_tau, moe_disc, moe_pos, moe_bc_floor, moe_ldt_mu, moe_ldt_sd;
+    const double *moe_x_mu, *moe_x_sd, *moe_pca_mean, *moe_pca_U, *moe_tau_pca;  /* F, F, K x F, K x npc x F, K */
+    cm_linear moe_r0, moe_r1, moe_e[CM_MOE_MAX_K][CM_MOE_MAX_LAYERS];
 
     /* OOD data */
     int has_ood;
@@ -296,6 +305,40 @@ cm_model *cm_load(const char *path, char *err, int errlen)
         linear(m, &m->dec[0], "net.decoder.0", H, d, err, errlen, &ok);
         linear(m, &m->dec[1], "net.decoder.2", H, H, err, errlen, &ok);
         linear(m, &m->dec[2], "net.decoder.4", Ns, H, err, errlen, &ok);
+    } else if (strcmp(m->arch_name, "moe_top2") == 0) {
+        const int Fm = Ns + 1;
+        const cm_array *rb = find(m, "moe.r0.bias");
+        int kk, j, Hr = rb ? rb->n : 0;
+        m->arch = ARCH_MOE;
+        m->moe_K = (int)get_scalar(m, "moe.K", 0);
+        m->moe_nl = (int)get_scalar(m, "moe.n_layers", 0);
+        m->moe_npc = (int)get_scalar(m, "moe.n_pca", 0);
+        H = m->hidden = (int)get_scalar(m, "moe.hidden", 0);
+        if (m->moe_K < 2 || m->moe_K > CM_MOE_MAX_K || m->moe_nl < 2 || m->moe_nl > CM_MOE_MAX_LAYERS
+            || H <= 0 || H > CM_MAX_HIDDEN || Hr <= 0 || Hr > CM_MAX_HIDDEN || m->moe_npc > CM_MOE_MAX_PCA) {
+            snprintf(err, errlen, "bad MoE size (K %d, layers %d, hidden %d, router %d)", m->moe_K, m->moe_nl, H, Hr);
+            cm_free(m);
+            return NULL;
+        }
+        m->moe_tau = get_scalar(m, "moe.tau_gate", 2.5);
+        m->moe_disc = get_scalar(m, "moe.disc_limit", 0.05);
+        m->moe_pos = get_scalar(m, "moe.pos_limit", -5e-3);
+        m->moe_bc_floor = get_scalar(m, "moe.bc_floor", 1e-10);
+        m->moe_ldt_mu = get_scalar(m, "moe.ldt_mu", -4.0);
+        m->moe_ldt_sd = get_scalar(m, "moe.ldt_sd", 1.0);
+        m->moe_x_mu = get(m, "moe.x_mu", Fm, err, errlen, &ok);
+        m->moe_x_sd = get(m, "moe.x_sd", Fm, err, errlen, &ok);
+        m->moe_pca_mean = get(m, "moe.pca_mean", m->moe_K * Fm, err, errlen, &ok);
+        m->moe_pca_U = get(m, "moe.pca_U", m->moe_K * m->moe_npc * Fm, err, errlen, &ok);
+        m->moe_tau_pca = get(m, "moe.tau_pca", m->moe_K, err, errlen, &ok);
+        linear(m, &m->moe_r0, "moe.r0", Hr, Fm, err, errlen, &ok);
+        linear(m, &m->moe_r1, "moe.r1", m->moe_K, Hr, err, errlen, &ok);
+        for (kk = 0; kk < m->moe_K; kk++)
+            for (j = 0; j < m->moe_nl; j++) {
+                const int n_in = j == 0 ? Fm + 1 : H, n_out = j == m->moe_nl - 1 ? Ns : H;
+                snprintf(name, sizeof name, "moe.e%d.%d", kk, j);
+                linear(m, &m->moe_e[kk][j], name, n_out, n_in, err, errlen, &ok);
+            }
     } else {
         snprintf(err, errlen, "unknown architecture '%s'", m->arch_name);
         cm_free(m);
@@ -574,6 +617,96 @@ static void chemnode(const cm_model *m, const double *yt, const double *c, doubl
     for (i = 0; i < Ns; i++) y_cand[i] = yt[i] + (d1[i] - d0[i]);  /* Eq. 41 */
 }
 
+/* MoE features x~ = ([T, shifted Box-Cox(Y)] - x_mu) / x_sd (moe.py raw_features) */
+static void moe_features(const cm_model *m, const double *Y, double T, double *x)
+{
+    const int Ns = m->Ns;
+    int k;
+    x[0] = (T - m->moe_x_mu[0]) / m->moe_x_sd[0];
+    for (k = 0; k < Ns; k++) {
+        const double bc = (pow((Y[k] > 0.0 ? Y[k] : 0.0) + m->moe_bc_floor, m->lam) - 1.0) / m->lam;
+        x[k + 1] = (bc - m->moe_x_mu[k + 1]) / m->moe_x_sd[k + 1];
+    }
+}
+
+static double moe_pca_ratio(const cm_model *m, const double *x, int k)
+{
+    const int F = m->Ns + 1, d = m->moe_npc;
+    double v[CM_MAX_FEAT], s[CM_MOE_MAX_PCA], res = 0.0;
+    int i, j;
+    for (j = 0; j < F; j++) v[j] = x[j] - m->moe_pca_mean[k * F + j];
+    for (i = 0; i < d; i++) {
+        const double *U = m->moe_pca_U + ((size_t)k * d + i) * F;
+        s[i] = 0.0;
+        for (j = 0; j < F; j++) s[i] += U[j] * v[j];
+    }
+    for (j = 0; j < F; j++) {
+        double e = v[j];
+        for (i = 0; i < d; i++) e -= m->moe_pca_U[((size_t)k * d + i) * F + j] * s[i];
+        res += e * e;
+    }
+    return sqrt(res) / m->moe_tau_pca[k];
+}
+
+/* Router on the state only: top-2 experts and Hermite C1 weights */
+static void moe_route(const cm_model *m, const double *x, int *k1, int *k2, double *w1, double *w2)
+{
+    double h[CM_MAX_HIDDEN], z[CM_MOE_MAX_K], u;
+    int k;
+    apply(&m->moe_r0, x, h, 1);
+    apply(&m->moe_r1, h, z, 0);
+    *k1 = 0;
+    for (k = 1; k < m->moe_K; k++) if (z[k] > z[*k1]) *k1 = k;
+    *k2 = *k1 == 0 ? 1 : 0;
+    for (k = 0; k < m->moe_K; k++) if (k != *k1 && z[k] > z[*k2]) *k2 = k;
+    u = (z[*k1] - z[*k2]) / m->moe_tau;
+    if (u < 0.0) u = 0.0;
+    if (u > 1.0) u = 1.0;
+    *w2 = 0.25 * (1.0 - u) * (1.0 - u) * (2.0 + u);
+    *w1 = 1.0 - *w2;
+}
+
+/* Exported expert k returns the physical rate R [1/s] (scalings folded into its last layer) */
+static void moe_expert(const cm_model *m, int k, const double *x, double ldt, double *R)
+{
+    double a[CM_MAX_HIDDEN + CM_MAX_FEAT + 1], b[CM_MAX_HIDDEN];
+    const int F = m->Ns + 1;
+    int j, i;
+    for (i = 0; i < F; i++) a[i] = x[i];
+    a[F] = ldt;
+    for (j = 0; j < m->moe_nl; j++) {
+        const int last = j == m->moe_nl - 1;
+        apply(&m->moe_e[k][j], a, last ? R : b, !last);
+        if (!last) for (i = 0; i < m->moe_e[k][j].n_out; i++) a[i] = b[i];
+    }
+}
+
+/* Blended rate; returns the trust quantities: PCA ratio of the gate (boundary cells: min over the two),
+   inter-expert L1 discrepancy of dY (0 on interior cells) */
+static void moe_rate(const cm_model *m, const double *Y, double T, double dt, double *R,
+                     double *pca_ratio, double *disc)
+{
+    const int Ns = m->Ns;
+    double x[CM_MAX_FEAT], R2[CM_MAX_SPECIES], ldt, w1, w2, r1;
+    int k1, k2, k;
+    moe_features(m, Y, T, x);
+    ldt = (log10(dt) - m->moe_ldt_mu) / m->moe_ldt_sd;
+    moe_route(m, x, &k1, &k2, &w1, &w2);
+    moe_expert(m, k1, x, ldt, R);
+    r1 = moe_pca_ratio(m, x, k1);
+    *disc = 0.0;
+    if (w2 > 0.0) {
+        const double r2 = moe_pca_ratio(m, x, k2);
+        moe_expert(m, k2, x, ldt, R2);
+        for (k = 0; k < Ns; k++) {
+            *disc += fabs((R[k] - R2[k]) * dt);
+            R[k] = w1 * R[k] + w2 * R2[k];
+        }
+        if (r2 < r1) r1 = r2;
+    }
+    *pca_ratio = r1;
+}
+
 static int cm_finite(double x) { return x == x && x < 1e300 && x > -1e300; }
 
 int cm_step(const cm_model *m, const double *Y, double T, double P, double h, double dt,
@@ -590,6 +723,17 @@ int cm_step(const cm_model *m, const double *Y, double T, double P, double h, do
     raw[2] = h;
     raw[3] = log10(dt);
     for (k = 0; k < 4; k++) c[k] = (raw[k] - m->ctx_mu[k]) / m->ctx_sigma[k];
+    if (m->arch == ARCH_MOE) {
+        double R[CM_MAX_SPECIES], pr, disc;
+        moe_rate(m, Y, T, dt, R, &pr, &disc);
+        for (k = 0; k < Ns; k++) {
+            Y_out[k] = Y[k] + dt * R[k];
+            if (!cm_finite(Y_out[k])) return -1;
+        }
+        project(m, Y, Y_out);
+        *T_out = cm_temperature(m, Y_out, h, T);
+        return cm_finite(*T_out) ? 0 : -1;
+    }
     if (m->arch == ARCH_RESNET)
         resnet_film(m, yt, c, yc);
     else
@@ -619,6 +763,16 @@ void cm_ood(const cm_model *m, const cm_options *o, const double *Y, double T, d
     info->manifold_ratio = 0.0;
     info->data_ratio = 0.0;
     if (fabs(P / m->P_ref - 1.0) > o->p_tol) info->flags |= CM_OOD_P;
+    if (m->arch == ARCH_MOE) {   /* state-only part of the MoE trust gate: local PCA of the routed expert(s) */
+        double xm[CM_MAX_FEAT], w1, w2, r;
+        int k1, k2;
+        moe_features(m, Y, T, xm);
+        moe_route(m, xm, &k1, &k2, &w1, &w2);
+        r = moe_pca_ratio(m, xm, k1);
+        if (w2 > 0.0) { const double r2 = moe_pca_ratio(m, xm, k2); if (r2 < r) r = r2; }
+        info->manifold_ratio = r;
+        if (r > 1.0) info->flags |= CM_OOD_MANIFOLD;
+    }
     if (!m->has_ood) return;
 
     for (i = 0; i < m->Ne; i++) {
@@ -724,6 +878,17 @@ int cm_advance(const cm_model *m, const cm_options *o, double *Y, double T, doub
         }
     }
 
+    if (m->arch == ARCH_MOE && o->check_ood) {   /* dt-dependent part of the MoE trust gate */
+        double R[CM_MAX_SPECIES], pr, disc, ymin = 1.0;
+        moe_rate(m, Y, T, dts, R, &pr, &disc);
+        for (k = 0; k < Ns; k++) { const double y = Y[k] + dts * R[k]; if (y < ymin) ymin = y; }
+        info->data_ratio = disc / m->moe_disc;
+        if (disc > m->moe_disc || ymin < m->moe_pos) info->flags |= CM_OOD_DATA;
+        if (o->ood_action == 1 && (info->flags & CM_OOD_ANY)) {
+            info->flags |= CM_OOD_SKIPPED;
+            return 0;
+        }
+    }
     for (k = 0; k < Ns; k++) Y0[k] = Y[k];
     h = cm_enthalpy(m, Y, T);
     for (s = 0; s < n; s++) {

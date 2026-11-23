@@ -399,10 +399,12 @@ class CPUFastMoE:
         r1 = self._pca_ratio(xs, k1)
         boundary = w2 > 0
         pca_ood = r1 > 1.0
+        gate_ratio = r1.copy()
         if boundary.any():
             r2 = self._pca_ratio(xs[boundary], k2[boundary])
-            pca_ood[boundary] = np.minimum(r1[boundary], r2) > 1.0
-        info = {"k1": k1, "k2": k2, "w1": w1, "w2": w2, "pca_ratio": r1, "pca_ood": pca_ood,
+            gate_ratio[boundary] = np.minimum(r1[boundary], r2)
+            pca_ood = gate_ratio > 1.0
+        info = {"k1": k1, "k2": k2, "w1": w1, "w2": w2, "pca_ratio": r1, "gate_ratio": gate_ratio, "pca_ood": pca_ood,
                 "boundary": boundary}
         # (2) inter-expert discrepancy, needs expert-1 output on boundary cells
         disc = np.zeros(len(xs))
@@ -450,3 +452,50 @@ def project_elements(Y0, Yc, A, n_iter=3, w_eps=1e-15):
         lam = np.linalg.solve(G, r[..., None])[..., 0]
         Y = Y - w * (lam @ A)
     return np.maximum(Y, 0.0)
+
+
+# ----------------------------------------------------------------------------------------------- C core export
+
+def write_core_model(path, arrays, species, mech="gri30.yaml", P_ref=101325.0, lam=BC_LAMBDA):
+    """Write an exported MoE (MoESurrogate.arrays) as a CHEMMANIFOLD_SURROGATE v1 file, arch "moe_top2", read by
+    fluent/udf/chemmanifold_core.c (Fluent UDF and OpenFOAM userChemStep). Thermo (NASA-7) and the element
+    matrix come from `mech` restricted to `species` (for ARC22: gri30.yaml and the 22 transported species)."""
+    import cantera as ct
+    full = ct.Solution(mech)
+    gas = ct.Solution(thermo="ideal-gas", species=[full.species(s) for s in species])
+    Ns, Ne = gas.n_species, gas.n_elements
+    A = np.array([[gas.n_atoms(k, m) * gas.atomic_weights[m] / gas.molecular_weights[k] for k in range(Ns)]
+                  for m in range(Ne)])
+    T_mid = np.array([sp.thermo.coeffs[0] for sp in gas.species()])
+    a_hi = np.array([sp.thermo.coeffs[1:8] for sp in gas.species()])
+    a_lo = np.array([sp.thermo.coeffs[8:15] for sp in gas.species()])
+    a = arrays
+    tau, disc, pos, dt_min, dt_max, T_frozen = a["cfg"]
+    K, nl = a["centroids"].shape[0], int(a["n_layers"][0])
+    lines = ["CHEMMANIFOLD_SURROGATE 1", "S arch 1 moe_top2", f"S species {Ns} " + " ".join(species),
+             f"S elements {Ne} " + " ".join(gas.element_names)]
+
+    def arr(name, v):
+        v = np.atleast_1d(np.asarray(v, dtype=float)).ravel()
+        lines.append(f"A {name} {v.size} " + " ".join("%.17g" % x for x in v))
+
+    arr("n_species", Ns); arr("n_elements", Ne); arr("boxcox_lambda", lam)
+    arr("dt_base", np.sqrt(dt_min * dt_max)); arr("dt_min", dt_min); arr("dt_max", dt_max); arr("P_ref", P_ref)
+    arr("mu_y", np.zeros(Ns)); arr("sigma_y", np.ones(Ns))           # unused by the MoE (own features)
+    arr("ctx_mu", [1000.0, P_ref, 0.0, -4.0]); arr("ctx_sigma", [1.0, 1e-12, 1.0, 1.0])
+    for k, v in (("A", A), ("W", gas.molecular_weights), ("T_mid", T_mid), ("a_lo", a_lo), ("a_hi", a_hi)):
+        arr(k, v)
+    arr("moe.K", K); arr("moe.n_layers", nl); arr("moe.n_pca", a["pca_U"].shape[1])
+    arr("moe.hidden", a["e0_b0"].size); arr("moe.tau_gate", tau); arr("moe.disc_limit", disc)
+    arr("moe.pos_limit", pos); arr("moe.bc_floor", BC_FLOOR); arr("moe.T_frozen", T_frozen)
+    arr("moe.ldt_mu", a["ldt"][0]); arr("moe.ldt_sd", a["ldt"][1])
+    arr("moe.x_mu", a["x_mu"]); arr("moe.x_sd", a["x_sd"])
+    arr("moe.pca_mean", a["pca_mean"]); arr("moe.pca_U", a["pca_U"]); arr("moe.tau_pca", a["tau_pca"])
+    arr("moe.r0.weight", a["r_W0"]); arr("moe.r0.bias", a["r_b0"])
+    arr("moe.r1.weight", a["r_W1"]); arr("moe.r1.bias", a["r_b1"])
+    for k in range(K):
+        for j in range(nl):
+            arr(f"moe.e{k}.{j}.weight", a[f"e{k}_W{j}"]); arr(f"moe.e{k}.{j}.bias", a[f"e{k}_b{j}"])
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return A
