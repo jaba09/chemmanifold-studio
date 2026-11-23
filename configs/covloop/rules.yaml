@@ -1,0 +1,24 @@
+# COVLOOP frozen rules (docs/COVERAGE-LOOP-ROADMAP.md s. 5, 8). Do not edit during a campaign.
+coverage:
+  ood_max: 0.05          # bin is a hole if > 5 % of its reacting mass is OOD
+  fail_max: 0.10         # ... or > 10 % of its one-step shadow checks fail
+  min_checks: 6          # ... or fewer checks than this (unverified)
+stop:
+  min_gain: 0.01         # 1 percentage point
+  spread_factor: 2.0     # gain must beat max(min_gain, 2 x repeat spread)
+  patience: 2
+  target: 0.98
+  max_iterations: 8
+legs:                    # (case, leg): weight inside the case is equal; cases weigh 1/2 each
+  - [A, ignition]
+  - [A, flame]
+  - [B, startup]
+  - [B, steady]
+training:
+  repeats: 2
+  experts: 6
+  dt_min: 1.0e-6
+  dt_max: 1.0e-3
+seeding:
+  max_starts: 15000
+  per_start: 12
