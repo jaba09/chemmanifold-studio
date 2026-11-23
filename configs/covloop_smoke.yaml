@@ -1,0 +1,20 @@
+# COVLOOP general sampling, SMOKE size (cloud, minutes). Production sizes: configs/covloop_general.yaml
+seed: 0
+dt: {min: 1.0e-6, max: 1.0e-3, per_state: 2}
+balance: {cap_per_bin: 200}
+families:
+  R1: {n_traj: 6, n_keep: 20}
+  R2: {n_traj: 2, n_keep: 10}
+  R3: {n_mix: 2, n_keep: 10}
+  R4: {n_runs: 1, n_part: 16, n_steps: 30, n_keep: 40}
+  R5: {n: 3, n_keep: 10}
+  R6: {n: 4, n_keep: 8}
+  F1: {phis: [0.8, 1.2], Tu: [298.0, 300.0], n_keep: 30}
+  F2: {T_streams: [298.0], n_strain: 3, n_keep: 30}
+  F3: {phis: [1.0], mdots: [0.5], n_keep: 20}
+  F4: {phis_rich: [1.8], phis_lean: [0.8], n_strain: 2, n_keep: 20}
+  F5: {n_runs: 1, n_keep: 20}
+  P1: {n: 50}
+  P2: {n: 50}
+  P3: {n: 5, n_keep: 4}
+  P4: {n: 5, n_keep: 4}
