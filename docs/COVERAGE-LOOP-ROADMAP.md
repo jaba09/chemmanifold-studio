@@ -296,9 +296,9 @@ ISANN-ARC22 run 2 (CFD-adapted, flame 5.2 K), the single-ANN control.
 
 ## 9. Stages, run locations and cost
 
-All heavy runs on **sim1** (16 cores, no 2 h cut) by default, per the run-location rule; the cloud
-thread writes code, runs smoke tests and analyses; Javier's PC is not needed (no Fluent). To be
-confirmed by Javier (decision card in the thread).
+All heavy runs on **sim1** (16 cores, no 2 h cut), confirmed by Javier on 2026-11-23 at 14:48 CET; the cloud
+thread writes code, runs smoke tests and analyses; Javier's PC is not needed (no Fluent).
+
 
 | Stage | Work | Where | Cost (estimate) |
 |---|---|---|---|
@@ -340,7 +340,7 @@ in the thread.
 | Q3 | One shared training database and MoE for both cases, or one loop per case? | shared (tests generality; coverage still reported per case) |
 | Q4 | Case B variants (phi = 0.75, rich slit with air co-flow) | not included |
 | Q5 | ARC22 ISAT 1e-4 run on Case A as the same-mechanism bar | yes, at the end (~4 h, 8 ranks) |
-| Q6 | Run location | sim1 for all heavy runs (decision card) |
+| Q6 | Run location | sim1 for all heavy runs (DECIDED 2026-11-23) |
 
 ---
 
