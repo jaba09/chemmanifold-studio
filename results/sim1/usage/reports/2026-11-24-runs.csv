@@ -1,0 +1,4 @@
+date,kind,run_dir,core_hours,mean_cores_while_active,peak_cores,first_seen,last_seen
+2026-11-24,openfoam,/opt/ofb/runs/arc22/gri/flame_ext,43.89,15.97,15.98,00:00,02:40
+2026-11-24,openfoam,/opt/ofb/runs/arc22/gri/flame_ext/snap/.pp_gri53_ext,0.01,0.01,0.02,00:05,02:25
+2026-11-24,python,/opt/ofb/runs/arc22/gri/flame_ext,0.00,0.00,0.01,00:00,02:30
