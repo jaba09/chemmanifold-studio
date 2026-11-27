@@ -1,7 +1,7 @@
 # COVLOOP code (stage 0)
 
-Roadmap: `docs/COVERAGE-LOOP-ROADMAP.md`. Status 2026-11-23 (Spain time): stage 0 written and smoke-tested in the
-cloud only. Nothing has run on sim1.
+Roadmap: `docs/COVERAGE-LOOP-ROADMAP.md`. Status 2026-11-27 (Spain time): stage 0 written and smoke-tested in the
+cloud only, including the rollout loss and the leg export. Nothing has run on sim1 yet.
 
 | Piece | File | Tested |
 |---|---|---|
@@ -12,13 +12,12 @@ cloud only. Nothing has run on sim1.
 | Hole-seeded sampling S1-S4 (starts excluded, deduplicated across iterations) | `scripts/28_hole_sampling.py` | via `tests/smoke_covloop.py` |
 | Shadow checks -> trust (incl. NOx floors) | `openfoam/covloop/shadow_to_npz.py` | not yet (needs a real shadowDI.csv) |
 | Driver with frozen rules (train / coverage / seed / decide) | `openfoam/covloop/covloop.py`, `configs/covloop/rules.yaml` | `tests/smoke_covloop.py` (fake leg, no OpenFOAM) |
+| Rollout loss (24-step reference segments, closed loop with projection + T inversion) | `chemmanifold/moe.py` (`RolloutThermo`), `scripts/26` (`segments.npz`), `scripts/27 --segments` | `tests/smoke_rollout.py` |
+| Leg export: cells (T, Y22, rho V, dt, OOD by the leg's model) and 25/200-step sentinels from per-bin cell starts | `openfoam/covloop/cells_to_npz.py`, `openfoam/covloop/sentinel_from_cells.py` | `tests/smoke_cell_export.py` (fake OpenFOAM run) |
 | Case B slit burner | `openfoam/slitBurner/make_case.py` | files generated; blockMesh/solver not yet |
 
-Still to do on sim1 (gate G0/G1), each needs Javier's typed OK in the thread:
+Still to do on sim1 (gate G0/G1):
 1. Build `userChemStep` with `-DUSERCHEMSTEP_ARC` against the new core; load a `moe_top2` model; selftest.
-2. Cell export of a leg for ARC22 species (`cells.npz`: T, Y, mass = rho V, OOD flag): extend `foam_snapshot.py`
-   (today GA18 names) or write the OOD flags as a field.
-3. Sentinel export (`sentinel.npz`) from the userChemStep sentinel store (reason 4) rolled out 25/200 steps.
-4. Case B: blockMesh + checkMesh + 1 ms coarse (50 um) smoke, then the G1 reference runs.
-5. Rollout loss in `MoESurrogate.fit` (24-step segments, weight 0.5), not yet implemented.
-6. Production step 1 (`configs/covloop_general.yaml`, ~10-16 h on 8 cores) and G0 offline tests.
+2. Case B: blockMesh + checkMesh + 1 ms coarse (50 um) smoke, then the G1 reference runs.
+3. Check `cells_to_npz.py` on a real ARC22 leg (field names, binary vs ASCII, deltaT under LTS).
+4. Production step 1 (`configs/covloop_general.yaml`, ~10-16 h on 8 cores) and G0 offline tests.

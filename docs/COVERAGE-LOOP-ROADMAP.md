@@ -413,3 +413,21 @@ in the thread.
   families with ARC22 labels, coverage tool, hole-seeded sampling S1-S4, frozen-rule driver, Case B builder.
 - Not done yet: rollout loss in the MoE training; ARC22 cell export of a leg; sentinel export; the OpenFOAM
   build and Case B mesh/solver checks (sim1). Nothing has run on sim1.
+
+### 2026-11-27 (Spain time): remaining cloud items
+
+- Rollout loss in `MoESurrogate.fit`: reference segments (`segments.npz`, config `rollout:`, 24 steps of one dt
+  each, ARC22 kernel at constant h, p) written by `scripts/26`; the joint stage steps the model on its own output
+  (element projection + NASA-7 T inversion, as the C core) and adds the per-step error in the standardised
+  [T, BoxCox(Y)] space, weight 0.5 from 10 % of the joint epochs (`scripts/27 --segments`).
+  Found on the way: over long segments the ARC22 QSS closure drifts sum(Y) by up to 0.2 % and the integrated T
+  by up to 32 K away from h0; reference T is therefore taken from (h0, p, projected Y), like the C core step.
+- Found and fixed: the ARC element projection put the whole O balance on O2 and gave Y_O2 < 0 (down to -7e-3)
+  in 3.7 % of the smoke states (rich and fuel-side R6, F5, P2). `ARC.project` now falls back to the abundance-
+  weighted non-negative projection. The C kernel's `arc_project` used by arcChemStep has the same weakness
+  (OpenFOAM clips negative Y); to be checked on sim1.
+- Leg export: `openfoam/covloop/cells_to_npz.py` (T, Y22, mass = rho V, dt, OOD flag recomputed with the leg's
+  model at the snapshot dt, all flagged excluded) and `openfoam/covloop/sentinel_from_cells.py` (per-bin starts
+  from the cells, 25/200-step pure surrogate rollouts vs ARC22, same trust criteria as the shadow checks).
+  Sentinel starts now come from the snapshot instead of the plug-in's reason-4 store: every reacting bin gets
+  checks, and no C++ change is needed. Smoke-tested on a fake OpenFOAM run.

@@ -76,12 +76,15 @@ def main():
         pairs = [os.path.join(a.root, "general", "pairs.npz")]
         pairs += [os.path.join(a.root, f"iter{k}", "seeded", "pairs_seeded.npz") for k in range(a.K)]
         pairs = [p for p in pairs if os.path.exists(p)]
+        segs = [os.path.join(a.root, "general", "segments.npz")]   # rollout-loss reference segments
+        segs = [p for p in segs if os.path.exists(p)]
         tr = R["training"]
         for r in range(tr["repeats"]):
             sh([PY, "-I", os.path.join(ROOT_REPO, "scripts", "27_train_moe.py"),
                 os.path.join(a.root, f"iter{a.K}", f"train_r{r}"), *pairs, "--seed", str(r),
                 "--threads", str(a.np), "--experts", str(tr["experts"]),
-                "--dt-min", str(tr["dt_min"]), "--dt-max", str(tr["dt_max"]), *smoke])
+                "--dt-min", str(tr["dt_min"]), "--dt-max", str(tr["dt_max"]), *smoke,
+                *(["--segments", *segs] if segs else [])])
 
     elif a.cmd == "coverage":
         it = os.path.join(a.root, f"iter{a.K}")

@@ -2,6 +2,7 @@
 # docs/COVERAGE-LOOP-ROADMAP.md section 4. No heat loss, no jet mixing, no CFD-derived strain or times.
 seed: 0
 dt: {min: 1.0e-6, max: 1.0e-3, per_state: 2}     # refined from the first run's dt histogram
+rollout: {n_segments: 4000, steps: 24, T_min: 450.0}   # reference segments for the rollout loss
 balance: {cap_per_bin: 2000}
 families:
   R1: {n_traj: 4000, n_keep: 60}

@@ -4,7 +4,8 @@ label with the ARC22 kernel at several dt, save pairs (docs/COVERAGE-LOOP-ROADMA
 
   python scripts/26_general_sampling.py configs/covloop_general.yaml OUT_DIR [--families R1,F1,...] [--np 8]
 Output: OUT_DIR/states_<FAM>.npz (raw states, 43 sp) and OUT_DIR/pairs.npz with
-  T, Y (N,22), dt, dY (N,22), family (N,), species (22,)   -- physics data, may be used for training.
+  T, Y (N,22), dt, dY (N,22), family (N,), species (22,)   -- physics data, may be used for training;
+  OUT_DIR/segments.npz (config `rollout:`): T0, Y0, dt, Tref (M,n), Yref (M,n,22) for the MoE rollout loss.
 """
 import argparse, os, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -28,6 +29,21 @@ def _label(args):
     except Exception:
         return None
     return None if r[0] is None else r
+
+
+_GAS = None
+
+
+def _segment(args):
+    global _ARC, _GAS
+    if _ARC is None:
+        _ARC, _GAS = gs.ARC(), ct.Solution(gs.SKEL)
+    T, Y, dt, n = args
+    try:
+        Ts, Ys = gs.label_segment(_ARC, T, Y, dt, n, _GAS)
+    except Exception:
+        return None
+    return None if Ts is None or not np.all(np.isfinite(Ts)) else (Ts, Ys)
 
 
 def main():
@@ -100,6 +116,22 @@ def main():
     print(f"[label] {len(P['T'])} pairs in {time.time() - t0:.0f} s; failed states {sum(r is None for r in res)}")
     for f in fams:
         print(f"   {f}: {int((P['family'] == f).sum())} pairs")
+
+    # reference segments for the rollout loss (states drawn across families, one dt each)
+    rc = cfg.get("rollout", {})
+    M, n = int(rc.get("n_segments", 0)), int(rc.get("steps", 24))
+    if M > 0:
+        hot = np.where(T > rc.get("T_min", 450.0))[0]
+        pick = rng.choice(hot, min(M, len(hot)), replace=False)
+        sdt = 10 ** rng.uniform(lo, np.log10(dtc["max"]), len(pick))
+        t0 = time.time()
+        with Pool(a.np) as pool:
+            res = pool.map(_segment, [(T[i], Y22[i], d, n) for i, d in zip(pick, sdt)], chunksize=4)
+        ok = [j for j, r in enumerate(res) if r is not None]
+        np.savez(os.path.join(a.out, "segments.npz"), species=np.array(arc.ode),
+                 T0=T[pick[ok]], Y0=Y22[pick[ok]], dt=sdt[ok], family=fam[pick[ok]],
+                 Tref=np.array([res[j][0] for j in ok]), Yref=np.array([res[j][1] for j in ok]))
+        print(f"[segments] {len(ok)}/{len(pick)} segments x {n} steps in {time.time() - t0:.0f} s")
 
 
 if __name__ == "__main__":

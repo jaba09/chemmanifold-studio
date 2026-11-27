@@ -77,6 +77,10 @@ class MoEConfig:
     w_anchor: float = 0.05
     w_balance: float = 0.01
     local_weight_cap: float = 25.0
+    w_rollout: float = 0.5          # rollout loss weight (closed-loop 24-step segments), 0 = off
+    rollout_start: float = 0.10     # switched on after this fraction of the joint epochs
+    rollout_batch: int = 32
+    rollout_every: int = 2          # one rollout mini-batch every n joint batches
     threads: int = 8
     seed: int = 0
     species: list = field(default_factory=list)
@@ -192,6 +196,61 @@ def build_torch_model(n_feat, n_species, cfg: MoEConfig):
     return Top2MoE()
 
 
+# ----------------------------------------------------------------------------------------------- rollout loss
+
+class RolloutThermo:
+    """NASA-7 T inversion and element projection (torch, float64) for the model's species list."""
+
+    def __init__(self, species, mech):
+        import cantera as ct
+        from chemmanifold.physics import NasaTemperatureSolver, NullSpaceProjection
+        gas = ct.Solution(mech)
+        idx = [gas.species_index(s) for s in species]
+        co = np.array([gas.species(k).thermo.coeffs for k in idx])          # [Tmid, a_hi(7), a_lo(7)]
+        W = gas.molecular_weights[idx]
+        self.nasa = NasaTemperatureSolver(W, co[:, 0], co[:, 8:15], co[:, 1:8], n_iter=4)
+        A = np.array([[gas.n_atoms(k, e) * gas.atomic_weight(e) / gas.molecular_weights[k] for k in idx]
+                      for e in range(gas.n_elements)])
+        self.proj = NullSpaceProjection(A[np.abs(A).sum(1) > 0])
+
+
+class _RolloutLoss:
+    """Closed-loop multi-step loss on reference segments (same step as the C core: Y + dt R, project, T)."""
+
+    def __init__(self, model, seg, thermo, sur, cfg):
+        torch = _torch()
+        self.torch, self.model, self.th, self.cfg = torch, model, thermo, cfg
+        f = lambda a: torch.as_tensor(np.asarray(a, float))
+        self.T0, self.Y0, self.dt = f(seg["T0"]), f(seg["Y0"]), f(seg["dt"])
+        self.Tref, self.Yref = f(seg["Tref"]), f(seg["Yref"])
+        self.n = self.Tref.shape[1]
+        self.x_mu, self.x_sd = f(sur.x_mu), f(sur.x_sd)
+        self.R_mu, self.R_sd = f(sur.R_mu), f(sur.R_sd)
+        self.ls = ((torch.log10(self.dt) - sur.ldt_mu) / sur.ldt_sd)[:, None]
+        self.fref = self._feat(self.Tref.reshape(-1), self.Yref.reshape(-1, self.Yref.shape[-1]))
+        self.fref = self.fref.reshape(self.Tref.shape[0], self.n, -1)
+
+    def _feat(self, T, Y):
+        torch = self.torch
+        bc = ((torch.clamp(Y, min=0.0) + BC_FLOOR) ** BC_LAMBDA - 1.0) / BC_LAMBDA
+        return (torch.cat([T[:, None], bc], -1) - self.x_mu) / self.x_sd
+
+    def __call__(self, all_segments=False):
+        torch = self.torch
+        M = len(self.T0)
+        i = torch.arange(M) if all_segments else torch.randint(0, M, (min(self.cfg.rollout_batch, M),))
+        T, Y, dt, ls = self.T0[i], self.Y0[i], self.dt[i], self.ls[i]
+        h0 = self.th.nasa.enthalpy(Y, T)
+        loss = 0.0
+        for n in range(self.n):
+            out, _, _ = self.model(self._feat(T, Y), ls)
+            R = (out * self.R_sd + self.R_mu) * (T > self.cfg.T_frozen).to(Y.dtype)[:, None]
+            Y = self.th.proj(Y, Y + dt[:, None] * R)
+            T = self.th.nasa(Y, h0, T)
+            loss = loss + ((self._feat(T, Y) - self.fref[i, n]) ** 2).mean()
+        return loss / self.n
+
+
 # ----------------------------------------------------------------------------------------------- fit
 
 class MoESurrogate:
@@ -205,8 +264,15 @@ class MoESurrogate:
         x = raw_features(T, Y)
         return (x - self.x_mu) / self.x_sd, ((np.log10(dt) - self.ldt_mu) / self.ldt_sd)[:, None]
 
-    def fit(self, T, Y, dt, dY, weight=None, psi=None, log=print):
-        """T (N,), Y (N, S), dt (N,), dY (N, S): physics-exploration pairs only."""
+    def fit(self, T, Y, dt, dY, weight=None, psi=None, log=print, segments=None, thermo=None):
+        """T (N,), Y (N, S), dt (N,), dY (N, S): physics-exploration pairs only.
+
+        segments (optional): dict T0 (M,), Y0 (M, S), dt (M,), Tref (M, n), Yref (M, n, S) = reference ARC22
+        trajectories at constant (h, p) sampled every dt (scripts/26 writes segments.npz). With `thermo`
+        (RolloutThermo) the joint stage adds the closed-loop rollout loss: the model is stepped n times on its own
+        output (element projection + NASA-7 T inversion, as in the C core) and the error is taken in the
+        standardised feature space [T, BoxCox(Y)] at every step.
+        """
         torch = _torch()
         c = self.cfg
         torch.manual_seed(c.seed), np.random.seed(c.seed)
@@ -275,8 +341,17 @@ class MoESurrogate:
                                  {"params": model.experts.parameters(), "lr": c.lr_joint_expert}])
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, max(c.epochs_joint, 1))
         inv_s = torch.clamp(1.0 / model.s, max=c.local_weight_cap)
+        roll = None
+        if segments is not None and thermo is not None and c.w_rollout > 0 and len(segments["T0"]):
+            roll = _RolloutLoss(model, segments, thermo, self, c)
+            log(f"[moe] rollout loss on {len(segments['T0'])} segments x {roll.n} steps, weight {c.w_rollout}, "
+                f"from joint epoch {int(c.rollout_start * c.epochs_joint) + 1}")
+        l_roll = torch.zeros(())
+        nb = 0
         for ep in range(c.epochs_joint):
+            use_roll = roll is not None and ep >= int(c.rollout_start * c.epochs_joint)
             for i in torch.randperm(N).split(c.batch):
+                nb += 1
                 opt.zero_grad()
                 out, z, (w1, w2, k1, k2) = model(tx[i], tl[i])
                 err = out - tR[i]
@@ -287,13 +362,21 @@ class MoESurrogate:
                 frac = torch.zeros(K, dtype=z.dtype).index_add_(0, k1, w1).index_add_(0, k2, w2) / len(i)
                 l_bal = K * (p * frac).sum()
                 loss = l_glob + c.w_local * l_loc + c.w_anchor * l_ce + c.w_balance * l_bal
+                if use_roll and nb % c.rollout_every == 0:
+                    l_roll = roll()
+                    loss = loss + c.w_rollout * l_roll
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
                 opt.step()
             sched.step()
             if ep % max(1, c.epochs_joint // 10) == 0 or ep == c.epochs_joint - 1:
-                log(f"[moe] stage 2 epoch {ep + 1}/{c.epochs_joint} glob {l_glob.item():.4g} loc {l_loc.item():.4g}")
+                log(f"[moe] stage 2 epoch {ep + 1}/{c.epochs_joint} glob {l_glob.item():.4g} loc {l_loc.item():.4g}"
+                    f" roll {l_roll.item():.4g}")
         hist["final_glob_mse"] = l_glob.item()
+        if roll is not None:
+            with torch.no_grad():
+                hist["final_rollout"] = roll(all_segments=True).item()
+            log(f"[moe] final rollout loss (all segments) {hist['final_rollout']:.4g}")
         self.torch_model, self.history = model, hist
         self.export_arrays()
         return self

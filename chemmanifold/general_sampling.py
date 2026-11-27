@@ -48,6 +48,12 @@ class ARC:
         self.ode = self.names[:22]
         self.W = np.array([self.lib.arc_species_W(k) for k in range(43)])
         self._D = ctypes.POINTER(ctypes.c_double)
+        E = np.zeros((4, 22))
+        for k in range(22):
+            ek = np.zeros(4)
+            self.lib.arc_species_elements(k, self._p(ek))
+            E[:, k] = ek / self.W[k]
+        self.A22 = E                      # kmol element / kg per unit Y_k (C, H, O, N)
 
     def _p(self, a):
         return a.ctypes.data_as(self._D)
@@ -65,8 +71,25 @@ class ARC:
         return e
 
     def project(self, Y22, el0):
+        """ARC element projection (QSS element mass -> CO2/H2O/N2/O2), kept non-negative.
+
+        The C kernel's projection puts the oxygen balance on O2; in rich or fuel-side states with little O2 that
+        can drive Y_O2 below zero (seen down to -7e-3 in the smoke data). Such states are then moved to the
+        nearest non-negative composition with the same elements by the abundance-weighted active-set
+        projection (numpy twin of physics.NullSpaceProjection, acting on all 22 species).
+        """
         Y = np.array(Y22, float)
-        self.lib.arc_project(self._p(Y), self._p(np.ascontiguousarray(el0, float)))
+        el0 = np.ascontiguousarray(el0, float)
+        self.lib.arc_project(self._p(Y), self._p(el0))
+        if Y.min() < -1e-14:
+            A = self.A22
+            for _ in range(8):
+                Y = np.maximum(Y, 0.0)
+                r = A @ Y - el0
+                w = Y + 1e-15
+                lam = np.linalg.solve((A * w) @ A.T + 1e-24 * np.eye(4), r)
+                Y = Y - w * (lam @ A)
+            Y = np.maximum(Y, 0.0)
         return Y
 
     def elements43(self, Y43):
@@ -108,6 +131,32 @@ def label_arc(arc, T, Y22, dts, rtol=1e-8, atol=1e-14):
     el0 = arc.elements(Y22)
     Y = np.array([arc.project(y, el0) for y in Y])
     return dts, Y, sol.y[22]
+
+
+def label_segment(arc, T, Y22, dt, n_steps, gas=None):
+    """Reference closed-loop segment: ARC22 state at dt, 2 dt, ... n dt (constant h, p). Returns (T (n,), Y (n, 22)).
+
+    Used by the MoE rollout loss (chemmanifold/moe.py); it is the same 0D integration as `label_arc`. The ARC
+    QSS closure does not conserve the transported mass exactly, so over long segments sum(Y) drifts (up to ~0.2 %
+    over 24 ms at 2500 K) and the integrated T no longer matches h0. Each reference state is therefore defined like
+    the C core step: element projection of Y, then T from (h0, p, Y) with the skel43 NASA-7 data.
+    """
+    r = label_arc(arc, T, Y22, dt * np.arange(1, n_steps + 1))
+    if r[0] is None:
+        return None, None
+    gas = gas or ct.Solution(SKEL)
+    idx = [gas.species_index(s) for s in arc.ode]
+    y = np.zeros(gas.n_species)
+    y[idx] = Y22
+    gas.TPY = T, P0, y
+    h0 = gas.enthalpy_mass
+    Ts = np.empty(n_steps)
+    for k, Yk in enumerate(r[1]):
+        y[:] = 0.0
+        y[idx] = Yk
+        gas.HPY = h0, P0, y
+        Ts[k] = gas.T
+    return Ts, r[1]
 
 
 # ----------------------------------------------------------------------------------------------- helpers
