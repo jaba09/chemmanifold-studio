@@ -45,7 +45,7 @@ def fig_1d():
 
 
 def fig_maps(F):
-    a = np.load(F / "arc22_mean_0.125-0.15.npz"); g = np.load(F / "gri53_mean_0.125-0.15.npz")
+    a = np.load(F / "arc22_ext_mean_0.2-0.3.npz"); g = np.load(F / "gri53_ext_mean_0.2-0.3.npz")
     x, r = 1e3 * a["x"].astype(float), 1e3 * a["r"].astype(float)
     tri = mtri.Triangulation(x, r)
     p = np.stack([x[tri.triangles], r[tri.triangles]], -1)
@@ -69,7 +69,7 @@ def fig_maps(F):
     h = (a["T"] > 1500) | (g["T"] > 1500); V = a["V"].astype(float)
     dT = np.average(np.abs(a["T"].astype(float) - g["T"])[h], weights=V[h])
     axs.flat[5].axis("off")
-    axs.flat[5].text(0.02, 0.5, "Mean of the snapshots 0.125-0.15 s\n(11 each), same mesh, same start.\n"
+    axs.flat[5].text(0.02, 0.5, "Mean of the snapshots 0.2-0.3 s\n(41 each), same mesh, same start,\nsame radiation and pot walls.\n"
                      f"Hot-cell mean |dT| = {dT:.1f} K\nThe pot bottom (grey) is at x = 50 mm.", fontsize=8, va="center")
     fig.subplots_adjust(wspace=0.45, hspace=0.35)
     fig.savefig(OUT / "fig_burner_maps.pdf")
@@ -100,7 +100,7 @@ def fig_ign(R):
 
 def fig_domain(F):
     """Sketch of the burner domain: every cell centre (grey), the flame (mean T of OF GRI-Mech 3.0), labels."""
-    g = np.load(F / "gri53_mean_0.125-0.15.npz")
+    g = np.load(F / "gri53_ext_mean_0.2-0.3.npz")
     x, r, T = 1e3 * g["x"].astype(float), 1e3 * g["r"].astype(float), g["T"].astype(float)
     fig, ax = plt.subplots(figsize=(6.8, 2.4))
     ax.scatter(x, r, s=0.15, c="0.75", lw=0, rasterized=True)

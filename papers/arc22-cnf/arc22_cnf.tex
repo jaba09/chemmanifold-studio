@@ -42,9 +42,9 @@ checks against GRI-Mech~3.0 agree: the original reduction reproduces ignition de
 near blow-out; an independent rebuild gives the same net production rates (maximum relative difference $2\times10^{-8}$), ignition delays within
 1.43\,\% up to $\phi=2$ and 1\,atm flame speeds within 1.3\,\%, and locates the weak point in hot rich gas. As an
 OpenFOAM chemistry library, the ARC was used for direct integration of a laminar, radiating, axisymmetric \ce{CH_{4}}
-jet flame under a pot. In the same code as full GRI-Mech~3.0 it reproduces the flame to 3.2\,K in mean hot-cell
-temperature, with OH, CO and NO within 7\,\% (relative L1: volume-weighted mean absolute difference over the mean of the larger value), and ignites it at the same time, at 2.7--3.4 times lower
-cost per step; HCN and \ce{N_{2}O} are the weakest species (17--23\,\%). The 38.6\,K difference to a Fluent GRI-Mech~3.0
+jet flame under a pot. In the same code as full GRI-Mech~3.0 it reproduces the flame to 3.3\,K in mean hot-cell
+temperature over 0.2--0.3\,s, with OH, CO and NO within 8\,\% (relative L1: volume-weighted mean absolute difference over the mean of the larger value), and ignites it at the same time, at 2.7--3.4 times lower
+cost per step; HCN and \ce{N_{2}O} are the weakest species (17--21\,\%). The 38.6\,K difference to a Fluent GRI-Mech~3.0
 solution on the same mesh is below the 48.8\,K that separates the two codes with identical chemistry.
 \end{abstract}
 
@@ -407,12 +407,13 @@ temperature of OF GRI-Mech~3.0 above 600\,K, the unmeshed pot, and the hood baff
 \end{figure}
 
 Table~\ref{tab:solutions} lists the solutions. OF GRI and OF ARC22 both start from the OF GA18 state at 0.1\,s and run
-with $\Delta t=2\times10^{-5}$\,s; snapshots every 2.5\,ms are averaged cell by cell. OF GRI ran to 0.15\,s. OF ARC22
-ran to 0.1874\,s. There the temperature of one gas cell on the axis, just below the pot bottom, fell from 300\,K to a
-negative value within one time step, which stops the solver. The same cell failed in OF GA18 at 0.1875\,s: the
-radiative flux on the axis-adjacent faces of the pot bottom becomes noisy face to face once the fvDOM ray solution
-stalls, and the cooling of that cell then runs away. It is independent of the chemistry; the last clean ARC state is
-0.185\,s. OpenFOAM cell $i$ is Fluent cell $i+1$
+with $\Delta t=2\times10^{-5}$\,s; snapshots every 2.5\,ms are averaged cell by cell. Both were run to 0.3\,s. With the
+original wall and radiation settings, OF ARC22 stopped at 0.1874\,s: the temperature of one gas cell on the axis, just
+below the pot bottom, fell from 300\,K to a negative value within one time step. The same cell had failed in OF GA18 at
+0.1875\,s. The pot bottom is a zero-total-flux wall, so the temperature of each face is whatever balances its radiative
+flux; on the tiny axis-adjacent faces that flux is noisy, the face temperature falls, and the gas cell next to it is
+cooled until it runs away. The cause is numerical and independent of the chemistry; Section~\ref{sec:numerics} gives
+the remedies, which let both runs reach 0.3\,s. OpenFOAM cell $i$ is Fluent cell $i+1$
 on the identical mesh, so every comparison is cell by cell. Differences are volume-weighted over the full revolution:
 the mean hot $|\Delta T|$ uses the cells above 1500\,K in either solution, and the relative L1 of a species is
 $\overline{|a-b|}/\overline{\max(a,b)}$ over the cells above 600\,K in either.
@@ -429,12 +430,13 @@ Label & Code & Chemistry (direct integration) & Field used \\
 Fluent GRI & Fluent 20.2 & GRI-Mech 3.0, 53 species & steady \\
 Fluent GA18 & Fluent 20.2 & GA18, 18 species & steady \\
 OF GA18 (A1r) & OpenFOAM v2412 & GA18, seulex $10^{-10}/10^{-5}$ & mean 0.1--0.1875\,s \\
-OF GRI & OpenFOAM v2412 & GRI-Mech 3.0, seulex $10^{-10}/10^{-5}$ & mean 0.125--0.15\,s \\
-OF ARC22 & OpenFOAM v2412 & ARC\_GRI30\_NOx22, Rosenbrock34 & mean 0.15--0.185\,s; 0.125--0.15\,s vs OF GRI \\
+OF GRI & OpenFOAM v2412 & GRI-Mech 3.0, seulex $10^{-10}/10^{-5}$ & mean 0.125--0.15\,s$^{a}$; 0.2--0.3\,s \\
+OF ARC22 & OpenFOAM v2412 & ARC\_GRI30\_NOx22, Rosenbrock34 & mean 0.15--0.185\,s$^{a}$; 0.2--0.3\,s \\
 \bottomrule
 \end{tabular}}
 \\[2pt]{\footnotesize Fluent: kinetic-theory transport with thermal diffusion. OpenFOAM: constant Lewis numbers,
-$\mathrm{Sc}_t=0.7$.}
+$\mathrm{Sc}_t=0.7$. $^{a}$Windows of the comparison with Fluent (Table~\ref{tab:fluent}), before the remedies of
+Section~\ref{sec:numerics}; the same-code comparison uses 0.2--0.3\,s, with the remedies in both runs.}
 \end{table}
 
 \subsection{Against Fluent}
@@ -471,37 +473,43 @@ OF GA18 vs Fluent GA18 & \multicolumn{3}{l}{code} & 48.8 & 0.22 / 0.12 \\
 OF GA18 vs Fluent GRI & \multicolumn{3}{l}{both} & 55.4 & 0.25 / 0.15 \\
 OF ARC22 vs Fluent GRI & \multicolumn{3}{l}{code and reduction} & 38.6 & 0.20 / 0.08 \\
 OF GRI vs Fluent GRI & \multicolumn{3}{l}{code (GRI chemistry)} & 37.2 & 0.15 / 0.10 \\
-OF ARC22 vs OF GRI$^{a}$ & \multicolumn{3}{l}{reduction (same code)} & 3.2 & 0.015 / 0.033 \\
+OF ARC22 vs OF GRI$^{a}$ & \multicolumn{3}{l}{reduction (same code)} & 3.3 & 0.019 / 0.038 \\
 \bottomrule
 \end{tabular}}
-\\[2pt]{\footnotesize $^{a}$Both averaged over 0.125--0.15\,s (Section~\ref{sec:samecode}).}
+\\[2pt]{\footnotesize $^{a}$Both averaged over 0.2--0.3\,s (Section~\ref{sec:samecode}).}
 \end{table}
 
 \subsection{Same code: ARC against full GRI-Mech 3.0}
 \label{sec:samecode}
-Both OpenFOAM runs are averaged over 0.125--0.15\,s (11 snapshots each; Table~\ref{tab:samecode},
-Fig.~\ref{fig:maps}). Within one code the ARC reproduces the GRI-Mech~3.0 flame to 3.2\,K, so the 38.6\,K against
-Fluent GRI is almost entirely code difference. The differences grow slowly with time: over 0.1025--0.125\,s the hot
-$|\Delta T|$ was 1.7\,K and the \ce{N_{2}O} L1 0.11. HCN and \ce{N_{2}O}, on the prompt and \ce{N_{2}O}-intermediate routes,
-are the weakest species; \ce{N_{2}O} is small in absolute terms (peak $2.6\times10^{-6}$ against $1.1\times10^{-6}$).
+Both OpenFOAM runs are averaged over 0.2--0.3\,s (41 snapshots each; Table~\ref{tab:samecode}, Fig.~\ref{fig:maps}),
+with identical radiation and pot-wall temperatures (Section~\ref{sec:numerics}). The window covers about one period
+of a slow oscillation of the flame: $V(T>1500$\,K) swings between 17.9 and 20.5\,cm$^3$ with a period of about
+0.1\,s, and $T_{\max}$ by $\pm4$\,K. Within one code the ARC reproduces the GRI-Mech~3.0 flame to 3.3\,K, so the
+38.6\,K against Fluent GRI is almost entirely code difference. The result does not depend on the window: the hot
+$|\Delta T|$ is 1.7\,K over 0.1025--0.125\,s, 3.2\,K over 0.125--0.15\,s (before the remedies) and 3.3\,K over
+0.2--0.3\,s, with NO L1 0.07 throughout. HCN and \ce{N_{2}O}, on the prompt and \ce{N_{2}O}-intermediate routes, are
+the weakest species; \ce{N_{2}O} is small in absolute terms (peak $7.6\times10^{-6}$ against $5.0\times10^{-6}$). The
+position of the OH maximum is not a usable metric here: the maximum is flat, and equal peak values (3.43 and
+$3.45\times10^{-3}$) sit at 13 and 19\,mm.
 
 \begin{table}[t]
 \centering\small
-\caption{ARC22 against full GRI-Mech~3.0 in OpenFOAM, mean 0.125--0.15\,s. Totals are domain integrals, ARC/GRI.}
+\caption{ARC22 against full GRI-Mech~3.0 in OpenFOAM, mean 0.2--0.3\,s. Totals are domain integrals, ARC/GRI.}
 \label{tab:samecode}
 \resizebox{\linewidth}{!}{%
 \begin{tabular}{lccc}
 \toprule
 Quantity & OF GRI-Mech 3.0 & OF ARC22 & Difference \\
 \midrule
-$T_{\max}$ [K] & 2107 & 2108 & +1\,K \\
-$V(T>1500$\,K) [cm$^3$] & 19.46 & 19.48 & +0.1\,\% \\
-$x$(OH max) [mm] & 19.1 & 19.4 & +0.3\,mm \\
-Mean hot $|\Delta T|$ [K] & \multicolumn{2}{c}{--} & 3.2 (max.\ 17) \\
-OH / CO / \ce{CO_{2}} rel.\ L1 & \multicolumn{2}{c}{--} & 0.015 / 0.033 / 0.006 \\
-NO / \ce{NO_{2}} rel.\ L1 (total) & \multicolumn{2}{c}{--} & 0.071 (1.04) / 0.033 (0.98) \\
-HCN / \ce{N_{2}O} rel.\ L1 (total) & \multicolumn{2}{c}{--} & 0.17 (1.21) / 0.23 (1.27) \\
-\ce{C_{2}H_{2}} rel.\ L1 & \multicolumn{2}{c}{--} & 0.081 \\
+$T_{\max}$ [K] & 2101 & 2103 & +2\,K \\
+$V(T>1500$\,K) [cm$^3$] & 19.14 & 19.20 & +0.3\,\% \\
+OH max [$10^{-3}$] & 3.45 & 3.43 & $-0.6$\,\% \\
+NO max [$10^{-4}$] & 2.59 & 2.48 & $-4$\,\% \\
+Mean hot $|\Delta T|$ [K] & \multicolumn{2}{c}{--} & 3.3 (max.\ 40) \\
+OH / CO / \ce{CO_{2}} rel.\ L1 & \multicolumn{2}{c}{--} & 0.019 / 0.038 / 0.010 \\
+NO / \ce{NO_{2}} rel.\ L1 (total) & \multicolumn{2}{c}{--} & 0.074 (0.98) / 0.038 (0.97) \\
+HCN / \ce{N_{2}O} rel.\ L1 (total) & \multicolumn{2}{c}{--} & 0.17 (1.21) / 0.21 (1.17) \\
+\ce{C_{2}H_{2}} rel.\ L1 & \multicolumn{2}{c}{--} & 0.087 \\
 Cost per step, 8 ranks [s] & 30 & 11.2 & $2.7\times$ cheaper \\
 \bottomrule
 \end{tabular}}
@@ -510,7 +518,7 @@ Cost per step, 8 ranks [s] & 30 & 11.2 & $2.7\times$ cheaper \\
 \begin{figure}[t]
 \centering
 \includegraphics[width=\linewidth]{figs/fig_burner_maps.pdf}
-\caption{Mean fields 0.125--0.15\,s below the pot bottom (grey): temperature and NO mass fraction with full
+\caption{Mean fields 0.2--0.3\,s below the pot bottom (grey): temperature and NO mass fraction with full
 GRI-Mech~3.0 (a, c) and ARC22 (b, d) in OpenFOAM, and their temperature difference (e).}
 \label{fig:maps}
 \end{figure}
@@ -554,10 +562,10 @@ $\times0.97$, OH L1 13\,\% and CO L1 7\,\%. OF GRI shows the same offset and the
 GA18-based reference flames carry a chemistry bias of about 30\,K against GRI-Mech~3.0.
 
 \paragraph{Weak species and rich gas}
-HCN ($+21$\,\% in total) and \ce{N_{2}O} ($+27$\,\%) sit on the prompt and \ce{N_{2}O}-intermediate routes, whose radicals
+HCN ($+21$\,\% in total) and \ce{N_{2}O} ($+17$\,\%) sit on the prompt and \ce{N_{2}O}-intermediate routes, whose radicals
 (CH, NCO, HCNO, NNH) are quasi-steady. The truncated directions include CH\,+\,\ce{CH_{2}}, CH\,+\,HCCO and N\,+\,NCO, a
 plausible cause not yet tested; a nonlinear QSSA for that sub-block is the obvious remedy. NO itself stays within
-4--9\,\% in total in the flame and during ignition. At $\phi=2$ and $T>2400$\,K the burnt gas is 7--14\,K cool and NO
+2--9\,\% in total in the flame and during ignition. At $\phi=2$ and $T>2400$\,K the burnt gas is 7--14\,K cool and NO
 11--16\,\% high, and rich 5\,atm flames are the worst 1D case; the burner (peak about 2100\,K) does not reach this
 regime, but rich high-pressure flames need further checks.
 
@@ -581,15 +589,22 @@ to that level. The mechanism-specific evidence is the same-code comparison and t
 ARC carry. Cross-code peaks reflect both effects: the ARC $T_{\max}$ is 27\,K above Fluent GRI and its HCN peak
 28\,\% higher.
 
-\paragraph{Numerical limits}
-The flame windows are short (35\,ms for the ARC mean, 25\,ms for the same-code comparison); $V(T>1500$\,K) still
-drifts slowly (19.4 to 18.3\,cm$^3$ over 0.15--0.185\,s) and NO is still building up in the exhaust. All OpenFOAM
-flame runs end near 0.187\,s at the same near-axis fvDOM divergence, independent of the chemistry, and outlet NO$_x$
-cannot yet be evaluated. Planned remedies, in order: (i) restart from 0.185\,s with the radiation solved at every flow step instead of every
-tenth, and more ray-solver iterations; (ii) if the cell still diverges, a finer angular discretization of fvDOM near
-the axis or a fixed-temperature condition on the axis corner of the pot bottom; (iii) then extend the ARC and GRI runs
-to about 0.3\,s, which gives a common 100\,ms averaging window and lets the burnt gas reach the outlets, so that
-outlet NO$_x$ can be compared. \todo{choose and run}
+\paragraph{Wall instabilities and their remedies}
+\label{sec:numerics}
+All OpenFOAM flame runs first stopped near 0.187\,s at the near-axis cell under the pot bottom (Section~\ref{sec:burner}).
+Solving the radiation at every flow step, with more ray-solver sweeps, made it fail sooner (after 9 steps): it feeds
+the loop between the wall flux and the face temperature. A finer angular discretization of fvDOM (256 instead of 64
+directions) removed it at the pot bottom until 0.2268\,s, but the same loop then appeared at the axis corner of the pot
+top (0.2072\,s). Under-relaxing the radiative flux and the wall temperature in the boundary condition did not help. What
+worked was to hold the pot walls at a fixed temperature profile: each face at its own value in a clean, settled state
+(0.205\,s for the upper side and top, 0.22\,s for the bottom, taken from the ARC run). The GRI run received exactly
+the same face temperatures, mapped face by face, so both runs share radiation settings and pot temperatures in the
+0.2--0.3\,s window. In the GRI run only, a cell next to the outer lab wall ($r=140$\,mm) ran away at 0.2622\,s by the
+same mechanism; that wall was held at the ambient 300\,K from 0.2625\,s, and the cells within 20\,mm of it differ
+between the two runs by 0.3\,K on average. None of these changes shows in the flame: $T_{\max}$ and $V(T>1500$\,K)
+change smoothly through the switches. The burnt gas has not reached the outlets even at 0.3\,s, so outlet NO$_x$ is not
+compared; NO$_x$ is compared inside the domain. \todo{decide whether to report the fixed-temperature pot as a
+modelling choice (it replaces the zero-flux condition of the Fluent case) or to seek a radiation-side fix}
 
 \paragraph{Validation range}
 The 0D/1D checks cover ignition at 1--10\,atm and $T_0=1100$--1600\,K up to $\phi=2$, flame speeds at 1 and 5\,atm
@@ -607,8 +622,8 @@ within 3\,\% down to near blow-out. An independent rebuild from the specificatio
 $2\times10^{-8}$, so the procedure of Section~\ref{sec:reduction} fully defines the mechanism.
 \item As an OpenFOAM chemistry library it runs direct integration of a radiating burner flame at 1.5 times the GA18
 cost and 2.7--3.4 times faster than full GRI-Mech~3.0, and adds NO, \ce{NO_{2}}, \ce{N_{2}O} and HCN predictions.
-\item In the same code it reproduces the GRI-Mech~3.0 burner flame to 3.2\,K in mean hot-cell temperature, with OH,
-CO and NO within 7\,\% (relative L1), and ignites it at the same time (2.8\,ms); HCN and \ce{N_{2}O}, at 17--23\,\%, are
+\item In the same code it reproduces the GRI-Mech~3.0 burner flame to 3.3\,K in mean hot-cell temperature, with OH,
+CO and NO within 8\,\% (relative L1), and ignites it at the same time (2.8\,ms); HCN and \ce{N_{2}O}, at 17--21\,\%, are
 the species to improve.
 \item Against Fluent with GRI-Mech~3.0 the gap is 38.6\,K: code-to-code difference (48.8\,K with GA18 in both codes),
 not the mechanism. Likewise the earlier ignition and hotter flame of GA18 are GA18 chemistry.
