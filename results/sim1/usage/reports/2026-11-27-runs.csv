@@ -1,0 +1,4 @@
+date,kind,run_dir,core_hours,mean_cores_while_active,peak_cores,first_seen,last_seen
+2026-11-27,openfoam,/home/ubuntu/pc_moe_nox,191.23,15.94,15.97,11:25,23:55
+2026-11-27,other,(system / other),0.77,0.06,0.13,10:35,23:55
+2026-11-27,python,(system / other),0.00,0.00,0.00,15:15,15:15
