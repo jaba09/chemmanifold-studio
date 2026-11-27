@@ -60,7 +60,7 @@ fi
 if [ "$LEG" = gri ] || [ "$LEG" = all ]; then
     run_leg "$G" gri53_ext; touch "$W/.axis_done_gri"
 fi
-[ "$LEG" = arc ] || [ "$LEG" = gri ] && { say "leg done"; exit 0; }
+if [ "$LEG" = arc ] || [ "$LEG" = gri ]; then say "leg done"; exit 0; fi   # (a bare A || B && C here killed LEG=fields under set -e)
 until [ -f "$W/.axis_done_arc" ] && [ -f "$W/.axis_done_gri" ]; do sleep 300; done
 
 # field files for the common window and the end state

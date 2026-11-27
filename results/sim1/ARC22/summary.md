@@ -121,6 +121,28 @@ Cell by cell ARC vs GRI (`ign_gri/compare_arc_gri_ign.md`, hot = T > 1000 K): ab
 At 3 ms the ARC kernel is slightly behind (Tmax 1871 vs 1896 K), so early NO and HCN lag (x0.75 / x0.81); from 4 ms
 they run 6-12 % high, as in the steady flame.
 
+## Final same-code comparison, 0.20-0.30 s (axis remedies applied; 27 Nov)
+
+Both runs extended to 0.3 s with fvDOM 256 rays and the pot walls at fixed temperatures (bottom and upper side + top at the
+ARC face values of 0.22 / 0.205 s; GRI given exactly those values, mapped face by face at 0.175 s; server/sim1/axis_ext.sh,
+map_pot_T.py). GRI only: outer lab side wall held at 300 K from 0.2625 s (a wall cell ran away at 0.2622 s); near-wall
+cells (r > 120 mm) differ by 0.3 K on average in the window mean. Window 0.20-0.30 s = about one period of the slow
+flame oscillation (V(T > 1500 K) 17.9-20.5 cm3, period about 0.1 s). `compare_of_gri_ext.md`,
+`fields/{arc22,gri53}_ext_mean_0.2-0.3.npz`, `fields/{arc22,gri53}_ext_t0.3.npz`.
+
+| Metric | ARC22 | GRI-Mech 3.0 |
+|---|---|---|
+| V(T > 1500 K) [cm3] | 19.20 | 19.14 |
+| Tmax [K] | 2103.0 | 2101.4 |
+| OH / CO max | 3.43e-3 / 0.0509 | 3.45e-3 / 0.0541 |
+| NO / NO2 / N2O / HCN max | 2.48e-4 / 4.3e-5 / 7.6e-6 / 1.48e-4 | 2.59e-4 / 3.6e-5 / 5.0e-6 / 1.20e-4 |
+
+Paper convention (hot = T > 1500 K in either, rel. L1 over T > 600 K, totals ARC/GRI): hot abs(dT) 3.3 K (max 40 K, the
+pot-bottom axis cell), OH 0.019 (1.00), CO 0.038 (0.97), CO2 0.010, NO 0.074 (0.98), NO2 0.038 (0.97), N2O 0.210 (1.17),
+HCN 0.173 (1.21), C2H2 0.087 (1.09). Same as the 0.125-0.15 s window (3.2 K, NO 0.071, HCN 0.17, N2O 0.23): the result
+does not depend on the window or on the axis remedies. x(OH max) is not usable (flat maximum: 13.1 vs 18.6 mm at equal
+peak OH). Outlet NOx still not usable at 0.3 s (outlets carry initial gas).
+
 ## Benchmark: Fluent DI with full GRI-Mech 3.0
 
 Javier supplied a Fluent DI solution of the same corrected burner with full GRI-Mech 3.0 (53 species). It is the main
