@@ -14,10 +14,12 @@ cloud only, including the rollout loss and the leg export. Nothing has run on si
 | Driver with frozen rules (train / coverage / seed / decide) | `openfoam/covloop/covloop.py`, `configs/covloop/rules.yaml` | `tests/smoke_covloop.py` (fake leg, no OpenFOAM) |
 | Rollout loss (24-step reference segments, closed loop with projection + T inversion) | `chemmanifold/moe.py` (`RolloutThermo`), `scripts/26` (`segments.npz`), `scripts/27 --segments` | `tests/smoke_rollout.py` |
 | Leg export: cells (T, Y22, rho V, dt, OOD by the leg's model) and 25/200-step sentinels from per-bin cell starts | `openfoam/covloop/cells_to_npz.py`, `openfoam/covloop/sentinel_from_cells.py` | `tests/smoke_cell_export.py` (fake OpenFOAM run) |
+| Selftest vectors for moe_top2 (chemmanifold_tests.txt for the plug-in's on-load selftest; checked vs numpy) | `scripts/29_export_moe_tests.py`, `fluent/udf/cm_make_tests.c` (run by `scripts/27` at the end) | smoke model: 306/306 cases pass `cm_selftest` |
 | Case B slit burner | `openfoam/slitBurner/make_case.py` | files generated; blockMesh/solver not yet |
 
 Still to do on sim1 (gate G0/G1):
-1. Build `userChemStep` with `-DUSERCHEMSTEP_ARC` against the new core; load a `moe_top2` model; selftest.
-2. Case B: blockMesh + checkMesh + 1 ms coarse (50 um) smoke, then the G1 reference runs.
+1. DONE 2026-11-28: userChemStep built (/home/ubuntu/runs/covloop/lib, put it first on LD_LIBRARY_PATH; MPICH mpirun),
+   C core = numpy to 7e-15 on 2308 pairs; Case B 50 um 1 ms clean on 4 ranks (36 min), not anchored yet.
+2. Case B 20 ms coarse run (anchoring), then the G1 reference runs.
 3. Check `cells_to_npz.py` on a real ARC22 leg (field names, binary vs ASCII, deltaT under LTS).
 4. Production step 1 (`configs/covloop_general.yaml`, ~10-16 h on 8 cores) and G0 offline tests.

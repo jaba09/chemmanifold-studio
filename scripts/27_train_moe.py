@@ -3,11 +3,12 @@
 
   python scripts/27_train_moe.py OUT_DIR pairs.npz [more_pairs.npz ...] [--segments segments.npz ...]
          [--seed 0] [--threads 8] [--smoke] [--no-rollout]
-Writes OUT_DIR/moe.npz (+ .json) and OUT_DIR/chemmanifold_model.txt (C core, arch moe_top2).
+Writes OUT_DIR/moe.npz (+ .json), OUT_DIR/chemmanifold_model.txt (C core, arch moe_top2) and
+OUT_DIR/chemmanifold_tests.txt (selftest vectors, scripts/29).
 Refuses any pairs file whose `origin` says CFD/DI (javier-methodology): starting states from CFD are flagged
 `excluded` by step 4 and never reach this script.
 """
-import argparse, os, sys, time
+import argparse, os, subprocess, sys, time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 import numpy as np
 from chemmanifold.moe import MoEConfig, MoESurrogate, RolloutThermo, write_core_model
@@ -70,6 +71,9 @@ def main():
     m.save(os.path.join(a.out, "moe.npz"))
     write_core_model(os.path.join(a.out, "chemmanifold_model.txt"), m.arrays, species)
     print(f"trained on {len(D['T'])} pairs in {m.history['train_s']:.0f} s -> {a.out}")
+    # selftest vectors for the plug-in / UDF (chemmanifold_tests.txt), checked against numpy
+    subprocess.run([sys.executable, "-I", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                    "29_export_moe_tests.py"), a.out, a.pairs[0]], check=True)
 
 
 if __name__ == "__main__":
