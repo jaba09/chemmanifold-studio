@@ -94,7 +94,8 @@ boundary
 def scalar_field(name, dims, internal, bc):
     s = hdr("volScalarField", name, "0") + "dimensions %s;\n\ninternalField uniform %.10g;\n\nboundaryField\n{\n" % (dims, internal)
     for patch, body in bc.items():
-        s += "    %s\n    {\n%s    }\n" % (patch, "".join("        %s\n" % l for l in body))
+        key = '"%s"' % patch if any(c in patch for c in ".*|()") else patch   # regex patch names must be quoted
+        s += "    %s\n    {\n%s    }\n" % (key, "".join("        %s\n" % l for l in body))
     return s + "}\n"
 
 
@@ -259,6 +260,7 @@ divSchemes
 laplacianSchemes { default Gauss linear corrected; }
 interpolationSchemes { default linear; }
 snGradSchemes { default corrected; }
+fluxRequired { default no; p_rgh; }
 """ % ddt)
     open(os.path.join(s, "fvSolution"), "w").write(hdr("dictionary", "fvSolution", "system") + """solvers
 {
@@ -281,7 +283,7 @@ PIMPLE
                                                          "numberOfSubdomains 8;\nmethod scotch;\n")
     allrun = """#!/bin/sh
 # COVLOOP Case B (Somers-de Goey slit burner, ARC22 DI). ./Allrun [nProcs]
-cd "${0%%/*}" || exit 1
+cd "${0%/*}" || exit 1
 set -e
 NP=${1:-8}
 run() { log=log.$1; shift; echo "Running $* > $log"; "$@" > "$log" 2>&1 || { echo "  failed, see $log"; tail -20 "$log"; exit 1; }; }
