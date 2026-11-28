@@ -431,3 +431,16 @@ in the thread.
   from the cells, 25/200-step pure surrogate rollouts vs ARC22, same trust criteria as the shadow checks).
   Sentinel starts now come from the snapshot instead of the plug-in's reason-4 store: every reacting bin gets
   checks, and no C++ change is needed. Smoke-tested on a fake OpenFOAM run.
+
+### 2026-11-28 (Spain time): sim1 smoke, selftest vectors, self-flagging
+
+- sim1: plug-in built with the MoE core (C = numpy to 7e-15 on 2308 pairs); Case B 50 um ran 1 ms clean on 4 ranks.
+  The per-step slowdown (2.9 -> 16.4 s) is dt growth (1.2e-7 -> 7.4e-6 s); cost per us of physical time fell
+  from ~29 to ~2.2 CPU s. Fixed imbalance: on the 4-rank scotch split, two ranks hold all flame cells (to fix
+  before the G1 runs: weighted decomposition). 20 ms run started 28 Nov 18:51 CET (4 ranks, shared cores).
+- `scripts/29_export_moe_tests.py`: selftest vectors for moe_top2, now written by scripts/27.
+- Self-flagging of training pairs (smoke data, 2.3k pairs): 17.6 % with the 5-epoch smoke model, 7.8 % with
+  full epochs (expert discrepancy gone: boundary share 96 % -> 5 %). The rest is the positivity gate at
+  dt >= 1e-4 (22 % there): O2 undershoot in O2-poor states, a rate error times a large dt. A dt-weighted global
+  loss (w = dt/1e-4 clipped 0.1-10) gave 5.9 % but a 44 % larger small-dt error: not adopted; to be re-tested
+  in G0 with production data (one seed only so far).
