@@ -603,8 +603,9 @@ the same face temperatures, mapped face by face, so both runs share radiation se
 same mechanism; that wall was held at the ambient 300\,K from 0.2625\,s, and the cells within 20\,mm of it differ
 between the two runs by 0.3\,K on average. None of these changes shows in the flame: $T_{\max}$ and $V(T>1500$\,K)
 change smoothly through the switches. The burnt gas has not reached the outlets even at 0.3\,s, so outlet NO$_x$ is not
-compared; NO$_x$ is compared inside the domain. \todo{decide whether to report the fixed-temperature pot as a
-modelling choice (it replaces the zero-flux condition of the Fluent case) or to seek a radiation-side fix}
+compared; NO$_x$ is compared inside the domain. We treat the fixed-temperature pot as a modelling choice for the extended runs: it replaces the zero-total-flux
+condition of the Fluent case with the temperatures that condition had produced, leaves the flame unchanged, and is
+identical in the two runs being compared, so the mechanism comparison is unaffected.
 
 \paragraph{Validation range}
 The 0D/1D checks cover ignition at 1--10\,atm and $T_0=1100$--1600\,K up to $\phi=2$, flame speeds at 1 and 5\,atm
