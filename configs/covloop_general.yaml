@@ -1,0 +1,22 @@
+# COVLOOP step 1: general (not flame-specific) sampling, production size (sim1, ~10-16 h on 8 cores).
+# docs/COVERAGE-LOOP-ROADMAP.md section 4. No heat loss, no jet mixing, no CFD-derived strain or times.
+seed: 0
+dt: {min: 1.0e-6, max: 1.0e-3, per_state: 2}     # refined from the first run's dt histogram
+rollout: {n_segments: 4000, steps: 24, T_min: 450.0}   # reference segments for the rollout loss
+balance: {cap_per_bin: 2000}
+families:
+  R1: {n_traj: 4000, n_keep: 60}
+  R2: {n_traj: 600, n_keep: 40}
+  R3: {n_mix: 300, n_keep: 30}
+  R4: {n_runs: 60, n_part: 80, n_steps: 200, n_keep: 600}
+  R5: {n: 1500, n_keep: 30}
+  R6: {n: 3000, n_keep: 15}
+  F1: {Tu: [298.0, 800.0], n_keep: 80}             # phi 0.5-1.7 (9), mixture-averaged + unity Le
+  F2: {T_streams: [298.0, 450.0, 600.0, 800.0], n_strain: 14, n_keep: 80, two_point_steps: 40}
+  F3: {n_keep: 60}
+  F4: {n_strain: 10, n_keep: 60}
+  F5: {n_runs: 300, n_keep: 40}
+  P1: {n: 60000}
+  P2: {n: 60000}
+  P3: {n: 8000, n_keep: 8}
+  P4: {n: 4000, n_keep: 6}
